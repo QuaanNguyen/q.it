@@ -40,13 +40,13 @@ _Avoid_: bookmark, favorite
 A capacity and runtime row identified by `(artifact_id, n_ctx, n_gpu_layers, n_parallel)`. Drives spawn flags and KV estimates. Two sessions with different `n_ctx` are distinct.
 _Avoid_: slot, job
 
-**Smoke test**:
-Short streamed generation to verify an artifact works. Ephemeral load/unload unless reusing an already **loaded session**. Not a chat product.
-_Avoid_: chat, demo
-
 **Stable budget**:
 Planner memory ceiling: unified memory minus OS reserve, capped by Metal `recommendedMaxWorkingSetSize` when available. Does not use live free RAM.
 _Avoid_: available memory, system RAM
+
+**Try**:
+A multi-turn trial conversation against one **loaded session** to verify an artifact works. The transcript lives only in browser memory and is gone on reload or close; nothing is stored, no multi-model, no agents. Not a chat product.
+_Avoid_: chat, smoke test, demo
 
 **What-if reservation**:
 An ephemeral reservation used on the Capacity page to simulate loading an artifact. Cleared on daemon restart; does not persist in SQLite.

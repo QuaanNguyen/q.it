@@ -31,6 +31,7 @@ async fn main() {
             "--n-tokens" => {
                 stream.n_tokens = args.next().and_then(|v| v.parse().ok()).unwrap_or(2)
             }
+            "--echo-usage" => stream.echo_usage = true,
             "-m" | "-c" | "-ngl" | "--parallel" | "--host" => {
                 let _ = args.next();
             }
@@ -72,6 +73,7 @@ async fn main() {
 struct StreamShape {
     token_delay_ms: u64,
     n_tokens: usize,
+    echo_usage: bool,
 }
 
 impl Default for StreamShape {
@@ -79,8 +81,24 @@ impl Default for StreamShape {
         Self {
             token_delay_ms: 0,
             n_tokens: 2,
+            echo_usage: false,
         }
     }
+}
+
+const FAKE_TOKENS_PER_MESSAGE: u64 = 100;
+
+fn usage_chunk(req: &Value, n_tokens: usize) -> Value {
+    let n_messages = req["messages"].as_array().map(|m| m.len()).unwrap_or(0) as u64;
+    let max_tokens = req["max_tokens"].as_u64().unwrap_or(0);
+    json!({
+        "choices": [],
+        "usage": {
+            "prompt_tokens": n_messages * FAKE_TOKENS_PER_MESSAGE + max_tokens,
+            "completion_tokens": n_tokens,
+            "total_tokens": n_messages * FAKE_TOKENS_PER_MESSAGE + max_tokens + n_tokens as u64
+        }
+    })
 }
 
 fn token_text(index: usize) -> String {
@@ -93,7 +111,7 @@ fn token_text(index: usize) -> String {
 
 async fn chat(
     shape: StreamShape,
-    Json(_req): Json<Value>,
+    Json(req): Json<Value>,
 ) -> Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>> {
     let delay = Duration::from_millis(shape.token_delay_ms);
     let tokens = stream::iter(0..shape.n_tokens).then(move |i| async move {
@@ -105,6 +123,11 @@ async fn chat(
         });
         Ok(Event::default().data(payload.to_string()))
     });
+    let usage = if shape.echo_usage {
+        vec![Ok(Event::default().data(usage_chunk(&req, shape.n_tokens).to_string()))]
+    } else {
+        vec![]
+    };
     let done = stream::once(async { Ok(Event::default().data("[DONE]")) });
-    Sse::new(tokens.chain(done)).keep_alive(KeepAlive::default())
+    Sse::new(tokens.chain(stream::iter(usage)).chain(done)).keep_alive(KeepAlive::default())
 }

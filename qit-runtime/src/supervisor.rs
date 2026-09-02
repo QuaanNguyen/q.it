@@ -4,7 +4,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -423,21 +423,47 @@ async fn wait_ready(base_url: &str, child: &mut Child) -> Result<(), String> {
     Err("worker did not become ready".into())
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct Usage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+}
+
+pub struct GenerateOutcome {
+    pub n_tokens: u32,
+    pub generation_ms: f64,
+    pub usage: Option<Usage>,
+}
+
+enum WorkerFrame {
+    Token(String),
+    Usage(Usage),
+    Other,
+}
+
 pub async fn proxy_generate<F, Fut>(
     base_url: &str,
-    prompt: &str,
+    messages: &[ChatMessage],
+    max_tokens: u32,
     cancel: tokio::sync::watch::Receiver<bool>,
     mut on_token: F,
-) -> Result<(u32, f64), String>
+) -> Result<GenerateOutcome, String>
 where
     F: FnMut(String) -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     let client = reqwest::Client::new();
     let body = serde_json::json!({
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": true,
-        "max_tokens": 64
+        "stream_options": {"include_usage": true},
+        "max_tokens": max_tokens
     });
     let mut resp = client
         .post(format!("{base_url}/v1/chat/completions"))
@@ -450,6 +476,7 @@ where
     }
     let t0 = std::time::Instant::now();
     let mut n_tokens = 0u32;
+    let mut usage = None;
     let mut buf = bytes::BytesMut::new();
     while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
         if *cancel.borrow() {
@@ -458,18 +485,27 @@ where
         buf.extend_from_slice(&chunk);
         while let Some(pos) = buf.windows(2).position(|w| w == b"\n\n") {
             let frame = buf.split_to(pos + 2);
-            if let Some(token) = parse_openai_sse(&frame) {
-                n_tokens += 1;
-                on_token(token).await?;
+            match parse_openai_sse(&frame) {
+                WorkerFrame::Token(token) => {
+                    n_tokens += 1;
+                    on_token(token).await?;
+                }
+                WorkerFrame::Usage(u) => usage = Some(u),
+                WorkerFrame::Other => {}
             }
         }
     }
-    let ms = t0.elapsed().as_secs_f64() * 1000.0;
-    Ok((n_tokens, ms))
+    Ok(GenerateOutcome {
+        n_tokens,
+        generation_ms: t0.elapsed().as_secs_f64() * 1000.0,
+        usage,
+    })
 }
 
-fn parse_openai_sse(frame: &[u8]) -> Option<String> {
-    let text = std::str::from_utf8(frame).ok()?;
+fn parse_openai_sse(frame: &[u8]) -> WorkerFrame {
+    let Ok(text) = std::str::from_utf8(frame) else {
+        return WorkerFrame::Other;
+    };
     for line in text.lines() {
         let line = line.trim();
         let Some(data) = line.strip_prefix("data:") else {
@@ -477,16 +513,27 @@ fn parse_openai_sse(frame: &[u8]) -> Option<String> {
         };
         let data = data.trim();
         if data == "[DONE]" {
-            return None;
+            return WorkerFrame::Other;
         }
-        let v: serde_json::Value = serde_json::from_str(data).ok()?;
-        let content = v
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
+            return WorkerFrame::Other;
+        };
+        if let Some(content) = v
             .pointer("/choices/0/delta/content")
-            .and_then(|c| c.as_str())?;
-        if content.is_empty() {
-            return None;
+            .and_then(|c| c.as_str())
+            .filter(|c| !c.is_empty())
+        {
+            return WorkerFrame::Token(content.to_string());
         }
-        return Some(content.to_string());
+        if let Some(u) = v.get("usage") {
+            let prompt_tokens = u["prompt_tokens"].as_u64().unwrap_or(0) as u32;
+            let completion_tokens = u["completion_tokens"].as_u64().unwrap_or(0) as u32;
+            return WorkerFrame::Usage(Usage {
+                prompt_tokens,
+                completion_tokens,
+            });
+        }
+        return WorkerFrame::Other;
     }
-    None
+    WorkerFrame::Other
 }

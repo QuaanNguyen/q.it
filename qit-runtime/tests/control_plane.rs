@@ -685,6 +685,76 @@ async fn os_reserve_setting_moves_budget_and_survives_restart() {
     h.listening.shutdown().await;
 }
 
+fn sse_events(body: &str) -> Vec<(String, String)> {
+    body.split("\n\n")
+        .filter(|frame| frame.contains("event:"))
+        .map(|frame| {
+            let mut event = String::new();
+            let mut data = String::new();
+            for line in frame.lines() {
+                if let Some(v) = line.strip_prefix("event: ") {
+                    event = v.to_string();
+                } else if let Some(v) = line.strip_prefix("data: ") {
+                    data.push_str(v);
+                }
+            }
+            (event, data)
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn generate_accepts_messages_and_reports_usage_on_done() {
+    let h = Harness::start(
+        probe_with_free(None),
+        vec!["--echo-usage".into()],
+    )
+    .await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let body = reqwest::Client::new()
+        .post(h.url("/api/generate"))
+        .json(&serde_json::json!({
+            "artifact_id": "org/small.gguf",
+            "n_ctx": 4096,
+            "max_tokens": 7,
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello world"},
+                {"role": "user", "content": "again"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let events = sse_events(&body);
+    let (last_event, last_data) = events.last().expect("done event");
+    assert_eq!(last_event, "done", "{body}");
+    let done: Value = serde_json::from_str(last_data).unwrap();
+    assert_eq!(done["n_ctx"], 4096);
+    assert_eq!(done["completion_tokens"], 2);
+    assert_eq!(done["prompt_tokens"], 3 * 100 + 7, "{done}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn generate_without_prompt_or_messages_is_rejected() {
+    let h = Harness::start(probe_with_free(None), vec![]).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let resp = h
+        .post_json(
+            "/api/generate",
+            serde_json::json!({"artifact_id": "org/small.gguf", "n_ctx": 4096}),
+        )
+        .await;
+    assert_eq!(resp.status(), 400);
+    h.listening.shutdown().await;
+}
+
 #[tokio::test]
 async fn hardware_reports_worker_path() {
     let launcher = Arc::new(StubBinLauncher {

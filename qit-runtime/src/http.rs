@@ -22,7 +22,11 @@ use crate::probe::{budget_bytes, resolve_os_reserve, HardwareProbe, HardwareSnap
 use crate::scan::scan_library;
 use crate::spa::index_html;
 use crate::store::{ArtifactRow, MeasurementRow, PinRow, SessionRow, Store};
-use crate::supervisor::{proxy_generate, session_status_str, SessionStatus, SessionView, Supervisor};
+use crate::supervisor::{
+    proxy_generate, session_status_str, ChatMessage, SessionStatus, SessionView, Supervisor,
+};
+
+const DEFAULT_MAX_TOKENS: u32 = 512;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -104,11 +108,33 @@ pub struct ReservationBody {
 #[derive(Deserialize)]
 pub struct GenerateBody {
     pub artifact_id: String,
-    pub prompt: String,
+    pub prompt: Option<String>,
+    pub messages: Option<Vec<ChatMessage>>,
+    pub max_tokens: Option<u32>,
     pub n_ctx: Option<u32>,
     pub n_gpu_layers: Option<i32>,
     pub n_parallel: Option<u32>,
     pub session_id: Option<String>,
+}
+
+impl GenerateBody {
+    fn messages(&self) -> Result<Vec<ChatMessage>, ApiError> {
+        match (&self.messages, &self.prompt) {
+            (Some(messages), _) if !messages.is_empty() => Ok(messages.clone()),
+            (_, Some(prompt)) => Ok(vec![ChatMessage {
+                role: "user".into(),
+                content: prompt.clone(),
+            }]),
+            _ => Err(ApiError::bad("messages or prompt is required")),
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct GenerateDone {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub n_ctx: u32,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -368,6 +394,8 @@ async fn generate(
     let n_ctx = body.n_ctx.unwrap_or(DEFAULT_N_CTX);
     let n_gpu_layers = body.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS);
     let n_parallel = body.n_parallel.unwrap_or(DEFAULT_N_PARALLEL);
+    let messages = body.messages()?;
+    let max_tokens = body.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
     let store = state.store.lock().await;
     let artifact = require_artifact(&store, &body.artifact_id)?;
     validate_n_ctx(&artifact, n_ctx)?;
@@ -420,7 +448,6 @@ async fn generate(
         .ok_or_else(|| ApiError::bad("worker has no endpoint"))?;
 
     let (cancel_tx, cancel_rx) = watch::channel(false);
-    let prompt = body.prompt.clone();
     let artifact_id = artifact.id.clone();
     let runtime = state.clone();
     let session_id = session.id.clone();
@@ -428,20 +455,26 @@ async fn generate(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
     tokio::spawn(async move {
         let token_tx = tx.clone();
-        let result = proxy_generate(&base_url, &prompt, cancel_rx, move |token| {
-            let token_tx = token_tx.clone();
-            async move {
-                token_tx
-                    .send(Ok(Event::default().event("token").data(token)))
-                    .await
-                    .map_err(|_| "client closed".to_string())
-            }
-        })
+        let result = proxy_generate(
+            &base_url,
+            &messages,
+            max_tokens,
+            cancel_rx,
+            move |token| {
+                let token_tx = token_tx.clone();
+                async move {
+                    token_tx
+                        .send(Ok(Event::default().event("token").data(token)))
+                        .await
+                        .map_err(|_| "client closed".to_string())
+                }
+            },
+        )
         .await;
         match result {
-            Ok((n_tokens, generation_ms)) => {
-                let tps = if generation_ms > 0.0 {
-                    Some((n_tokens as f64) / (generation_ms / 1000.0))
+            Ok(outcome) => {
+                let tps = if outcome.generation_ms > 0.0 {
+                    Some((outcome.n_tokens as f64) / (outcome.generation_ms / 1000.0))
                 } else {
                     None
                 };
@@ -450,11 +483,18 @@ async fn generate(
                     artifact_id,
                     throughput_tps: tps,
                     peak_rss_bytes: None,
-                    n_tokens: Some(n_tokens),
-                    generation_ms: Some(generation_ms),
+                    n_tokens: Some(outcome.n_tokens),
+                    generation_ms: Some(outcome.generation_ms),
                 });
                 drop(store);
-                let _ = tx.send(Ok(Event::default().event("done").data(""))).await;
+                let usage = outcome.usage.unwrap_or_default();
+                let done = GenerateDone {
+                    prompt_tokens: usage.prompt_tokens,
+                    completion_tokens: usage.completion_tokens.max(outcome.n_tokens),
+                    n_ctx,
+                };
+                let data = serde_json::to_string(&done).unwrap_or_default();
+                let _ = tx.send(Ok(Event::default().event("done").data(data))).await;
             }
             Err(e) => {
                 if e != "client closed" {
