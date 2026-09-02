@@ -4,7 +4,7 @@ Supplements `CONTEXT.md` and ADRs with repo-specific facts agents need repeatedl
 
 ## Product direction
 
-Local inference runtime for Apple Silicon (v1). Users browse **artifacts**, see **fit** against a **stable budget**, **pin** or **what-if** capacity, **start/stop** worker children, and **smoke-test** generation. Not a chat product; agents and Hub install are later milestones on the same control plane.
+Local inference runtime for Apple Silicon (v1). Users browse **artifacts**, see **fit** against a **stable budget**, **pin** or **what-if** capacity, **start/stop** worker children, and **Try** an artifact in a multi-turn window whose transcript lives only in the browser. Not a chat product; agents and Hub install are later milestones on the same control plane.
 
 Parent spec: GitHub issue [#1](https://github.com/QuaanNguyen/q.it/issues/1). Tracer bullets [#2–#7](https://github.com/QuaanNguyen/q.it/issues/2). Local copies: `.scratch/milestone-1-catalog-capacity/`.
 
@@ -38,7 +38,15 @@ Do not add a second production test seam unless the control plane cannot express
 
 ## Milestone 1 status
 
-Core tracer bullets #2–#6 are implemented on `main`; human verification pending ([#23](https://github.com/QuaanNguyen/q.it/issues/23)). Closure work ([#8](https://github.com/QuaanNguyen/q.it/issues/8)): **done** [#15](https://github.com/QuaanNguyen/q.it/issues/15) worker discovery/readiness, [#16](https://github.com/QuaanNguyen/q.it/issues/16) session rows, [#18](https://github.com/QuaanNguyen/q.it/issues/18) context presets. **Open:** [#7](https://github.com/QuaanNguyen/q.it/issues/7) peak RSS + cancel test, [#17](https://github.com/QuaanNguyen/q.it/issues/17) single-flight generate, [#19](https://github.com/QuaanNguyen/q.it/issues/19) settings table, [#20–#22](https://github.com/QuaanNguyen/q.it/issues/20) blocked on research [#10–#14](https://github.com/QuaanNguyen/q.it/issues/10). Homebrew `llama-server` at `/opt/homebrew/bin/llama-server` is auto-discovered; `/health` 503 while loading, 200 when ready.
+Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](https://github.com/QuaanNguyen/q.it/issues/23)). Closure work ([#8](https://github.com/QuaanNguyen/q.it/issues/8)): **done** [#15](https://github.com/QuaanNguyen/q.it/issues/15) worker discovery/readiness, [#16](https://github.com/QuaanNguyen/q.it/issues/16) session rows, [#17](https://github.com/QuaanNguyen/q.it/issues/17) single-flight generate, [#18](https://github.com/QuaanNguyen/q.it/issues/18) context presets, [#19](https://github.com/QuaanNguyen/q.it/issues/19) settings table, the cancel test on [#7](https://github.com/QuaanNguyen/q.it/issues/7). **Open:** peak RSS on #7 (blocked on [#11](https://github.com/QuaanNguyen/q.it/issues/11)), [#20–#22](https://github.com/QuaanNguyen/q.it/issues/20) blocked on research [#10–#14](https://github.com/QuaanNguyen/q.it/issues/10). Homebrew `llama-server` at `/opt/homebrew/bin/llama-server` is auto-discovered; `/health` 503 while loading, 200 when ready.
+
+## Generate API
+
+`POST /api/generate` takes `messages: [{role, content}]` (or a one-message `prompt`), optional `max_tokens` (default 512), and streams SSE `token` events. `done` carries `{prompt_tokens, completion_tokens, n_ctx}` from the worker's usage chunk; the UI's context square reads it. One generate at a time: a concurrent request gets `409 generate in flight`.
+
+## UI notes
+
+Catalog rows carry Start/Stop with an inline status icon (spinner, green check, red cross; hover for the error and an **Inspect** link to Capacity) and a **Try** button that opens the Try window under the row, auto-starting the session when needed. Transcript is browser memory only. Palette and type live in `qit-web/src/styles.css`; throwaway layout variants live on branch `prototype/catalog-ui`.
 
 ## Coding conventions
 
