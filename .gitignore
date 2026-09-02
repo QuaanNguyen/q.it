@@ -9,4 +9,5 @@ __pycache__/
 /target
 /qit-web/node_modules
 /qit-web/dist
+/qit-web/tsconfig.tsbuildinfo
 .scratch/
