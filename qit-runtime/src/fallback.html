@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>q.it</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --card: #18181b;
+      --border: rgba(63, 63, 70, 0.4);
+      --text: #c8c2b4;
+      --heading: #e0dbd0;
+      --muted: #8a8070;
+      --accent: #d6c7a1;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; }
+    body { display: grid; grid-template-columns: 140px 1fr; }
+    aside { background: var(--card); border-right: 1px solid var(--border); padding: 1rem; }
+    aside strong { color: var(--heading); }
+    aside nav { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
+    aside a { color: var(--muted); text-decoration: none; padding: 0.35rem 0.5rem; border-radius: 8px; }
+    aside a.active, aside a:hover { background: var(--border); color: var(--heading); }
+    main { padding: 1.5rem 2rem; overflow: auto; }
+    h1 { color: var(--heading); font-size: 1.25rem; font-weight: 600; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin: 0.75rem 0; }
+    button, select, input, textarea {
+      background: var(--card); color: var(--heading); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.4rem 0.65rem; font: inherit;
+    }
+    button { cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.45rem 0.35rem; border-bottom: 1px solid var(--border); }
+    .Fits { color: #9cae8a; }
+    .Tight { color: #d2b56a; }
+    .No { color: #c98980; }
+    textarea { width: 100%; min-height: 4rem; }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+    .stream { white-space: pre-wrap; min-height: 3rem; }
+  </style>
+</head>
+<body>
+  <aside>
+    <strong>q.it</strong>
+    <nav>
+      <a href="#/catalog" data-route="catalog">Catalog</a>
+      <a href="#/capacity" data-route="capacity">Capacity</a>
+      <a href="#/settings" data-route="settings">Settings</a>
+    </nav>
+  </aside>
+  <main id="root"></main>
+  <script>
+    const ctxPresets = [4096, 8192, 16384, 32768];
+    const state = { n_ctx: 4096, catalog: null, capacity: null, prompt: "Say hello in one word.", stream: "" };
+
+    function fmtBytes(n) {
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + " GB";
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + " MB";
+      return n + " B";
+    }
+
+    async function api(path, opts) {
+      const res = await fetch(path, Object.assign({ headers: { "content-type": "application/json" } }, opts));
+      if (res.status === 204) return null;
+      const text = await res.text();
+      if (!res.ok) throw new Error(text);
+      return text ? JSON.parse(text) : null;
+    }
+
+    function nav() {
+      const route = location.hash.replace("#/", "") || "catalog";
+      document.querySelectorAll("aside a").forEach((a) => a.classList.toggle("active", a.dataset.route === route));
+      return route;
+    }
+
+    function ctxSelect() {
+      return `<select id="nctx">${ctxPresets.map((n) => `<option value="${n}" ${n === state.n_ctx ? "selected" : ""}>${n / 1024}k</option>`).join("")}</select>`;
+    }
+
+    async function render() {
+      const route = nav();
+      const root = document.getElementById("root");
+      try {
+        if (route === "settings") {
+          root.innerHTML = `<h1>Settings</h1><p class="muted">Hugging Face token sign-in is not in this milestone.</p>`;
+          return;
+        }
+        if (route === "capacity") {
+          state.capacity = await api("/api/capacity");
+          const h = state.capacity.hardware;
+          root.innerHTML = `
+            <h1>Capacity</h1>
+            <div class="panel">
+              <div>${h.chip} · ${h.device_class}</div>
+              <div>Unified ${fmtBytes(h.unified_memory_bytes)} · OS reserve ${fmtBytes(h.os_reserve_bytes)}</div>
+              <div>Metal cap ${h.metal_recommended_working_set_bytes != null ? fmtBytes(h.metal_recommended_working_set_bytes) : "n/a"}</div>
+              <div>Budget ${fmtBytes(h.budget_bytes)} · Headroom ${fmtBytes(h.headroom_bytes)}</div>
+              <div class="muted">Free RAM (not used for fit) ${h.free_ram_bytes != null ? fmtBytes(h.free_ram_bytes) : "n/a"} · worker RSS ${fmtBytes(h.loaded_rss_bytes)}</div>
+            </div>
+            <h2>Pins</h2>
+            ${tableReservations(state.capacity.pins, "pin")}
+            <h2>What-if</h2>
+            ${tableReservations(state.capacity.what_ifs, "what-if")}
+            <div class="row"><button id="clear-whatifs">Clear what-ifs</button></div>
+            <h2>Sessions</h2>
+            ${tableSessions(state.capacity.sessions)}
+          `;
+          document.getElementById("clear-whatifs").onclick = async () => {
+            await api("/api/what-ifs", { method: "DELETE" });
+            render();
+          };
+          return;
+        }
+        await api("/api/scan", { method: "POST" });
+        state.catalog = await api("/api/catalog?n_ctx=" + state.n_ctx);
+        root.innerHTML = `
+          <h1>Catalog</h1>
+          <div class="row"><label>Context ${ctxSelect()}</label><button id="rescan">Scan library</button></div>
+          <table>
+            <thead><tr><th>Artifact</th><th>Size</th><th>Fit</th><th>Confidence</th><th>tok/s</th><th></th></tr></thead>
+            <tbody>
+              ${(state.catalog.artifacts || []).map((a) => `
+                <tr>
+                  <td>${a.id}</td>
+                  <td>${fmtBytes(a.bytes)}</td>
+                  <td class="${a.fit}">${a.fit}</td>
+                  <td>${a.confidence}</td>
+                  <td>${a.throughput_tps != null ? a.throughput_tps.toFixed(1) : "—"}</td>
+                  <td>
+                    <button data-pin="${a.id}">Pin</button>
+                    <button data-what="${a.id}">What-if</button>
+                    <button data-start="${a.id}">Start</button>
+                    <button data-gen="${a.id}">Generate</button>
+                  </td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+          <div class="panel">
+            <textarea id="prompt">${state.prompt}</textarea>
+            <div class="stream" id="stream">${state.stream}</div>
+          </div>
+        `;
+        document.getElementById("nctx").onchange = (e) => { state.n_ctx = Number(e.target.value); render(); };
+        document.getElementById("rescan").onclick = () => render();
+        document.getElementById("prompt").oninput = (e) => { state.prompt = e.target.value; };
+        root.querySelectorAll("[data-pin]").forEach((b) => b.onclick = () => reserve("/api/pins", b.dataset.pin));
+        root.querySelectorAll("[data-what]").forEach((b) => b.onclick = () => reserve("/api/what-ifs", b.dataset.what));
+        root.querySelectorAll("[data-start]").forEach((b) => b.onclick = () => start(b.dataset.start));
+        root.querySelectorAll("[data-gen]").forEach((b) => b.onclick = () => generate(b.dataset.gen));
+      } catch (err) {
+        root.innerHTML = `<h1>Error</h1><pre>${err}</pre>`;
+      }
+    }
+
+    function tableReservations(rows, kind) {
+      if (!rows.length) return `<p class="muted">None</p>`;
+      return `<table><thead><tr><th>Artifact</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>${
+        rows.map((r) => `<tr><td>${r.artifact_id}</td><td>${r.n_ctx}</td><td>${fmtBytes(r.estimate_bytes)}</td><td><button data-del="${kind}:${r.id}">Remove</button></td></tr>`).join("")
+      }</tbody></table>`;
+    }
+
+    function tableSessions(rows) {
+      if (!rows.length) return `<p class="muted">None</p>`;
+      return `<table><thead><tr><th>Id</th><th>Artifact</th><th>Status</th><th></th></tr></thead><tbody>${
+        rows.map((s) => `<tr><td>${s.id.slice(0, 8)}</td><td>${s.artifact_id}</td><td>${s.status}</td><td><button data-stop="${s.id}">Stop</button></td></tr>`).join("")
+      }</tbody></table>`;
+    }
+
+    async function reserve(url, artifact_id) {
+      await api(url, { method: "POST", body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx }) });
+      location.hash = "#/capacity";
+      render();
+    }
+
+    async function start(artifact_id) {
+      await api("/api/sessions", { method: "POST", body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx }) });
+      location.hash = "#/capacity";
+      render();
+    }
+
+    document.body.addEventListener("click", async (e) => {
+      const del = e.target.dataset && e.target.dataset.del;
+      const stop = e.target.dataset && e.target.dataset.stop;
+      if (del) {
+        const [kind, id] = del.split(":");
+        const url = kind === "pin" ? "/api/pins/" + id : "/api/what-ifs/" + id;
+        await api(url, { method: "DELETE" });
+        render();
+      }
+      if (stop) {
+        await api("/api/sessions/" + stop + "/stop", { method: "POST" });
+        render();
+      }
+    });
+
+    async function generate(artifact_id) {
+      state.stream = "";
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx, prompt: state.prompt })
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop();
+        for (const part of parts) {
+          const ev = (part.match(/^event: (.*)$/m) || [])[1];
+          const data = (part.match(/^data: (.*)$/m) || [])[1] || "";
+          if (ev === "token") state.stream += data;
+          if (ev === "error") state.stream += "\n" + data;
+        }
+        const el = document.getElementById("stream");
+        if (el) el.textContent = state.stream;
+      }
+      render();
+    }
+
+    window.addEventListener("hashchange", render);
+    if (!location.hash) location.hash = "#/catalog";
+    render();
+  </script>
+</body>
+</html>

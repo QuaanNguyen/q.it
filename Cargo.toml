@@ -1,0 +1,3 @@
+[workspace]
+members = ["qit-runtime"]
+resolver = "2"

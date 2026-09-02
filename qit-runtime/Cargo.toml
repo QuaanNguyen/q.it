@@ -1,0 +1,39 @@
+[package]
+name = "qit-runtime"
+version = "0.1.0"
+edition = "2021"
+default-run = "qit-runtime"
+
+[[bin]]
+name = "qit-runtime"
+path = "src/main.rs"
+
+[[bin]]
+name = "qit-stub-worker"
+path = "src/bin/stub_worker.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["json"] }
+bytes = "1"
+futures-util = "0.3"
+hex = "0.4"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tower-http = { version = "0.6", features = ["fs", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.31"
+
+[dev-dependencies]
+tempfile = "3"
+reqwest = { version = "0.12", features = ["json"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
