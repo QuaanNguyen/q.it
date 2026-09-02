@@ -38,7 +38,7 @@ Do not add a second production test seam unless the control plane cannot express
 
 ## Milestone 1 status
 
-Core tracer bullets are implemented on `main`. Known spec gaps (see code-review notes): peak RSS, live memory pressure, instruct-only Generate filter, model-max context presets, session/settings SQLite tables, single-flight generate.
+Core tracer bullets #2–#6 are implemented on `main`; human verification pending ([#23](https://github.com/QuaanNguyen/q.it/issues/23)). Closure work ([#8](https://github.com/QuaanNguyen/q.it/issues/8)): **done** [#15](https://github.com/QuaanNguyen/q.it/issues/15) worker discovery/readiness, [#16](https://github.com/QuaanNguyen/q.it/issues/16) session rows, [#18](https://github.com/QuaanNguyen/q.it/issues/18) context presets. **Open:** [#7](https://github.com/QuaanNguyen/q.it/issues/7) peak RSS + cancel test, [#17](https://github.com/QuaanNguyen/q.it/issues/17) single-flight generate, [#19](https://github.com/QuaanNguyen/q.it/issues/19) settings table, [#20–#22](https://github.com/QuaanNguyen/q.it/issues/20) blocked on research [#10–#14](https://github.com/QuaanNguyen/q.it/issues/10). Homebrew `llama-server` at `/opt/homebrew/bin/llama-server` is auto-discovered; `/health` 503 while loading, 200 when ready.
 
 ## Coding conventions
 

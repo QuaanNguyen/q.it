@@ -1,3 +1,4 @@
+use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -13,12 +14,16 @@ async fn main() {
     let mut port = 0u16;
     let mut crash = false;
     let mut delay_ms = 0u64;
+    let mut health_warmup_ms = 0u64;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--port" => port = args.next().and_then(|v| v.parse().ok()).unwrap_or(0),
             "--crash" => crash = true,
             "--delay-ms" => delay_ms = args.next().and_then(|v| v.parse().ok()).unwrap_or(0),
+            "--health-warmup-ms" => {
+                health_warmup_ms = args.next().and_then(|v| v.parse().ok()).unwrap_or(0)
+            }
             "-m" | "-c" | "-ngl" | "--parallel" | "--host" => {
                 let _ = args.next();
             }
@@ -33,8 +38,21 @@ async fn main() {
     }
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = TcpListener::bind(addr).await.expect("bind stub worker");
+    let ready_at = std::time::Instant::now() + Duration::from_millis(health_warmup_ms);
     let app = Router::new()
-        .route("/health", get(|| async { "ok" }))
+        .route(
+            "/health",
+            get(move || {
+                let ready_at = ready_at;
+                async move {
+                    if std::time::Instant::now() < ready_at {
+                        (StatusCode::SERVICE_UNAVAILABLE, "loading")
+                    } else {
+                        (StatusCode::OK, "ok")
+                    }
+                }
+            }),
+        )
         .route("/v1/chat/completions", post(chat));
     axum::serve(listener, app).await.expect("stub worker");
 }

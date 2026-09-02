@@ -51,12 +51,16 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
         source,
     })?;
     let store = Store::open(&paths.db_path)?;
+    store.reset_sessions_on_restart()?;
+    let session_rows = store.sessions()?;
     let supervisor = Arc::new(Supervisor::new(config.worker_launcher.clone()));
+    supervisor.hydrate(session_rows).await;
     let state = AppState {
         paths,
         store: Arc::new(Mutex::new(store)),
         probe: config.probe.clone(),
         os_reserve_override: config.os_reserve_bytes,
+        worker_path: config.worker_path.clone(),
         supervisor,
         what_ifs: Arc::new(Mutex::new(Vec::new())),
     };

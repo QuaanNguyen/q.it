@@ -36,6 +36,18 @@ pub struct MeasurementRow {
     pub generation_ms: Option<f64>,
 }
 
+#[derive(Clone, Debug)]
+pub struct SessionRow {
+    pub id: String,
+    pub artifact_id: String,
+    pub n_ctx: u32,
+    pub n_gpu_layers: i32,
+    pub n_parallel: u32,
+    pub status: String,
+    pub last_error: Option<String>,
+    pub log_path: Option<String>,
+}
+
 pub struct Store {
     conn: Connection,
 }
@@ -74,6 +86,17 @@ impl Store {
                 peak_rss_bytes INTEGER,
                 n_tokens INTEGER,
                 generation_ms REAL
+            );
+            CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                artifact_id TEXT NOT NULL,
+                n_ctx INTEGER NOT NULL,
+                n_gpu_layers INTEGER NOT NULL,
+                n_parallel INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                last_error TEXT,
+                log_path TEXT,
+                UNIQUE(artifact_id, n_ctx, n_gpu_layers, n_parallel)
             );
             ",
         )?;
@@ -236,5 +259,62 @@ impl Store {
                 },
             )
             .optional()
+    }
+
+    pub fn reset_sessions_on_restart(&self) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "UPDATE sessions SET status = 'not_loaded', last_error = NULL",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn upsert_session(&self, row: &SessionRow) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO sessions (
+                id, artifact_id, n_ctx, n_gpu_layers, n_parallel, status, last_error, log_path
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(artifact_id, n_ctx, n_gpu_layers, n_parallel) DO UPDATE SET
+                id = excluded.id,
+                status = excluded.status,
+                last_error = excluded.last_error,
+                log_path = excluded.log_path",
+            params![
+                row.id,
+                row.artifact_id,
+                row.n_ctx as i64,
+                row.n_gpu_layers,
+                row.n_parallel as i64,
+                row.status,
+                row.last_error,
+                row.log_path,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_session(&self, id: &str) -> rusqlite::Result<bool> {
+        let n = self.conn.execute("DELETE FROM sessions WHERE id = ?1", [id])?;
+        Ok(n > 0)
+    }
+
+    pub fn sessions(&self) -> rusqlite::Result<Vec<SessionRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, artifact_id, n_ctx, n_gpu_layers, n_parallel, status, last_error, log_path
+             FROM sessions ORDER BY artifact_id, n_ctx",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(SessionRow {
+                id: r.get(0)?,
+                artifact_id: r.get(1)?,
+                n_ctx: r.get::<_, i64>(2)? as u32,
+                n_gpu_layers: r.get(3)?,
+                n_parallel: r.get::<_, i64>(4)? as u32,
+                status: r.get(5)?,
+                last_error: r.get(6)?,
+                log_path: r.get(7)?,
+            })
+        })?;
+        rows.collect()
     }
 }

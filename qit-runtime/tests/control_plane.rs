@@ -6,7 +6,7 @@ use qit_runtime::bind;
 use qit_runtime::config::Config;
 use qit_runtime::gguf::{write_test_gguf, GgufMeta};
 use qit_runtime::probe::{FixedProbe, HardwareSnapshot};
-use qit_runtime::supervisor::StubBinLauncher;
+use qit_runtime::supervisor::{LlamaServerLauncher, StubBinLauncher};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -19,14 +19,22 @@ struct Harness {
 
 impl Harness {
     async fn start(probe: HardwareSnapshot, extra_args: Vec<String>) -> Self {
-        let tmp = TempDir::new().unwrap();
-        let home = tmp.path().join("home");
-        let models = tmp.path().join("models");
-        std::fs::create_dir_all(&models).unwrap();
         let launcher = Arc::new(StubBinLauncher {
             binary: PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker")),
             extra_args,
         });
+        Self::start_with(probe, launcher, None).await
+    }
+
+    async fn start_with(
+        probe: HardwareSnapshot,
+        launcher: Arc<dyn qit_runtime::supervisor::WorkerLauncher>,
+        worker_path: Option<PathBuf>,
+    ) -> Self {
+        let tmp = TempDir::new().unwrap();
+        let home = tmp.path().join("home");
+        let models = tmp.path().join("models");
+        std::fs::create_dir_all(&models).unwrap();
         let cfg = Config::test(
             home.clone(),
             models.clone(),
@@ -34,6 +42,7 @@ impl Harness {
             FixedProbe {
                 snapshot: probe.clone(),
             },
+            worker_path,
             launcher,
             Some(2_000_000),
         );
@@ -152,6 +161,7 @@ async fn occupied_port_fails_without_hopping() {
         FixedProbe {
             snapshot: probe_with_free(None),
         },
+        None,
         launcher,
         Some(1),
     );
@@ -297,6 +307,7 @@ async fn what_if_and_pins_survive_rules() {
         FixedProbe {
             snapshot: probe_with_free(None),
         },
+        None,
         launcher,
         Some(2_000_000),
     );
@@ -440,5 +451,230 @@ async fn generate_reuses_loaded_session() {
         .iter()
         .any(|s| s["id"] == id && s["status"] == "loaded");
     assert!(still, "{sessions}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn hardware_reports_worker_path() {
+    let launcher = Arc::new(StubBinLauncher {
+        binary: PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker")),
+        extra_args: vec![],
+    });
+    let worker = PathBuf::from("/opt/test/llama-server");
+    let h = Harness::start_with(probe_with_free(None), launcher, Some(worker.clone())).await;
+    let hw = h.json("/api/hardware").await;
+    assert_eq!(hw["worker_path"].as_str().unwrap(), worker.to_string_lossy());
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn start_without_worker_binary_returns_install_message() {
+    let h = Harness::start_with(
+        probe_with_free(None),
+        Arc::new(LlamaServerLauncher { binary: None }),
+        None,
+    )
+    .await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let resp = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small.gguf","n_ctx":4096}),
+        )
+        .await;
+    assert_eq!(resp.status(), 400);
+    let body: Value = resp.json().await.unwrap();
+    let err = body["error"].as_str().unwrap();
+    assert!(err.contains("QIT_WORKER_PATH") || err.contains("llama-server"), "{err}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn worker_waits_for_health_200_before_loaded() {
+    let h = Harness::start(probe_with_free(None), vec!["--health-warmup-ms".into(), "400".into()])
+        .await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let started = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small.gguf","n_ctx":4096}),
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(started["status"], "loaded");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn duplicate_start_reuses_session_row() {
+    let h = Harness::start(probe_with_free(None), vec![]).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let first = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small.gguf","n_ctx":4096}),
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    h.post_json(&format!("/api/sessions/{}/stop", first["id"]), serde_json::json!({}))
+        .await;
+    let second = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small.gguf","n_ctx":4096}),
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(first["id"], second["id"]);
+    let sessions = h.json("/api/sessions").await;
+    let matches: Vec<_> = sessions
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["artifact_id"] == "org/small.gguf" && s["n_ctx"] == 4096)
+        .collect();
+    assert_eq!(matches.len(), 1, "{sessions}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn sessions_survive_restart_as_not_loaded() {
+    let h = Harness::start(probe_with_free(None), vec![]).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let started = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small.gguf","n_ctx":4096}),
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let id = started["id"].as_str().unwrap().to_string();
+    let home = h.home.clone();
+    let models = h.models.clone();
+    h.listening.shutdown().await;
+
+    let launcher = Arc::new(StubBinLauncher {
+        binary: PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker")),
+        extra_args: vec![],
+    });
+    let cfg = Config::test(
+        home,
+        models,
+        "127.0.0.1:0".parse().unwrap(),
+        FixedProbe {
+            snapshot: probe_with_free(None),
+        },
+        None,
+        launcher,
+        Some(2_000_000),
+    );
+    let listening = bind(cfg).await.unwrap();
+    let client = reqwest::Client::new();
+    let sessions: Value = client
+        .get(format!("{}/api/sessions", listening.base_url()))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let row = sessions
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == id)
+        .expect("session row survives restart");
+    assert_eq!(row["status"], "not_loaded");
+    listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn crash_populates_last_error() {
+    let h = Harness::start(probe_with_free(None), vec!["--crash".into()]).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let resp = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small.gguf"}),
+        )
+        .await;
+    assert!(resp.status().is_client_error() || resp.status().is_server_error());
+    let sessions = h.json("/api/sessions").await;
+    let failed = sessions
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["status"] == "failed")
+        .expect("failed session row");
+    assert!(failed["last_error"].as_str().is_some(), "{failed}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn delete_inactive_session_row() {
+    let h = Harness::start(probe_with_free(None), vec!["--crash".into()]).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    h.post_json(
+        "/api/sessions",
+        serde_json::json!({"artifact_id":"org/small.gguf"}),
+    )
+    .await;
+    let sessions = h.json("/api/sessions").await;
+    let id = sessions.as_array().unwrap()[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let del = h.delete(&format!("/api/sessions/{id}")).await;
+    assert_eq!(del.status(), 204);
+    let after = h.json("/api/sessions").await;
+    assert_eq!(after.as_array().unwrap().len(), 0);
+    h.listening.shutdown().await;
+}
+
+fn small_ctx_meta() -> GgufMeta {
+    GgufMeta {
+        architecture: Some("llama".into()),
+        context_length: Some(8192),
+        block_count: Some(1),
+        embedding_length: Some(256),
+        head_count: Some(4),
+        head_count_kv: Some(4),
+    }
+}
+
+#[tokio::test]
+async fn session_rejects_n_ctx_above_model_max() {
+    let h = Harness::start(probe_with_free(None), vec![]).await;
+    write_artifact(
+        &h.models,
+        "org",
+        "small-ctx.gguf",
+        100_000,
+        small_ctx_meta(),
+    );
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let resp = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"artifact_id":"org/small-ctx.gguf","n_ctx":16384}),
+        )
+        .await;
+    assert_eq!(resp.status(), 400);
+    let body: Value = resp.json().await.unwrap();
+    assert!(body["error"].as_str().unwrap().contains("8192"), "{body}");
     h.listening.shutdown().await;
 }

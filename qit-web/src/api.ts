@@ -25,6 +25,7 @@ export type Hardware = {
   memory_pressure: string | null;
   free_ram_bytes: number | null;
   loaded_rss_bytes: number;
+  worker_path: string | null;
 };
 
 export type Reservation = {
@@ -58,7 +59,15 @@ async function parse<T>(res: Response): Promise<T> {
   }
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(text);
+    try {
+      const j = JSON.parse(text) as { error?: string };
+      throw new Error(j.error ?? text);
+    } catch (e) {
+      if (e instanceof Error && !e.message.startsWith("{")) {
+        throw e;
+      }
+      throw new Error(text);
+    }
   }
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
@@ -71,6 +80,7 @@ export function fmtBytes(n: number): string {
 
 export const api = {
   health: () => fetch("/api/health").then((r) => parse<{ ok: boolean }>(r)),
+  hardware: () => fetch("/api/hardware").then((r) => parse<Hardware>(r)),
   scan: () =>
     fetch("/api/scan", { method: "POST" }).then((r) =>
       parse<{ artifacts: Artifact[] }>(r)

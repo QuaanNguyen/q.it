@@ -21,8 +21,8 @@ use crate::paths::Paths;
 use crate::probe::{budget_bytes, resolve_os_reserve, HardwareProbe, HardwareSnapshot};
 use crate::scan::scan_library;
 use crate::spa::index_html;
-use crate::store::{ArtifactRow, MeasurementRow, PinRow, Store};
-use crate::supervisor::{proxy_generate, SessionStatus, SessionView, Supervisor};
+use crate::store::{ArtifactRow, MeasurementRow, PinRow, SessionRow, Store};
+use crate::supervisor::{proxy_generate, session_status_str, SessionStatus, SessionView, Supervisor};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -30,6 +30,7 @@ pub struct AppState {
     pub store: Arc<Mutex<Store>>,
     pub probe: Arc<dyn HardwareProbe>,
     pub os_reserve_override: Option<u64>,
+    pub worker_path: Option<PathBuf>,
     pub supervisor: Arc<Supervisor>,
     pub what_ifs: Arc<Mutex<Vec<PinRow>>>,
 }
@@ -56,6 +57,7 @@ pub struct HardwareBody {
     pub memory_pressure: Option<String>,
     pub free_ram_bytes: Option<u64>,
     pub loaded_rss_bytes: u64,
+    pub worker_path: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -120,6 +122,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/pins", post(add_pin))
         .route("/api/pins/{id}", delete(delete_pin))
         .route("/api/sessions", get(list_sessions).post(start_session))
+        .route("/api/sessions/{id}", delete(delete_session))
         .route("/api/sessions/{id}/stop", post(stop_session))
         .route("/api/generate", post(generate))
         .fallback(get(spa_or_asset))
@@ -213,6 +216,7 @@ async fn add_what_if(
 ) -> Result<Json<ReservationBody>, ApiError> {
     let store = state.store.lock().await;
     let artifact = require_artifact(&store, &shape.artifact_id)?;
+    validate_n_ctx(&artifact, shape.n_ctx())?;
     let row = PinRow {
         id: Uuid::new_v4().to_string(),
         artifact_id: shape.artifact_id.clone(),
@@ -257,6 +261,7 @@ async fn add_pin(
 ) -> Result<Json<ReservationBody>, ApiError> {
     let store = state.store.lock().await;
     let artifact = require_artifact(&store, &shape.artifact_id)?;
+    validate_n_ctx(&artifact, shape.n_ctx())?;
     let row = PinRow {
         id: Uuid::new_v4().to_string(),
         artifact_id: shape.artifact_id.clone(),
@@ -298,20 +303,51 @@ async fn start_session(
 ) -> Result<Json<SessionView>, ApiError> {
     let store = state.store.lock().await;
     let artifact = require_artifact(&store, &shape.artifact_id)?;
+    validate_n_ctx(&artifact, shape.n_ctx())?;
     drop(store);
     let log = state.paths.worker_log(&Uuid::new_v4().to_string());
-    let view = state
+    let n_ctx = shape.n_ctx();
+    let n_gpu_layers = shape.n_gpu_layers();
+    let n_parallel = shape.n_parallel();
+    let result = state
         .supervisor
         .start(
             &artifact,
-            shape.n_ctx(),
-            shape.n_gpu_layers(),
-            shape.n_parallel(),
+            n_ctx,
+            n_gpu_layers,
+            n_parallel,
             log,
         )
         .await
-        .map_err(ApiError::bad)?;
-    Ok(Json(view))
+        .map_err(|e| {
+            tracing::warn!(
+                artifact_id = %shape.artifact_id,
+                error = %e,
+                "session start failed"
+            );
+            ApiError::bad(e)
+        });
+    persist_session_tuple(
+        &state,
+        &shape.artifact_id,
+        n_ctx,
+        n_gpu_layers,
+        n_parallel,
+    )
+    .await;
+    result.map(Json)
+}
+
+async fn delete_session(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state.supervisor.remove(&id).await.map_err(ApiError::bad)?;
+    let store = state.store.lock().await;
+    if !store.delete_session(&id).map_err(ApiError::from)? {
+        return Err(ApiError::not_found("session not found"));
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn stop_session(
@@ -319,6 +355,7 @@ async fn stop_session(
     Path(id): Path<String>,
 ) -> Result<Json<SessionView>, ApiError> {
     let view = state.supervisor.stop(&id).await.map_err(ApiError::bad)?;
+    persist_session(&state, &view).await;
     Ok(Json(view))
 }
 
@@ -331,6 +368,7 @@ async fn generate(
     let n_parallel = body.n_parallel.unwrap_or(DEFAULT_N_PARALLEL);
     let store = state.store.lock().await;
     let artifact = require_artifact(&store, &body.artifact_id)?;
+    validate_n_ctx(&artifact, n_ctx)?;
     drop(store);
 
     let mut ephemeral = false;
@@ -354,7 +392,14 @@ async fn generate(
             .supervisor
             .start(&artifact, n_ctx, n_gpu_layers, n_parallel, log)
             .await
-            .map_err(ApiError::bad)?
+            .map_err(|e| {
+                tracing::warn!(
+                    artifact_id = %body.artifact_id,
+                    error = %e,
+                    "generate worker start failed"
+                );
+                ApiError::bad(e)
+            })?
     };
 
     if session.status != SessionStatus::Loaded {
@@ -406,6 +451,11 @@ async fn generate(
             }
             Err(e) => {
                 if e != "client closed" {
+                    tracing::warn!(
+                        artifact_id = %artifact_id,
+                        error = %e,
+                        "generate failed"
+                    );
                     let _ = tx.send(Ok(Event::default().event("error").data(e))).await;
                 }
             }
@@ -448,6 +498,17 @@ fn require_artifact(store: &Store, id: &str) -> Result<ArtifactRow, ApiError> {
         .artifact(id)
         .map_err(ApiError::from)?
         .ok_or_else(|| ApiError::not_found("artifact not found"))
+}
+
+fn validate_n_ctx(artifact: &ArtifactRow, n_ctx: u32) -> Result<(), ApiError> {
+    if let Some(max) = artifact.context_length {
+        if n_ctx > max {
+            return Err(ApiError::bad(format!(
+                "n_ctx {n_ctx} exceeds model max {max}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 pub async fn rescan(state: &AppState) -> Result<(), ApiError> {
@@ -530,6 +591,10 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
         memory_pressure: snap.memory_pressure,
         free_ram_bytes: snap.free_ram_bytes,
         loaded_rss_bytes: state.supervisor.loaded_rss_bytes().await,
+        worker_path: state
+            .worker_path
+            .as_ref()
+            .map(|p| p.display().to_string()),
     })
 }
 
@@ -581,5 +646,36 @@ impl From<crate::error::Error> for ApiError {
 impl std::fmt::Debug for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
+    }
+}
+
+async fn persist_session(state: &AppState, view: &SessionView) {
+    let row = SessionRow {
+        id: view.id.clone(),
+        artifact_id: view.artifact_id.clone(),
+        n_ctx: view.n_ctx,
+        n_gpu_layers: view.n_gpu_layers,
+        n_parallel: view.n_parallel,
+        status: session_status_str(view.status).to_string(),
+        last_error: view.last_error.clone(),
+        log_path: view.log_path.clone(),
+    };
+    let store = state.store.lock().await;
+    let _ = store.upsert_session(&row);
+}
+
+async fn persist_session_tuple(
+    state: &AppState,
+    artifact_id: &str,
+    n_ctx: u32,
+    n_gpu_layers: i32,
+    n_parallel: u32,
+) {
+    if let Some(view) = state
+        .supervisor
+        .find_by_tuple(artifact_id, n_ctx, n_gpu_layers, n_parallel)
+        .await
+    {
+        persist_session(state, &view).await;
     }
 }

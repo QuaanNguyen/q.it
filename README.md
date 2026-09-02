@@ -10,6 +10,8 @@ QIT_MODELS_DIR="$HOME/models/gguf" cargo run -p qit-runtime
 
 Open http://127.0.0.1:2471
 
+Start and Generate need `llama-server` (`brew install llama.cpp` is auto-discovered on Apple Silicon). Override with `QIT_WORKER_PATH` or `LLAMA_SERVER_PATH` if needed.
+
 Optional:
 
 - `QIT_HOME` — app state (default `~/Library/Application Support/q.it`)

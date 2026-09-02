@@ -3,6 +3,19 @@ import { api, fmtBytes, type Artifact, type Capacity } from "./api";
 
 const PRESETS = [4096, 8192, 16384, 32768];
 
+function presetsForArtifacts(artifacts: Artifact[]): number[] {
+  const caps = artifacts
+    .map((a) => a.context_length)
+    .filter((n): n is number => n != null);
+  const max = caps.length ? Math.min(...caps) : 32768;
+  const presets = PRESETS.filter((n) => n <= max);
+  if (max < 32768 && !presets.includes(max)) {
+    presets.push(max);
+    presets.sort((a, b) => a - b);
+  }
+  return presets;
+}
+
 function routeFromHash(): "catalog" | "capacity" | "settings" {
   const raw = location.hash.replace("#/", "");
   if (raw === "capacity" || raw === "settings") return raw;
@@ -19,6 +32,10 @@ export default function App() {
   const [generating, setGenerating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [workerPath, setWorkerPath] = useState<string | null | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     const onHash = () => setRoute(routeFromHash());
@@ -28,13 +45,16 @@ export default function App() {
   }, []);
 
   const refreshCatalog = useCallback(async () => {
-    await api.scan();
+    const [hw, _] = await Promise.all([api.hardware(), api.scan()]);
+    setWorkerPath(hw.worker_path);
     const cat = await api.catalog(nCtx);
     setArtifacts(cat.artifacts);
   }, [nCtx]);
 
   const refreshCapacity = useCallback(async () => {
-    setCapacity(await api.capacity());
+    const cap = await api.capacity();
+    setCapacity(cap);
+    setWorkerPath(cap.hardware.worker_path);
   }, []);
 
   useEffect(() => {
@@ -57,6 +77,7 @@ export default function App() {
     abortRef.current = ac;
     setGenerating(true);
     setStream("");
+    setActionError(null);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -64,6 +85,16 @@ export default function App() {
         body: JSON.stringify({ artifact_id: id, n_ctx: nCtx, prompt }),
         signal: ac.signal,
       });
+      if (!res.ok) {
+        const text = await res.text();
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          setStream(j.error ?? text);
+        } catch {
+          setStream(text);
+        }
+        return;
+      }
       const reader = res.body?.getReader();
       if (!reader) return;
       const decoder = new TextDecoder();
@@ -193,6 +224,14 @@ export default function App() {
         {!error && route === "catalog" && (
           <>
             <h1>Catalog</h1>
+            {workerPath === null && (
+              <p className="muted">
+                No worker binary found. Install llama.cpp (
+                <code>brew install llama.cpp</code>) or set{" "}
+                <code>QIT_WORKER_PATH</code>.
+              </p>
+            )}
+            {actionError && <pre>{actionError}</pre>}
             <div className="row">
               <label>
                 Context{" "}
@@ -200,7 +239,7 @@ export default function App() {
                   value={nCtx}
                   onChange={(e) => setNCtx(Number(e.target.value))}
                 >
-                  {PRESETS.map((n) => (
+                  {presetsForArtifacts(artifacts).map((n) => (
                     <option key={n} value={n}>
                       {n / 1024}k
                     </option>
@@ -251,8 +290,15 @@ export default function App() {
                       </button>
                       <button
                         onClick={async () => {
-                          await api.start(a.id, nCtx);
-                          location.hash = "#/capacity";
+                          setActionError(null);
+                          try {
+                            await api.start(a.id, nCtx);
+                            location.hash = "#/capacity";
+                          } catch (e) {
+                            setActionError(
+                              e instanceof Error ? e.message : String(e)
+                            );
+                          }
                         }}
                       >
                         Start

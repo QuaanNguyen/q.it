@@ -41,11 +41,7 @@ impl Config {
         let os_reserve_bytes = std::env::var("QIT_OS_RESERVE_BYTES")
             .ok()
             .and_then(|v| v.parse().ok());
-        let worker_path = std::env::var("QIT_WORKER_PATH")
-            .ok()
-            .or_else(|| std::env::var("LLAMA_SERVER_PATH").ok())
-            .map(PathBuf::from)
-            .or_else(bundled_worker_path);
+        let worker_path = resolve_worker_path();
         let worker_launcher: Arc<dyn WorkerLauncher> = Arc::new(LlamaServerLauncher {
             binary: worker_path.clone(),
         });
@@ -65,6 +61,7 @@ impl Config {
         models_dir: PathBuf,
         listen: SocketAddr,
         probe: FixedProbe,
+        worker_path: Option<PathBuf>,
         worker_launcher: Arc<dyn WorkerLauncher>,
         os_reserve_bytes: Option<u64>,
     ) -> Self {
@@ -73,11 +70,32 @@ impl Config {
             home,
             models_dir,
             os_reserve_bytes,
-            worker_path: None,
+            worker_path,
             probe: Arc::new(probe),
             worker_launcher,
         }
     }
+}
+
+pub fn resolve_worker_path() -> Option<PathBuf> {
+    std::env::var("QIT_WORKER_PATH")
+        .ok()
+        .or_else(|| std::env::var("LLAMA_SERVER_PATH").ok())
+        .map(PathBuf::from)
+        .or_else(bundled_worker_path)
+        .or_else(homebrew_worker_path)
+}
+
+fn homebrew_worker_path() -> Option<PathBuf> {
+    for candidate in [
+        PathBuf::from("/opt/homebrew/bin/llama-server"),
+        PathBuf::from("/usr/local/bin/llama-server"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn default_home() -> PathBuf {

@@ -28,6 +28,30 @@ pub struct SessionView {
     pub n_gpu_layers: i32,
     pub n_parallel: u32,
     pub status: SessionStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_path: Option<String>,
+}
+
+pub fn session_status_str(status: SessionStatus) -> &'static str {
+    match status {
+        SessionStatus::NotLoaded => "not_loaded",
+        SessionStatus::Starting => "starting",
+        SessionStatus::Loaded => "loaded",
+        SessionStatus::Stopping => "stopping",
+        SessionStatus::Failed => "failed",
+    }
+}
+
+pub fn session_status_from_str(s: &str) -> SessionStatus {
+    match s {
+        "starting" => SessionStatus::Starting,
+        "loaded" => SessionStatus::Loaded,
+        "stopping" => SessionStatus::Stopping,
+        "failed" => SessionStatus::Failed,
+        _ => SessionStatus::NotLoaded,
+    }
 }
 
 pub struct LaunchRequest {
@@ -141,6 +165,67 @@ impl Supervisor {
         }
     }
 
+    pub async fn hydrate(&self, rows: Vec<crate::store::SessionRow>) {
+        let mut guard = self.sessions.lock().await;
+        for row in rows {
+            guard.insert(
+                row.id.clone(),
+                LiveSession {
+                    view: SessionView {
+                        id: row.id,
+                        artifact_id: row.artifact_id,
+                        n_ctx: row.n_ctx,
+                        n_gpu_layers: row.n_gpu_layers,
+                        n_parallel: row.n_parallel,
+                        status: session_status_from_str(&row.status),
+                        last_error: row.last_error,
+                        log_path: row.log_path,
+                    },
+                    child: None,
+                    base_url: None,
+                },
+            );
+        }
+    }
+
+    pub async fn find_by_tuple(
+        &self,
+        artifact_id: &str,
+        n_ctx: u32,
+        n_gpu_layers: i32,
+        n_parallel: u32,
+    ) -> Option<SessionView> {
+        self.sessions.lock().await.values().find_map(|s| {
+            if s.view.artifact_id == artifact_id
+                && s.view.n_ctx == n_ctx
+                && s.view.n_gpu_layers == n_gpu_layers
+                && s.view.n_parallel == n_parallel
+            {
+                Some(s.view.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub async fn remove(&self, id: &str) -> Result<SessionView, String> {
+        let mut guard = self.sessions.lock().await;
+        let session = guard
+            .get(id)
+            .ok_or_else(|| "session not found".to_string())?;
+        if session.child.is_some()
+            || matches!(
+                session.view.status,
+                SessionStatus::Loaded | SessionStatus::Starting | SessionStatus::Stopping
+            )
+        {
+            return Err("session is active".into());
+        }
+        let view = session.view.clone();
+        guard.remove(id);
+        Ok(view)
+    }
+
     pub async fn list(&self) -> Vec<SessionView> {
         self.sessions
             .lock()
@@ -195,7 +280,12 @@ impl Supervisor {
         {
             return Ok(existing);
         }
-        let id = Uuid::new_v4().to_string();
+        let log_path_str = log_path.display().to_string();
+        let id = self
+            .find_by_tuple(&artifact.id, n_ctx, n_gpu_layers, n_parallel)
+            .await
+            .map(|s| s.id)
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
         {
             let mut guard = self.sessions.lock().await;
             guard.insert(
@@ -208,6 +298,8 @@ impl Supervisor {
                         n_gpu_layers,
                         n_parallel,
                         status: SessionStatus::Starting,
+                        last_error: None,
+                        log_path: Some(log_path_str),
                     },
                     child: None,
                     base_url: None,
@@ -225,16 +317,20 @@ impl Supervisor {
             Err(e) => {
                 if let Some(s) = self.sessions.lock().await.get_mut(&id) {
                     s.view.status = SessionStatus::Failed;
+                    s.view.last_error = Some(e.clone());
                 }
                 return Err(e);
             }
         };
         let mut launched = launched;
         if let Err(e) = wait_ready(&launched.base_url, &mut launched.child).await {
+            drop(kill_child(launched.child));
             let mut guard = self.sessions.lock().await;
             if let Some(s) = guard.get_mut(&id) {
                 s.view.status = SessionStatus::Failed;
-                s.child = Some(launched.child);
+                s.view.last_error = Some(e.clone());
+                s.child = None;
+                s.base_url = None;
             }
             return Err(e);
         }
@@ -248,6 +344,7 @@ impl Supervisor {
                 return Ok(s.view.clone());
             }
             s.view.status = SessionStatus::Loaded;
+            s.view.last_error = None;
             s.base_url = Some(launched.base_url);
             s.child = Some(launched.child);
             return Ok(s.view.clone());
@@ -267,6 +364,7 @@ impl Supervisor {
         }
         session.base_url = None;
         session.view.status = SessionStatus::NotLoaded;
+        session.view.last_error = None;
         Ok(session.view.clone())
     }
 
@@ -289,6 +387,8 @@ impl Supervisor {
                     if let Ok(Some(status)) = child.try_wait() {
                         if !status.success() || session.view.status == SessionStatus::Loaded {
                             session.view.status = SessionStatus::Failed;
+                            session.view.last_error =
+                                Some(format!("worker exited ({status})"));
                             session.base_url = None;
                             session.child = None;
                         }
@@ -309,12 +409,14 @@ async fn wait_ready(base_url: &str, child: &mut Child) -> Result<(), String> {
     let client = reqwest::Client::new();
     let url = format!("{base_url}/health");
     let started = std::time::Instant::now();
-    while started.elapsed() < Duration::from_secs(15) {
+    while started.elapsed() < Duration::from_secs(60) {
         if let Ok(Some(status)) = child.try_wait() {
             return Err(format!("worker exited ({status})"));
         }
-        if client.get(&url).send().await.is_ok() {
-            return Ok(());
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                return Ok(());
+            }
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
