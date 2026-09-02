@@ -538,6 +538,53 @@ async fn client_abort_stops_ephemeral_worker_without_measurement() {
 }
 
 #[tokio::test]
+async fn concurrent_generate_is_refused_until_slot_frees() {
+    let h = Harness::start(probe_with_free(None), slow_stream_args()).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let body = serde_json::json!({
+        "artifact_id": "org/small.gguf",
+        "prompt": "hi",
+        "n_ctx": 4096
+    });
+    let client = reqwest::Client::new();
+    let mut first = client
+        .post(h.url("/api/generate"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first.status(), 200);
+    read_first_token(&mut first).await;
+
+    let second = h.post_json("/api/generate", body.clone()).await;
+    assert_eq!(second.status(), 409);
+    let err: Value = second.json().await.unwrap();
+    assert_eq!(err["error"], "generate in flight");
+    let sessions = h.json("/api/sessions").await;
+    assert_eq!(sessions.as_array().unwrap().len(), 1, "{sessions}");
+
+    drop(first);
+    wait_until(&h, "/api/sessions", |v| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s["status"] == "not_loaded")
+    })
+    .await;
+    let mut third = client
+        .post(h.url("/api/generate"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(third.status(), 200);
+    read_first_token(&mut third).await;
+    drop(third);
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
 async fn hardware_reports_worker_path() {
     let launcher = Arc::new(StubBinLauncher {
         binary: PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker")),

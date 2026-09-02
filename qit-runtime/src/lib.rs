@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot, Mutex, Semaphore};
 
 use crate::config::Config;
 use crate::error::Error;
@@ -63,6 +63,7 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
         worker_path: config.worker_path.clone(),
         supervisor,
         what_ifs: Arc::new(Mutex::new(Vec::new())),
+        generate_slot: Arc::new(Semaphore::new(1)),
     };
     rescan(&state)
         .await

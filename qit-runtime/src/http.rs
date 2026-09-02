@@ -12,7 +12,7 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use futures_util::stream;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{watch, Mutex, Semaphore};
 use uuid::Uuid;
 
 use crate::config::{SessionShape, DEFAULT_N_CTX, DEFAULT_N_GPU_LAYERS, DEFAULT_N_PARALLEL};
@@ -33,6 +33,7 @@ pub struct AppState {
     pub worker_path: Option<PathBuf>,
     pub supervisor: Arc<Supervisor>,
     pub what_ifs: Arc<Mutex<Vec<PinRow>>>,
+    pub generate_slot: Arc<Semaphore>,
 }
 
 #[derive(Deserialize)]
@@ -370,6 +371,11 @@ async fn generate(
     let artifact = require_artifact(&store, &body.artifact_id)?;
     validate_n_ctx(&artifact, n_ctx)?;
     drop(store);
+    let slot = state
+        .generate_slot
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::conflict("generate in flight"))?;
 
     let mut ephemeral = false;
     let session = if let Some(id) = &body.session_id {
@@ -464,6 +470,7 @@ async fn generate(
             let _ = runtime.supervisor.stop(&session_id).await;
         }
         drop(cancel_tx);
+        drop(slot);
     });
 
     let sse = Sse::new(stream::unfold(rx, |mut rx| async move {
@@ -614,6 +621,13 @@ impl ApiError {
     fn not_found(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
+    fn conflict(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
             message: message.into(),
         }
     }
