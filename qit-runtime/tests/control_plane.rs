@@ -31,6 +31,15 @@ impl Harness {
         launcher: Arc<dyn qit_runtime::supervisor::WorkerLauncher>,
         worker_path: Option<PathBuf>,
     ) -> Self {
+        Self::start_full(probe, launcher, worker_path, Some(2_000_000)).await
+    }
+
+    async fn start_full(
+        probe: HardwareSnapshot,
+        launcher: Arc<dyn qit_runtime::supervisor::WorkerLauncher>,
+        worker_path: Option<PathBuf>,
+        os_reserve_env: Option<u64>,
+    ) -> Self {
         let tmp = TempDir::new().unwrap();
         let home = tmp.path().join("home");
         let models = tmp.path().join("models");
@@ -44,7 +53,7 @@ impl Harness {
             },
             worker_path,
             launcher,
-            Some(2_000_000),
+            os_reserve_env,
         );
         let listening = bind(cfg).await.unwrap();
         Self {
@@ -53,6 +62,24 @@ impl Harness {
             models,
             listening,
         }
+    }
+
+    async fn restart(mut self, os_reserve_env: Option<u64>) -> Self {
+        let listening = std::mem::replace(
+            &mut self.listening,
+            bind_same_home(&self.home, &self.models, os_reserve_env).await,
+        );
+        listening.shutdown().await;
+        self
+    }
+
+    async fn put_json(&self, path: &str, body: Value) -> reqwest::Response {
+        reqwest::Client::new()
+            .put(self.url(path))
+            .json(&body)
+            .send()
+            .await
+            .unwrap()
     }
 
     fn url(&self, path: &str) -> String {
@@ -93,6 +120,32 @@ impl Harness {
             .await
             .unwrap()
     }
+}
+
+fn stub_launcher() -> Arc<StubBinLauncher> {
+    Arc::new(StubBinLauncher {
+        binary: PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker")),
+        extra_args: vec![],
+    })
+}
+
+async fn bind_same_home(
+    home: &PathBuf,
+    models: &PathBuf,
+    os_reserve_env: Option<u64>,
+) -> qit_runtime::Listening {
+    let cfg = Config::test(
+        home.clone(),
+        models.clone(),
+        "127.0.0.1:0".parse().unwrap(),
+        FixedProbe {
+            snapshot: probe_with_free(None),
+        },
+        None,
+        stub_launcher(),
+        os_reserve_env,
+    );
+    bind(cfg).await.unwrap()
 }
 
 fn probe_with_free(free: Option<u64>) -> HardwareSnapshot {
@@ -581,6 +634,54 @@ async fn concurrent_generate_is_refused_until_slot_frees() {
     assert_eq!(third.status(), 200);
     read_first_token(&mut third).await;
     drop(third);
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn os_reserve_setting_moves_budget_and_survives_restart() {
+    let h = Harness::start_full(probe_with_free(None), stub_launcher(), None, None).await;
+    let settings = h.json("/api/settings").await;
+    assert_eq!(settings["os_reserve_bytes"], Value::Null);
+    assert_eq!(settings["os_reserve_source"], "default");
+    assert_eq!(settings["effective_os_reserve_bytes"], 2_500_000);
+    assert_eq!(h.json("/api/hardware").await["budget_bytes"], 5_000_000);
+
+    let put = h
+        .put_json(
+            "/api/settings",
+            serde_json::json!({"os_reserve_bytes": 7_000_000}),
+        )
+        .await;
+    assert_eq!(put.status(), 200);
+    let settings: Value = put.json().await.unwrap();
+    assert_eq!(settings["os_reserve_bytes"], 7_000_000);
+    assert_eq!(settings["os_reserve_source"], "setting");
+    let hw = h.json("/api/hardware").await;
+    assert_eq!(hw["os_reserve_bytes"], 7_000_000);
+    assert_eq!(hw["budget_bytes"], 3_000_000);
+
+    let h = h.restart(None).await;
+    let hw = h.json("/api/hardware").await;
+    assert_eq!(hw["os_reserve_bytes"], 7_000_000);
+    assert_eq!(hw["budget_bytes"], 3_000_000);
+
+    let h = h.restart(Some(2_000_000)).await;
+    let settings = h.json("/api/settings").await;
+    assert_eq!(settings["os_reserve_bytes"], 7_000_000);
+    assert_eq!(settings["os_reserve_source"], "env");
+    assert_eq!(settings["effective_os_reserve_bytes"], 2_000_000);
+    assert_eq!(h.json("/api/hardware").await["os_reserve_bytes"], 2_000_000);
+
+    let h = h.restart(None).await;
+    let reset = h
+        .put_json("/api/settings", serde_json::json!({"os_reserve_bytes": null}))
+        .await;
+    assert_eq!(reset.status(), 200);
+    assert_eq!(h.json("/api/hardware").await["os_reserve_bytes"], 2_500_000);
+    let rejected = h
+        .put_json("/api/settings", serde_json::json!({"os_reserve_bytes": 20_000_000}))
+        .await;
+    assert_eq!(rejected.status(), 400);
     h.listening.shutdown().await;
 }
 

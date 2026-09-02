@@ -115,6 +115,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/hardware", get(hardware))
+        .route("/api/settings", get(settings).put(update_settings))
         .route("/api/scan", post(scan))
         .route("/api/catalog", get(catalog))
         .route("/api/capacity", get(capacity))
@@ -553,12 +554,88 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
     Ok(CatalogBody { artifacts: list })
 }
 
+#[derive(Serialize)]
+pub struct SettingsBody {
+    pub os_reserve_bytes: Option<u64>,
+    pub os_reserve_source: OsReserveSource,
+    pub effective_os_reserve_bytes: u64,
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OsReserveSource {
+    Env,
+    Setting,
+    Default,
+}
+
+#[derive(Deserialize)]
+pub struct SettingsUpdate {
+    pub os_reserve_bytes: Option<u64>,
+}
+
+struct OsReserve {
+    setting: Option<u64>,
+    source: OsReserveSource,
+    effective: u64,
+}
+
+fn os_reserve(state: &AppState, store: &Store, unified_memory_bytes: u64) -> Result<OsReserve, ApiError> {
+    let setting = store.os_reserve_setting().map_err(ApiError::from)?;
+    let (source, chosen) = match (state.os_reserve_override, setting) {
+        (Some(env), _) => (OsReserveSource::Env, Some(env)),
+        (None, Some(s)) => (OsReserveSource::Setting, Some(s)),
+        (None, None) => (OsReserveSource::Default, None),
+    };
+    Ok(OsReserve {
+        setting,
+        source,
+        effective: resolve_os_reserve(unified_memory_bytes, chosen),
+    })
+}
+
+async fn settings(State(state): State<AppState>) -> Result<Json<SettingsBody>, ApiError> {
+    let snap = state.probe.probe();
+    let store = state.store.lock().await;
+    let reserve = os_reserve(&state, &store, snap.unified_memory_bytes)?;
+    Ok(Json(settings_body(reserve)))
+}
+
+async fn update_settings(
+    State(state): State<AppState>,
+    Json(update): Json<SettingsUpdate>,
+) -> Result<Json<SettingsBody>, ApiError> {
+    let snap = state.probe.probe();
+    if let Some(bytes) = update.os_reserve_bytes {
+        if bytes >= snap.unified_memory_bytes {
+            return Err(ApiError::bad(format!(
+                "os_reserve_bytes {bytes} must be below unified memory {}",
+                snap.unified_memory_bytes
+            )));
+        }
+    }
+    let store = state.store.lock().await;
+    store
+        .set_os_reserve_setting(update.os_reserve_bytes)
+        .map_err(ApiError::from)?;
+    let reserve = os_reserve(&state, &store, snap.unified_memory_bytes)?;
+    Ok(Json(settings_body(reserve)))
+}
+
+fn settings_body(reserve: OsReserve) -> SettingsBody {
+    SettingsBody {
+        os_reserve_bytes: reserve.setting,
+        os_reserve_source: reserve.source,
+        effective_os_reserve_bytes: reserve.effective,
+    }
+}
+
 async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
     state.supervisor.reap().await;
     let snap: HardwareSnapshot = state.probe.probe();
-    let os_reserve_bytes = resolve_os_reserve(snap.unified_memory_bytes, state.os_reserve_override);
-    let budget = budget_bytes(&snap, os_reserve_bytes);
     let store = state.store.lock().await;
+    let os_reserve_bytes = os_reserve(state, &store, snap.unified_memory_bytes)?.effective;
+    let budget = budget_bytes(&snap, os_reserve_bytes);
     let artifacts = store.artifacts().map_err(ApiError::from)?;
     let pins = store.pins().map_err(ApiError::from)?;
     drop(store);

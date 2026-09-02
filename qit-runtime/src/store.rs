@@ -48,6 +48,8 @@ pub struct SessionRow {
     pub log_path: Option<String>,
 }
 
+const OS_RESERVE_KEY: &str = "os_reserve_bytes";
+
 pub struct Store {
     conn: Connection,
 }
@@ -98,9 +100,46 @@ impl Store {
                 log_path TEXT,
                 UNIQUE(artifact_id, n_ctx, n_gpu_layers, n_parallel)
             );
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             ",
         )?;
         Ok(Self { conn })
+    }
+
+    pub fn setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
+        self.conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+    }
+
+    pub fn set_setting(&self, key: &str, value: Option<&str>) -> rusqlite::Result<()> {
+        match value {
+            Some(v) => {
+                self.conn.execute(
+                    "INSERT INTO settings (key, value) VALUES (?1, ?2)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    params![key, v],
+                )?;
+            }
+            None => {
+                self.conn
+                    .execute("DELETE FROM settings WHERE key = ?1", [key])?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn os_reserve_setting(&self) -> rusqlite::Result<Option<u64>> {
+        Ok(self
+            .setting(OS_RESERVE_KEY)?
+            .and_then(|v| v.parse().ok()))
+    }
+
+    pub fn set_os_reserve_setting(&self, bytes: Option<u64>) -> rusqlite::Result<()> {
+        self.set_setting(OS_RESERVE_KEY, bytes.map(|b| b.to_string()).as_deref())
     }
 
     pub fn replace_artifacts(&self, rows: &[ArtifactRow]) -> rusqlite::Result<()> {
