@@ -454,6 +454,89 @@ async fn generate_reuses_loaded_session() {
     h.listening.shutdown().await;
 }
 
+fn slow_stream_args() -> Vec<String> {
+    vec![
+        "--token-delay-ms".into(),
+        "200".into(),
+        "--n-tokens".into(),
+        "50".into(),
+    ]
+}
+
+async fn read_first_token(resp: &mut reqwest::Response) {
+    let chunk = resp.chunk().await.unwrap().expect("first sse chunk");
+    let text = String::from_utf8_lossy(&chunk);
+    assert!(text.contains("event: token"), "{text}");
+}
+
+async fn wait_until<F: Fn(&Value) -> bool>(h: &Harness, path: &str, ok: F) -> Value {
+    let mut last = Value::Null;
+    for _ in 0..50 {
+        last = h.json(path).await;
+        if ok(&last) {
+            return last;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("condition not met for {path}: {last}");
+}
+
+fn worker_pid_from_log(log_path: &str) -> u32 {
+    let log = std::fs::read_to_string(log_path).unwrap();
+    log.lines()
+        .find_map(|l| l.strip_prefix("stub worker pid ").and_then(|p| p.trim().parse().ok()))
+        .expect("stub worker pid in log")
+}
+
+fn process_alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+#[tokio::test]
+async fn client_abort_stops_ephemeral_worker_without_measurement() {
+    let h = Harness::start(probe_with_free(None), slow_stream_args()).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let client = reqwest::Client::new();
+    let mut resp = client
+        .post(h.url("/api/generate"))
+        .json(&serde_json::json!({
+            "artifact_id": "org/small.gguf",
+            "prompt": "hi",
+            "n_ctx": 4096
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    read_first_token(&mut resp).await;
+    let sessions = h.json("/api/sessions").await;
+    let log_path = sessions[0]["log_path"].as_str().unwrap().to_string();
+    let pid = worker_pid_from_log(&log_path);
+    assert!(process_alive(pid));
+    drop(resp);
+
+    let sessions = wait_until(&h, "/api/sessions", |v| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s["status"] == "not_loaded")
+    })
+    .await;
+    assert_eq!(sessions.as_array().unwrap().len(), 1, "{sessions}");
+    assert!(!process_alive(pid), "stub worker {pid} still running");
+    let catalog = h.json("/api/catalog").await;
+    let small = &catalog["artifacts"][0];
+    assert!(small["throughput_tps"].is_null(), "{small}");
+    h.listening.shutdown().await;
+}
+
 #[tokio::test]
 async fn hardware_reports_worker_path() {
     let launcher = Arc::new(StubBinLauncher {
