@@ -55,13 +55,11 @@ fn system_snapshot() -> HardwareSnapshot {
 fn macos_snapshot() -> HardwareSnapshot {
     HardwareSnapshot {
         device_class: "apple_silicon".into(),
-        chip: sysctl_n("machdep.cpu.brand_string").unwrap_or_else(|| "Apple Silicon".into()),
-        unified_memory_bytes: sysctl_n("hw.memsize")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0),
+        chip: sysctl_string("machdep.cpu.brand_string").unwrap_or_else(|| "Apple Silicon".into()),
+        unified_memory_bytes: sysctl_u64("hw.memsize").unwrap_or(0),
         metal_recommended_working_set_bytes: metal_working_set(),
-        memory_pressure: None,
-        free_ram_bytes: None,
+        memory_pressure: vm_pressure_level(),
+        free_ram_bytes: reclaimable_ram_bytes(),
     }
 }
 
@@ -72,21 +70,105 @@ fn metal_working_set() -> Option<u64> {
 }
 
 #[cfg(target_os = "macos")]
-fn sysctl_n(name: &str) -> Option<String> {
-    let out = std::process::Command::new("sysctl")
-        .args(["-n", name])
-        .output()
-        .ok()?;
-    if !out.status.success() {
+fn sysctl_string(name: &str) -> Option<String> {
+    let mut len = 0usize;
+    let cname = std::ffi::CString::new(name).ok()?;
+    unsafe {
+        if libc::sysctlbyname(cname.as_ptr(), std::ptr::null_mut(), &mut len, std::ptr::null_mut(), 0)
+            != 0
+        {
+            return None;
+        }
+        let mut buf = vec![0u8; len];
+        if libc::sysctlbyname(
+            cname.as_ptr(),
+            buf.as_mut_ptr() as *mut _,
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        ) != 0
+        {
+            return None;
+        }
+        if len > 0 && buf[len - 1] == 0 {
+            buf.truncate(len - 1);
+        }
+        let s = String::from_utf8(buf).ok()?.trim().to_string();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn sysctl_u64(name: &str) -> Option<u64> {
+    let mut val: u64 = 0;
+    let mut len = std::mem::size_of::<u64>();
+    let cname = std::ffi::CString::new(name).ok()?;
+    let rc = unsafe {
+        libc::sysctlbyname(
+            cname.as_ptr(),
+            &mut val as *mut u64 as *mut _,
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if rc == 0 {
+        Some(val)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn vm_pressure_level() -> Option<String> {
+    let mut val: i32 = 0;
+    let mut len = std::mem::size_of::<i32>();
+    let cname = std::ffi::CString::new("kern.memorystatus_vm_pressure_level").ok()?;
+    let rc = unsafe {
+        libc::sysctlbyname(
+            cname.as_ptr(),
+            &mut val as *mut i32 as *mut _,
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if rc != 0 {
         return None;
     }
-    let s = String::from_utf8(out.stdout).ok()?;
-    let s = s.trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
+    match val {
+        1 => Some("normal".into()),
+        2 => Some("warn".into()),
+        4 => Some("critical".into()),
+        _ => None,
     }
+}
+
+#[cfg(target_os = "macos")]
+#[allow(deprecated)]
+fn reclaimable_ram_bytes() -> Option<u64> {
+    let mut stats = unsafe { std::mem::zeroed::<libc::vm_statistics64>() };
+    let mut count = libc::HOST_VM_INFO64_COUNT;
+    let rc = unsafe {
+        libc::host_statistics64(
+            libc::mach_host_self(),
+            libc::HOST_VM_INFO64,
+            &mut stats as *mut _ as *mut _,
+            &mut count,
+        )
+    };
+    if rc != libc::KERN_SUCCESS {
+        return None;
+    }
+    let page = sysctl_u64("hw.pagesize")?;
+    let pages = u64::from(stats.free_count)
+        + u64::from(stats.inactive_count)
+        + u64::from(stats.purgeable_count);
+    Some(pages * page)
 }
 
 pub fn budget_bytes(snapshot: &HardwareSnapshot, os_reserve_bytes: u64) -> u64 {

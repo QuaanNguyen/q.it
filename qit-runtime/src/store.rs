@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::gguf::{ArtifactKind, PlannerHints};
+
 #[derive(Clone, Debug)]
 pub struct ArtifactRow {
     pub id: String,
@@ -15,6 +17,8 @@ pub struct ArtifactRow {
     pub embedding_length: Option<u32>,
     pub head_count: Option<u32>,
     pub head_count_kv: Option<u32>,
+    pub kind: ArtifactKind,
+    pub planner: PlannerHints,
     pub confidence: String,
 }
 
@@ -72,6 +76,8 @@ impl Store {
                 embedding_length INTEGER,
                 head_count INTEGER,
                 head_count_kv INTEGER,
+                kind TEXT NOT NULL DEFAULT 'unknown',
+                planner_json TEXT,
                 confidence TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS pins (
@@ -106,6 +112,7 @@ impl Store {
             );
             ",
         )?;
+        ensure_artifact_columns(&conn)?;
         Ok(Self { conn })
     }
 
@@ -149,10 +156,12 @@ impl Store {
             let mut stmt = tx.prepare(
                 "INSERT INTO artifacts (
                     id, org, filename, path, bytes, architecture, context_length,
-                    block_count, embedding_length, head_count, head_count_kv, confidence
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    block_count, embedding_length, head_count, head_count_kv, kind,
+                    planner_json, confidence
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             )?;
             for row in rows {
+                let planner = serde_json::to_string(&row.planner).unwrap_or_else(|_| "{}".into());
                 stmt.execute(params![
                     row.id,
                     row.org,
@@ -165,6 +174,8 @@ impl Store {
                     row.embedding_length.map(|v| v as i64),
                     row.head_count.map(|v| v as i64),
                     row.head_count_kv.map(|v| v as i64),
+                    row.kind.as_str(),
+                    planner,
                     row.confidence,
                 ])?;
             }
@@ -176,25 +187,11 @@ impl Store {
     pub fn artifacts(&self) -> rusqlite::Result<Vec<ArtifactRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, org, filename, path, bytes, architecture, context_length,
-                    block_count, embedding_length, head_count, head_count_kv, confidence
+                    block_count, embedding_length, head_count, head_count_kv, kind,
+                    planner_json, confidence
              FROM artifacts ORDER BY org, filename",
         )?;
-        let rows = stmt.query_map([], |r| {
-            Ok(ArtifactRow {
-                id: r.get(0)?,
-                org: r.get(1)?,
-                filename: r.get(2)?,
-                path: PathBuf::from(r.get::<_, String>(3)?),
-                bytes: r.get::<_, i64>(4)? as u64,
-                architecture: r.get(5)?,
-                context_length: r.get::<_, Option<i64>>(6)?.map(|v| v as u32),
-                block_count: r.get::<_, Option<i64>>(7)?.map(|v| v as u32),
-                embedding_length: r.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                head_count: r.get::<_, Option<i64>>(9)?.map(|v| v as u32),
-                head_count_kv: r.get::<_, Option<i64>>(10)?.map(|v| v as u32),
-                confidence: r.get(11)?,
-            })
-        })?;
+        let rows = stmt.query_map([], map_artifact)?;
         rows.collect()
     }
 
@@ -202,25 +199,11 @@ impl Store {
         self.conn
             .query_row(
                 "SELECT id, org, filename, path, bytes, architecture, context_length,
-                        block_count, embedding_length, head_count, head_count_kv, confidence
+                        block_count, embedding_length, head_count, head_count_kv, kind,
+                        planner_json, confidence
                  FROM artifacts WHERE id = ?1",
                 [id],
-                |r| {
-                    Ok(ArtifactRow {
-                        id: r.get(0)?,
-                        org: r.get(1)?,
-                        filename: r.get(2)?,
-                        path: PathBuf::from(r.get::<_, String>(3)?),
-                        bytes: r.get::<_, i64>(4)? as u64,
-                        architecture: r.get(5)?,
-                        context_length: r.get::<_, Option<i64>>(6)?.map(|v| v as u32),
-                        block_count: r.get::<_, Option<i64>>(7)?.map(|v| v as u32),
-                        embedding_length: r.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                        head_count: r.get::<_, Option<i64>>(9)?.map(|v| v as u32),
-                        head_count_kv: r.get::<_, Option<i64>>(10)?.map(|v| v as u32),
-                        confidence: r.get(11)?,
-                    })
-                },
+                map_artifact,
             )
             .optional()
     }
@@ -356,4 +339,45 @@ impl Store {
         })?;
         rows.collect()
     }
+}
+
+fn map_artifact(r: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactRow> {
+    let kind: String = r.get(11)?;
+    let planner_json: Option<String> = r.get(12)?;
+    let planner = planner_json
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    Ok(ArtifactRow {
+        id: r.get(0)?,
+        org: r.get(1)?,
+        filename: r.get(2)?,
+        path: PathBuf::from(r.get::<_, String>(3)?),
+        bytes: r.get::<_, i64>(4)? as u64,
+        architecture: r.get(5)?,
+        context_length: r.get::<_, Option<i64>>(6)?.map(|v| v as u32),
+        block_count: r.get::<_, Option<i64>>(7)?.map(|v| v as u32),
+        embedding_length: r.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+        head_count: r.get::<_, Option<i64>>(9)?.map(|v| v as u32),
+        head_count_kv: r.get::<_, Option<i64>>(10)?.map(|v| v as u32),
+        kind: ArtifactKind::parse(&kind),
+        planner,
+        confidence: r.get(13)?,
+    })
+}
+
+fn ensure_artifact_columns(conn: &Connection) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(artifacts)")?;
+    let names: Vec<String> = stmt
+        .query_map([], |r| r.get::<_, String>(1))?
+        .collect::<Result<_, _>>()?;
+    if !names.iter().any(|n| n == "kind") {
+        conn.execute(
+            "ALTER TABLE artifacts ADD COLUMN kind TEXT NOT NULL DEFAULT 'unknown'",
+            [],
+        )?;
+    }
+    if !names.iter().any(|n| n == "planner_json") {
+        conn.execute("ALTER TABLE artifacts ADD COLUMN planner_json TEXT", [])?;
+    }
+    Ok(())
 }

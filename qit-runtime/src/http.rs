@@ -85,6 +85,8 @@ pub struct ArtifactBody {
     pub fit: Fit,
     pub throughput_tps: Option<f64>,
     pub peak_rss_bytes: Option<u64>,
+    pub kind: String,
+    pub generate_supported: bool,
 }
 
 #[derive(Serialize)]
@@ -382,9 +384,9 @@ async fn stop_session(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<SessionView>, ApiError> {
-    let view = state.supervisor.stop(&id).await.map_err(ApiError::bad)?;
-    persist_session(&state, &view).await;
-    Ok(Json(view))
+    let stopped = state.supervisor.stop(&id).await.map_err(ApiError::bad)?;
+    persist_session(&state, &stopped.view).await;
+    Ok(Json(stopped.view))
 }
 
 async fn generate(
@@ -399,6 +401,12 @@ async fn generate(
     let store = state.store.lock().await;
     let artifact = require_artifact(&store, &body.artifact_id)?;
     validate_n_ctx(&artifact, n_ctx)?;
+    if !artifact.kind.generate_supported() {
+        return Err(ApiError::bad(format!(
+            "Try is only for instruct artifacts, this one is {}",
+            artifact.kind.as_str()
+        )));
+    }
     drop(store);
     let slot = state
         .generate_slot
@@ -478,11 +486,21 @@ async fn generate(
                 } else {
                     None
                 };
+                let peak = if ephemeral {
+                    runtime
+                        .supervisor
+                        .stop(&session_id)
+                        .await
+                        .ok()
+                        .and_then(|s| s.peak_rss_bytes)
+                } else {
+                    runtime.supervisor.sample_resident(&session_id).await
+                };
                 let store = runtime.store.lock().await;
                 let _ = store.upsert_measurement(&MeasurementRow {
                     artifact_id,
                     throughput_tps: tps,
-                    peak_rss_bytes: None,
+                    peak_rss_bytes: peak,
                     n_tokens: Some(outcome.n_tokens),
                     generation_ms: Some(outcome.generation_ms),
                 });
@@ -589,6 +607,8 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
             fit,
             throughput_tps: measurement.as_ref().and_then(|m| m.throughput_tps),
             peak_rss_bytes: measurement.as_ref().and_then(|m| m.peak_rss_bytes),
+            kind: artifact.kind.as_str().into(),
+            generate_supported: artifact.kind.generate_supported(),
         });
     }
     Ok(CatalogBody { artifacts: list })

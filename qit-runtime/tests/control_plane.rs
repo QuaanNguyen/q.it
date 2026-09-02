@@ -149,12 +149,16 @@ async fn bind_same_home(
 }
 
 fn probe_with_free(free: Option<u64>) -> HardwareSnapshot {
+    probe_live(free, None)
+}
+
+fn probe_live(free: Option<u64>, pressure: Option<&str>) -> HardwareSnapshot {
     HardwareSnapshot {
         device_class: "apple_silicon".into(),
         chip: "test-chip".into(),
         unified_memory_bytes: 10_000_000,
         metal_recommended_working_set_bytes: Some(5_000_000),
-        memory_pressure: None,
+        memory_pressure: pressure.map(str::to_string),
         free_ram_bytes: free,
     }
 }
@@ -180,6 +184,8 @@ fn llm_meta() -> GgufMeta {
         embedding_length: Some(256),
         head_count: Some(4),
         head_count_kv: Some(4),
+        has_chat_template: true,
+        ..GgufMeta::default()
     }
 }
 
@@ -457,6 +463,10 @@ async fn generate_streams_and_records_metrics() {
         .find(|a| a["id"] == "org/small.gguf")
         .unwrap();
     assert!(small["throughput_tps"].as_f64().is_some(), "{small}");
+    assert!(
+        small["peak_rss_bytes"].as_u64().unwrap_or(0) > 0,
+        "{small}"
+    );
     let sessions = h.json("/api/sessions").await;
     let loaded = sessions
         .as_array()
@@ -954,6 +964,8 @@ fn small_ctx_meta() -> GgufMeta {
         embedding_length: Some(256),
         head_count: Some(4),
         head_count_kv: Some(4),
+        has_chat_template: true,
+        ..GgufMeta::default()
     }
 }
 
@@ -977,5 +989,129 @@ async fn session_rejects_n_ctx_above_model_max() {
     assert_eq!(resp.status(), 400);
     let body: Value = resp.json().await.unwrap();
     assert!(body["error"].as_str().unwrap().contains("8192"), "{body}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn warn_pressure_surfaces_without_changing_fit() {
+    let warn = Harness::start(probe_live(Some(50), Some("warn")), vec![]).await;
+    write_artifact(&warn.models, "org", "small.gguf", 100_000, llm_meta());
+    warn.post_json("/api/scan", serde_json::json!({})).await;
+    let hw = warn.json("/api/hardware").await;
+    assert_eq!(hw["memory_pressure"], "warn");
+    assert_eq!(hw["free_ram_bytes"], 50);
+    assert_eq!(hw["budget_bytes"], 5_000_000);
+    let cap = warn.json("/api/capacity").await;
+    assert_eq!(cap["hardware"]["memory_pressure"], "warn");
+    let fit = warn.json("/api/catalog?n_ctx=4096").await["artifacts"][0]["fit"].clone();
+    warn.listening.shutdown().await;
+
+    let quiet = Harness::start(probe_live(Some(9_000_000), Some("normal")), vec![]).await;
+    write_artifact(&quiet.models, "org", "small.gguf", 100_000, llm_meta());
+    quiet.post_json("/api/scan", serde_json::json!({})).await;
+    let other = quiet.json("/api/catalog?n_ctx=4096").await["artifacts"][0]["fit"].clone();
+    assert_eq!(fit, other);
+    quiet.listening.shutdown().await;
+}
+
+fn hybrid_meta() -> GgufMeta {
+    GgufMeta {
+        architecture: Some("nemotron_h".into()),
+        context_length: Some(1_048_576),
+        block_count: Some(42),
+        embedding_length: Some(3136),
+        head_count: Some(40),
+        head_count_kv_layers: Some(vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0,
+            0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]),
+        feed_forward_layers: Some(vec![
+            0, 12544, 0, 12544, 0, 12544, 0, 0, 12544, 0, 12544, 0, 0, 12544, 0, 12544, 0, 0,
+            12544, 0, 12544, 0, 12544, 0, 0, 12544, 0, 12544, 0, 12544, 0, 0, 0, 12544, 0, 0, 0,
+            12544, 0, 12544, 0, 12544,
+        ]),
+        key_length: Some(128),
+        value_length: Some(128),
+        ssm_conv_kernel: Some(4),
+        ssm_inner_size: Some(7680),
+        ssm_state_size: Some(128),
+        ssm_group_count: Some(8),
+        has_chat_template: true,
+        ..GgufMeta::default()
+    }
+}
+
+#[tokio::test]
+async fn hybrid_estimate_is_below_uniform_and_llama_is_unchanged() {
+    let h = Harness::start(probe_with_free(None), vec![]).await;
+    write_artifact(&h.models, "org", "llama.gguf", 100_000, llm_meta());
+    write_artifact(&h.models, "org", "hybrid.gguf", 100_000, hybrid_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let catalog = h.json("/api/catalog?n_ctx=4096").await;
+    let llama = catalog["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "org/llama.gguf")
+        .unwrap();
+    let hybrid = catalog["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "org/hybrid.gguf")
+        .unwrap();
+    assert_eq!(llama["estimate_bytes"], 4_294_304);
+    assert_eq!(hybrid["estimate_bytes"], 152_235_680);
+    assert_eq!(hybrid["confidence"], "headers");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn generate_refused_for_embedding_artifact() {
+    let h = Harness::start(probe_with_free(None), vec![]).await;
+    write_artifact(&h.models, "org", "chat.gguf", 100_000, llm_meta());
+    write_artifact(
+        &h.models,
+        "org",
+        "embed.gguf",
+        100_000,
+        GgufMeta {
+            architecture: Some("qwen3".into()),
+            context_length: Some(32768),
+            block_count: Some(1),
+            embedding_length: Some(256),
+            head_count: Some(4),
+            pooling_type: Some(1),
+            has_chat_template: true,
+            ..GgufMeta::default()
+        },
+    );
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let catalog = h.json("/api/catalog").await;
+    let chat = catalog["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "org/chat.gguf")
+        .unwrap();
+    let embed = catalog["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "org/embed.gguf")
+        .unwrap();
+    assert_eq!(chat["kind"], "instruct");
+    assert_eq!(chat["generate_supported"], true);
+    assert_eq!(embed["kind"], "embedding");
+    assert_eq!(embed["generate_supported"], false);
+    let refused = h
+        .post_json(
+            "/api/generate",
+            serde_json::json!({"artifact_id":"org/embed.gguf","prompt":"hi","n_ctx":4096}),
+        )
+        .await;
+    assert_eq!(refused.status(), 400);
+    let body: Value = refused.json().await.unwrap();
+    assert!(body["error"].as_str().unwrap().contains("embedding"), "{body}");
     h.listening.shutdown().await;
 }

@@ -5,8 +5,12 @@ Local catalog and capacity planner for open-weights GGUF artifacts on Apple Sili
 ## Language
 
 **Artifact**:
-A single installable GGUF file plus metadata (org, filename, bytes, architecture, context length, confidence). The runnable unit in the catalog; not a model family name alone.
+A single installable GGUF file plus metadata (org, filename, bytes, architecture, context length, confidence, **kind**). The runnable unit in the catalog; not a model family name alone.
 _Avoid_: model (when meaning a file), package
+
+**Artifact kind**:
+A scan-time label from GGUF headers: instruct, base, embedding, rerank, vision_projector, or unknown. **Try** is offered only for instruct.
+_Avoid_: model type, chat-capable
 
 **Backend**:
 An inference engine implementation behind a common session interface. Milestone 1 implements GGUF via a child `llama-server` process; MLX and others are future backends.

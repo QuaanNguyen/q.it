@@ -963,6 +963,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "hex",
+ "libc",
  "metal",
  "reqwest",
  "rusqlite",

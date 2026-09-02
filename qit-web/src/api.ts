@@ -12,6 +12,8 @@ export type Artifact = {
   fit: string;
   throughput_tps: number | null;
   peak_rss_bytes: number | null;
+  kind: string;
+  generate_supported: boolean;
 };
 
 export type Hardware = {

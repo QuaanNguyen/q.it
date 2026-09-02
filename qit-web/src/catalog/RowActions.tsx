@@ -19,13 +19,19 @@ export function RowActions({ row, model }: { row: RowModel; model: CatalogModel 
         onStop={() => void model.stop(artifact.id)}
         onInspect={model.inspect}
       />
-      <button
-        className="primary"
-        onClick={() => (trying ? model.closeTry() : model.openTry(artifact.id))}
-        disabled={row.status === "stopping"}
-      >
-        {trying ? "Close" : "Try"}
-      </button>
+      {artifact.generate_supported ? (
+        <button
+          className="primary"
+          onClick={() => (trying ? model.closeTry() : model.openTry(artifact.id))}
+          disabled={row.status === "stopping"}
+        >
+          {trying ? "Close" : "Try"}
+        </button>
+      ) : (
+        <button className="quiet" disabled title={artifact.kind}>
+          No Try
+        </button>
+      )}
     </div>
   );
 }

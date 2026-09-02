@@ -38,7 +38,7 @@ Do not add a second production test seam unless the control plane cannot express
 
 ## Milestone 1 status
 
-Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](https://github.com/QuaanNguyen/q.it/issues/23)). Closure work ([#8](https://github.com/QuaanNguyen/q.it/issues/8)): **done** [#15](https://github.com/QuaanNguyen/q.it/issues/15) worker discovery/readiness, [#16](https://github.com/QuaanNguyen/q.it/issues/16) session rows, [#17](https://github.com/QuaanNguyen/q.it/issues/17) single-flight generate, [#18](https://github.com/QuaanNguyen/q.it/issues/18) context presets, [#19](https://github.com/QuaanNguyen/q.it/issues/19) settings table, the cancel test on [#7](https://github.com/QuaanNguyen/q.it/issues/7). **Open:** peak RSS on #7 (blocked on [#11](https://github.com/QuaanNguyen/q.it/issues/11)), [#20–#22](https://github.com/QuaanNguyen/q.it/issues/20) blocked on research [#10–#14](https://github.com/QuaanNguyen/q.it/issues/10). Homebrew `llama-server` at `/opt/homebrew/bin/llama-server` is auto-discovered; `/health` 503 while loading, 200 when ready.
+Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](https://github.com/QuaanNguyen/q.it/issues/23)). Closure work ([#8](https://github.com/QuaanNguyen/q.it/issues/8)): **done** [#15](https://github.com/QuaanNguyen/q.it/issues/15)–[#22](https://github.com/QuaanNguyen/q.it/issues/22) and [#7](https://github.com/QuaanNguyen/q.it/issues/7) (including peak RSS via `wait4` `ru_maxrss`). Research notes live in `docs/research/`. Homebrew `llama-server` at `/opt/homebrew/bin/llama-server` is auto-discovered; `/health` 503 while loading, 200 when ready.
 
 ## Generate API
 

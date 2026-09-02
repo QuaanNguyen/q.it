@@ -353,19 +353,26 @@ impl Supervisor {
         Err("session vanished".into())
     }
 
-    pub async fn stop(&self, id: &str) -> Result<SessionView, String> {
+    pub async fn sample_resident(&self, id: &str) -> Option<u64> {
+        let guard = self.sessions.lock().await;
+        let pid = guard.get(id)?.child.as_ref()?.id();
+        resident_bytes(pid)
+    }
+
+    pub async fn stop(&self, id: &str) -> Result<Stopped, String> {
         let mut guard = self.sessions.lock().await;
         let session = guard
             .get_mut(id)
             .ok_or_else(|| "session not found".to_string())?;
         session.view.status = SessionStatus::Stopping;
-        if let Some(child) = session.child.take() {
-            drop(kill_child(child));
-        }
+        let peak_rss_bytes = session.child.take().and_then(reap_child);
         session.base_url = None;
         session.view.status = SessionStatus::NotLoaded;
         session.view.last_error = None;
-        Ok(session.view.clone())
+        Ok(Stopped {
+            view: session.view.clone(),
+            peak_rss_bytes,
+        })
     }
 
     pub async fn base_url(&self, id: &str) -> Option<String> {
@@ -399,10 +406,58 @@ impl Supervisor {
     }
 }
 
-fn kill_child(mut child: Child) -> Result<(), std::io::Error> {
-    let _ = child.kill();
-    let _ = child.wait();
+pub struct Stopped {
+    pub view: SessionView,
+    pub peak_rss_bytes: Option<u64>,
+}
+
+fn kill_child(child: Child) -> Result<(), std::io::Error> {
+    let _ = reap_child(child);
     Ok(())
+}
+
+fn reap_child(child: Child) -> Option<u64> {
+    let pid = child.id();
+    let _ = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+    #[cfg(unix)]
+    {
+        let mut status = 0;
+        let mut usage = unsafe { std::mem::zeroed::<libc::rusage>() };
+        let rc = unsafe { libc::wait4(pid as libc::pid_t, &mut status, 0, &mut usage) };
+        std::mem::forget(child);
+        if rc == pid as libc::pid_t && usage.ru_maxrss > 0 {
+            Some(usage.ru_maxrss as u64)
+        } else {
+            None
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.wait();
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn resident_bytes(pid: u32) -> Option<u64> {
+    let mut info = unsafe { std::mem::zeroed::<libc::rusage_info_v4>() };
+    let rc = unsafe {
+        libc::proc_pid_rusage(
+            pid as i32,
+            libc::RUSAGE_INFO_V4,
+            &mut info as *mut _ as *mut _,
+        )
+    };
+    if rc == 0 {
+        Some(info.ri_resident_size)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resident_bytes(_pid: u32) -> Option<u64> {
+    None
 }
 
 async fn wait_ready(base_url: &str, child: &mut Child) -> Result<(), String> {

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::gguf::read_gguf_meta;
+use crate::gguf::{read_gguf_meta, ArtifactKind, PlannerHints};
 use crate::store::ArtifactRow;
 
 pub fn scan_library(models_dir: &Path) -> Vec<ArtifactRow> {
@@ -44,6 +44,8 @@ pub fn scan_library(models_dir: &Path) -> Vec<ArtifactRow> {
                 embedding_length,
                 head_count,
                 head_count_kv,
+                kind,
+                planner,
                 confidence,
             ) = match gguf {
                 Some(m) => {
@@ -51,12 +53,14 @@ pub fn scan_library(models_dir: &Path) -> Vec<ArtifactRow> {
                         && m.block_count.is_some()
                         && m.embedding_length.is_some();
                     (
-                        m.architecture,
+                        m.architecture.clone(),
                         m.context_length,
                         m.block_count,
                         m.embedding_length,
                         m.head_count,
-                        m.head_count_kv,
+                        m.scalar_head_count_kv(),
+                        m.kind(),
+                        m.planner(),
                         if complete {
                             "headers".to_string()
                         } else {
@@ -64,7 +68,17 @@ pub fn scan_library(models_dir: &Path) -> Vec<ArtifactRow> {
                         },
                     )
                 }
-                None => (None, None, None, None, None, None, "incomplete".to_string()),
+                None => (
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    ArtifactKind::Unknown,
+                    PlannerHints::default(),
+                    "incomplete".to_string(),
+                ),
             };
             out.push(ArtifactRow {
                 id: format!("{org}/{filename}"),
@@ -78,6 +92,8 @@ pub fn scan_library(models_dir: &Path) -> Vec<ArtifactRow> {
                 embedding_length,
                 head_count,
                 head_count_kv,
+                kind,
+                planner,
                 confidence,
             });
         }
