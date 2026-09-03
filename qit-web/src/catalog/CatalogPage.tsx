@@ -8,7 +8,7 @@ export function CatalogPage() {
   return (
     <>
       <h1>Catalog</h1>
-      <p className="lede">Artifacts in your library and whether they fit the stable budget.</p>
+      <p className="lede">One card per artifact. Try opens inside the card.</p>
       {model.error && <div className="error">{model.error}</div>}
       <WorkerWarning model={model} />
       <Toolbar model={model} />

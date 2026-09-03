@@ -15,7 +15,7 @@ Parent spec: GitHub issue [#1](https://github.com/QuaanNguyen/q.it/issues/1). Tr
 | `qit-runtime` | Rust daemon: probe, scan, planner, supervisor, HTTP+SSE API, SQLite, embedded or proxied UI |
 | `qit-web` | React + Vite + TypeScript SPA; dev proxies `/api` to runtime |
 
-Shipped UX: one process (`qit-runtime`) on `127.0.0.1:2471`. Dev: `cargo run -p qit-runtime` plus `cd qit-web && npm run dev`.
+Shipped UX: one process (`qit-runtime`) on `127.0.0.1:2471`. It serves `qit-web/dist` when that build exists (`cd qit-web && npm run build`); otherwise the compiled-in Cards fallback. Dev: `cargo run -p qit-runtime` plus `cd qit-web && npm run dev`.
 
 ## Test seam (locked)
 
@@ -46,7 +46,7 @@ Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](htt
 
 ## UI notes
 
-Catalog rows carry Start/Stop with an inline status icon (spinner, green check, red cross; hover for the error and an **Inspect** link to Capacity) and a **Try** button that opens the Try window under the row, auto-starting the session when needed. Transcript is browser memory only. Palette and type live in `qit-web/src/styles.css`; throwaway layout variants live on branch `prototype/catalog-ui`.
+Catalog is the Cards layout from `prototype/catalog-ui` (variant B), with no variant switcher. Rows carry Start/Stop with an inline status icon (spinner, green check, red cross; hover for the error and an **Inspect** link to Capacity) and a **Try** button that opens the Try window under the card, auto-starting the session when needed. Transcript is browser memory only. Palette and type live in `qit-web/src/styles.css`.
 
 ## Coding conventions
 

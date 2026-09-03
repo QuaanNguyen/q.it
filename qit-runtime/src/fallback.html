@@ -6,44 +6,72 @@
   <title>q.it</title>
   <style>
     :root {
-      --bg: #09090b;
-      --card: #18181b;
-      --border: rgba(63, 63, 70, 0.4);
-      --text: #c8c2b4;
-      --heading: #e0dbd0;
-      --muted: #8a8070;
-      --accent: #d6c7a1;
+      --bg: #eef1f6;
+      --panel: #f7f8fb;
+      --panel-2: #e6eaf2;
+      --ink: #1b2432;
+      --muted: #6b7a90;
+      --rule: #d8dee9;
+      --accent: #4b7be5;
+      --accent-hover: #3a67cc;
+      --ok: #2f9e63;
+      --ok-soft: #dcf2e5;
+      --warn: #c98a2e;
+      --warn-soft: #f6ead2;
+      --danger: #d2553e;
+      --danger-soft: #f8e1dc;
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --radius: 10px;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; }
-    body { display: grid; grid-template-columns: 140px 1fr; }
-    aside { background: var(--card); border-right: 1px solid var(--border); padding: 1rem; }
-    aside strong { color: var(--heading); }
-    aside nav { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
-    aside a { color: var(--muted); text-decoration: none; padding: 0.35rem 0.5rem; border-radius: 8px; }
-    aside a.active, aside a:hover { background: var(--border); color: var(--heading); }
-    main { padding: 1.5rem 2rem; overflow: auto; }
-    h1 { color: var(--heading); font-size: 1.25rem; font-weight: 600; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+    body { display: grid; grid-template-columns: 168px 1fr; }
+    aside { padding: 1.5rem 1rem; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 1.5rem; }
+    .brand { font-family: var(--serif); font-size: 1.35rem; letter-spacing: -0.01em; }
+    .brand small { display: block; font-family: var(--sans); font-size: 0.72rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 0.15rem; }
+    aside nav { display: flex; flex-direction: column; gap: 0.2rem; }
+    aside a { color: var(--muted); text-decoration: none; padding: 0.4rem 0.6rem; border-radius: 8px; }
+    aside a.active, aside a:hover { color: var(--ink); background: var(--panel-2); }
+    aside a.active { color: var(--accent-hover); background: #dfe8fa; }
+    main { padding: 2rem 2.5rem 4rem; overflow: auto; max-width: 1120px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 1.9rem; margin: 0 0 0.25rem; }
+    h2 { font-family: var(--serif); font-weight: 500; font-size: 1.2rem; margin: 2rem 0 0.6rem; }
+    .lede { color: var(--muted); margin: 0 0 1.5rem; }
     .muted { color: var(--muted); }
-    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin: 0.75rem 0; }
-    button, select, input, textarea {
-      background: var(--card); color: var(--heading); border: 1px solid var(--border);
-      border-radius: 8px; padding: 0.4rem 0.65rem; font: inherit;
+    .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin: 0.75rem 0; }
+    .toolbar { display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; margin: 0 0 1rem; }
+    button, select, input {
+      font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--rule);
+      border-radius: 8px; padding: 0.38rem 0.7rem;
     }
     button { cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.quiet { background: transparent; border-color: transparent; color: var(--muted); }
     table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.45rem 0.35rem; border-bottom: 1px solid var(--border); }
-    .Fits { color: #9cae8a; }
-    .Tight { color: #d2b56a; }
-    .No { color: #c98980; }
-    textarea { width: 100%; min-height: 4rem; }
-    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1rem 0; }
-    .stream { white-space: pre-wrap; min-height: 3rem; }
+    th { text-align: left; font-weight: 500; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--rule); }
+    td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--rule); }
+    .card { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem 1.2rem; margin: 0 0 0.75rem; }
+    .card .head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+    .card .name { font-family: var(--serif); font-size: 1.1rem; }
+    .card .meta { display: flex; gap: 1rem; color: var(--muted); font-size: 0.85rem; margin: 0.35rem 0 0.75rem; }
+    .actions { display: flex; gap: 0.35rem; align-items: center; justify-content: flex-end; }
+    .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
+    .pill.Fits { background: var(--ok-soft); color: var(--ok); }
+    .pill.Tight { background: var(--warn-soft); color: var(--warn); }
+    .pill.No { background: var(--danger-soft); color: var(--danger); }
+    .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem 1.2rem; margin: 1rem 0; }
+    .try { margin-top: 0.75rem; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+    .log { min-height: 8rem; max-height: 16rem; overflow: auto; padding: 0.75rem 0.9rem; white-space: pre-wrap; font-family: var(--mono); font-size: 0.85rem; }
+    .composer { display: flex; gap: 0.5rem; padding: 0.6rem 0.9rem; border-top: 1px solid var(--rule); }
+    .composer input { flex: 1; background: #fff; resize: none; }
+    .error { color: var(--danger); background: var(--danger-soft); border-radius: 8px; padding: 0.5rem 0.75rem; }
   </style>
 </head>
 <body>
   <aside>
-    <strong>q.it</strong>
+    <div class="brand">q.it<small>local runtime</small></div>
     <nav>
       <a href="#/catalog" data-route="catalog">Catalog</a>
       <a href="#/capacity" data-route="capacity">Capacity</a>
@@ -53,14 +81,16 @@
   <main id="root"></main>
   <script>
     const ctxPresets = [4096, 8192, 16384, 32768];
-    const state = { n_ctx: 4096, catalog: null, capacity: null, prompt: "Say hello in one word.", stream: "" };
+    const state = { n_ctx: 4096 };
 
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
     function fmtBytes(n) {
       if (n >= 1e9) return (n / 1e9).toFixed(2) + " GB";
       if (n >= 1e6) return (n / 1e6).toFixed(1) + " MB";
       return n + " B";
     }
-
     async function api(path, opts) {
       const res = await fetch(path, Object.assign({ headers: { "content-type": "application/json" } }, opts));
       if (res.status === 204) return null;
@@ -68,15 +98,15 @@
       if (!res.ok) throw new Error(text);
       return text ? JSON.parse(text) : null;
     }
-
     function nav() {
       const route = location.hash.replace("#/", "") || "catalog";
       document.querySelectorAll("aside a").forEach((a) => a.classList.toggle("active", a.dataset.route === route));
       return route;
     }
-
     function ctxSelect() {
-      return `<select id="nctx">${ctxPresets.map((n) => `<option value="${n}" ${n === state.n_ctx ? "selected" : ""}>${n / 1024}k</option>`).join("")}</select>`;
+      return "<select id='nctx'>" + ctxPresets.map((n) =>
+        "<option value='" + n + "'" + (n === state.n_ctx ? " selected" : "") + ">" + (n / 1024) + "k</option>"
+      ).join("") + "</select>";
     }
 
     async function render() {
@@ -84,29 +114,41 @@
       const root = document.getElementById("root");
       try {
         if (route === "settings") {
-          root.innerHTML = `<h1>Settings</h1><p class="muted">Hugging Face token sign-in is not in this milestone.</p>`;
+          const s = await api("/api/settings");
+          root.innerHTML =
+            "<h1>Settings</h1><p class='lede'>Planner inputs that persist across restarts.</p>" +
+            "<div class='panel'><label>OS reserve (bytes) <input id='reserve' inputmode='numeric' /></label>" +
+            "<div class='muted' style='margin:0.6rem 0'>Effective " + fmtBytes(s.effective_os_reserve_bytes) + "</div>" +
+            "<div class='row'><button class='primary' id='save'>Save</button><button class='quiet' id='reset'>Reset to default</button></div></div>";
+          const input = document.getElementById("reserve");
+          input.value = s.os_reserve_bytes != null ? String(s.os_reserve_bytes) : "";
+          document.getElementById("save").onclick = async () => {
+            const raw = input.value.trim();
+            const os_reserve_bytes = raw === "" ? null : Number(raw);
+            await api("/api/settings", { method: "PUT", body: JSON.stringify({ os_reserve_bytes }) });
+            render();
+          };
+          document.getElementById("reset").onclick = async () => {
+            await api("/api/settings", { method: "PUT", body: JSON.stringify({ os_reserve_bytes: null }) });
+            render();
+          };
           return;
         }
         if (route === "capacity") {
-          state.capacity = await api("/api/capacity");
-          const h = state.capacity.hardware;
-          root.innerHTML = `
-            <h1>Capacity</h1>
-            <div class="panel">
-              <div>${h.chip} · ${h.device_class}</div>
-              <div>Unified ${fmtBytes(h.unified_memory_bytes)} · OS reserve ${fmtBytes(h.os_reserve_bytes)}</div>
-              <div>Metal cap ${h.metal_recommended_working_set_bytes != null ? fmtBytes(h.metal_recommended_working_set_bytes) : "n/a"}</div>
-              <div>Budget ${fmtBytes(h.budget_bytes)} · Headroom ${fmtBytes(h.headroom_bytes)}</div>
-              <div class="muted">Free RAM (not used for fit) ${h.free_ram_bytes != null ? fmtBytes(h.free_ram_bytes) : "n/a"} · worker RSS ${fmtBytes(h.loaded_rss_bytes)}</div>
-            </div>
-            <h2>Pins</h2>
-            ${tableReservations(state.capacity.pins, "pin")}
-            <h2>What-if</h2>
-            ${tableReservations(state.capacity.what_ifs, "what-if")}
-            <div class="row"><button id="clear-whatifs">Clear what-ifs</button></div>
-            <h2>Sessions</h2>
-            ${tableSessions(state.capacity.sessions)}
-          `;
+          const capacity = await api("/api/capacity");
+          const h = capacity.hardware;
+          root.innerHTML =
+            "<h1>Capacity</h1><p class='lede'>Live sessions against the stable budget.</p>" +
+            "<div class='panel'>" +
+            "<div>" + esc(h.chip) + " · " + esc(h.device_class) + "</div>" +
+            "<div>Unified " + fmtBytes(h.unified_memory_bytes) + " · OS reserve " + fmtBytes(h.os_reserve_bytes) + "</div>" +
+            "<div>Budget " + fmtBytes(h.budget_bytes) + " · Headroom " + fmtBytes(h.headroom_bytes) + "</div>" +
+            "<div class='muted'>Free RAM " + (h.free_ram_bytes != null ? fmtBytes(h.free_ram_bytes) : "n/a") +
+            " · pressure " + esc(h.memory_pressure || "—") + " · worker RSS " + fmtBytes(h.loaded_rss_bytes) + "</div></div>" +
+            "<h2>Pins</h2>" + tableReservations(capacity.pins, "pin") +
+            "<h2>What-if</h2>" + tableReservations(capacity.what_ifs, "what-if") +
+            "<div class='row'><button id='clear-whatifs'>Clear what-ifs</button></div>" +
+            "<h2>Sessions</h2>" + tableSessions(capacity.sessions);
           document.getElementById("clear-whatifs").onclick = async () => {
             await api("/api/what-ifs", { method: "DELETE" });
             render();
@@ -114,79 +156,149 @@
           return;
         }
         await api("/api/scan", { method: "POST" });
-        state.catalog = await api("/api/catalog?n_ctx=" + state.n_ctx);
-        root.innerHTML = `
-          <h1>Catalog</h1>
-          <div class="row"><label>Context ${ctxSelect()}</label><button id="rescan">Scan library</button></div>
-          <table>
-            <thead><tr><th>Artifact</th><th>Size</th><th>Fit</th><th>Confidence</th><th>tok/s</th><th></th></tr></thead>
-            <tbody>
-              ${(state.catalog.artifacts || []).map((a) => `
-                <tr>
-                  <td>${a.id}</td>
-                  <td>${fmtBytes(a.bytes)}</td>
-                  <td class="${a.fit}">${a.fit}</td>
-                  <td>${a.confidence}</td>
-                  <td>${a.throughput_tps != null ? a.throughput_tps.toFixed(1) : "—"}</td>
-                  <td>
-                    <button data-pin="${a.id}">Pin</button>
-                    <button data-what="${a.id}">What-if</button>
-                    <button data-start="${a.id}">Start</button>
-                    <button data-gen="${a.id}">Generate</button>
-                  </td>
-                </tr>`).join("")}
-            </tbody>
-          </table>
-          <div class="panel">
-            <textarea id="prompt">${state.prompt}</textarea>
-            <div class="stream" id="stream">${state.stream}</div>
-          </div>
-        `;
+        const catalog = await api("/api/catalog?n_ctx=" + state.n_ctx);
+        const artifacts = catalog.artifacts || [];
+        root.innerHTML =
+          "<h1>Catalog</h1><p class='lede'>One card per artifact. Try opens inside the card.</p>" +
+          "<div class='toolbar'><label class='muted'>Context " + ctxSelect() + "</label><button id='rescan'>Scan library</button></div>" +
+          "<div id='cards'></div>";
         document.getElementById("nctx").onchange = (e) => { state.n_ctx = Number(e.target.value); render(); };
         document.getElementById("rescan").onclick = () => render();
-        document.getElementById("prompt").oninput = (e) => { state.prompt = e.target.value; };
-        root.querySelectorAll("[data-pin]").forEach((b) => b.onclick = () => reserve("/api/pins", b.dataset.pin));
-        root.querySelectorAll("[data-what]").forEach((b) => b.onclick = () => reserve("/api/what-ifs", b.dataset.what));
-        root.querySelectorAll("[data-start]").forEach((b) => b.onclick = () => start(b.dataset.start));
-        root.querySelectorAll("[data-gen]").forEach((b) => b.onclick = () => generate(b.dataset.gen));
+        const cards = document.getElementById("cards");
+        if (!artifacts.length) {
+          cards.innerHTML = "<p class='muted'>No GGUF files found under the library root.</p>";
+          return;
+        }
+        for (const a of artifacts) {
+          const el = document.createElement("article");
+          el.className = "card";
+          el.innerHTML =
+            "<div class='head'><span class='name'></span><span class='pill'></span></div>" +
+            "<div class='meta'><span></span><span></span><span></span><span></span><span></span></div>" +
+            "<div class='actions'></div><div class='try' hidden></div>";
+          el.querySelector(".name").textContent = a.filename || a.id;
+          const pill = el.querySelector(".pill");
+          pill.textContent = a.fit;
+          pill.className = "pill " + a.fit;
+          const meta = el.querySelectorAll(".meta span");
+          meta[0].textContent = a.org || "";
+          meta[1].textContent = fmtBytes(a.bytes);
+          meta[2].textContent = "est. " + fmtBytes(a.estimate_bytes) + " at " + (state.n_ctx / 1024) + "k";
+          meta[3].textContent = a.confidence;
+          meta[4].textContent = a.throughput_tps != null ? a.throughput_tps.toFixed(1) + " tok/s" : "no run yet";
+          const actions = el.querySelector(".actions");
+          const add = (label, cls, fn) => {
+            const b = document.createElement("button");
+            b.className = cls;
+            b.textContent = label;
+            b.onclick = fn;
+            actions.appendChild(b);
+            return b;
+          };
+          add("Pin", "quiet", () => reserve("/api/pins", a.id));
+          add("What-if", "quiet", () => reserve("/api/what-ifs", a.id));
+          add("Start", "", () => start(a.id));
+          const pane = el.querySelector(".try");
+          if (a.generate_supported !== false) {
+            add("Try", "primary", () => {
+              pane.hidden = !pane.hidden;
+              if (!pane.hidden && !pane.dataset.ready) mountTry(pane, a);
+            });
+          } else {
+            const disabled = document.createElement("button");
+            disabled.className = "quiet";
+            disabled.disabled = true;
+            disabled.textContent = "No Try";
+            actions.appendChild(disabled);
+          }
+          cards.appendChild(el);
+        }
       } catch (err) {
-        root.innerHTML = `<h1>Error</h1><pre>${err}</pre>`;
+        root.innerHTML = "<h1>Error</h1><pre class='error'></pre>";
+        root.querySelector("pre").textContent = String(err);
       }
     }
 
     function tableReservations(rows, kind) {
-      if (!rows.length) return `<p class="muted">None</p>`;
-      return `<table><thead><tr><th>Artifact</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>${
-        rows.map((r) => `<tr><td>${r.artifact_id}</td><td>${r.n_ctx}</td><td>${fmtBytes(r.estimate_bytes)}</td><td><button data-del="${kind}:${r.id}">Remove</button></td></tr>`).join("")
-      }</tbody></table>`;
+      if (!rows.length) return "<p class='muted'>None</p>";
+      return "<table><thead><tr><th>Artifact</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>" +
+        rows.map((r) =>
+          "<tr><td>" + esc(r.artifact_id) + "</td><td>" + r.n_ctx + "</td><td>" + fmtBytes(r.estimate_bytes) +
+          "</td><td><button data-del='" + kind + ":" + esc(r.id) + "'>Remove</button></td></tr>"
+        ).join("") + "</tbody></table>";
     }
-
     function tableSessions(rows) {
-      if (!rows.length) return `<p class="muted">None</p>`;
-      return `<table><thead><tr><th>Id</th><th>Artifact</th><th>Status</th><th></th></tr></thead><tbody>${
-        rows.map((s) => `<tr><td>${s.id.slice(0, 8)}</td><td>${s.artifact_id}</td><td>${s.status}</td><td><button data-stop="${s.id}">Stop</button></td></tr>`).join("")
-      }</tbody></table>`;
+      if (!rows.length) return "<p class='muted'>None</p>";
+      return "<table><thead><tr><th>Id</th><th>Artifact</th><th>Status</th><th></th></tr></thead><tbody>" +
+        rows.map((s) =>
+          "<tr><td>" + esc(s.id.slice(0, 8)) + "</td><td>" + esc(s.artifact_id) + "</td><td>" + esc(s.status) +
+          "</td><td><button data-stop='" + esc(s.id) + "'>Stop</button></td></tr>"
+        ).join("") + "</tbody></table>";
     }
-
     async function reserve(url, artifact_id) {
       await api(url, { method: "POST", body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx }) });
       location.hash = "#/capacity";
       render();
     }
-
     async function start(artifact_id) {
       await api("/api/sessions", { method: "POST", body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx }) });
       location.hash = "#/capacity";
       render();
     }
-
+    function mountTry(pane, artifact) {
+      pane.dataset.ready = "1";
+      pane.innerHTML = "<div class='log'></div><div class='composer'><input type='text' /><button class='primary'>Send</button></div>";
+      const log = pane.querySelector(".log");
+      const input = pane.querySelector("input");
+      const send = pane.querySelector("button");
+      let stream = "";
+      send.onclick = async () => {
+        const prompt = input.value.trim();
+        if (!prompt) return;
+        input.value = "";
+        stream += (stream ? "\n" : "") + "› " + prompt + "\n";
+        log.textContent = stream;
+        send.disabled = true;
+        try {
+          const res = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ artifact_id: artifact.id, n_ctx: state.n_ctx, prompt }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const parts = buf.split("\n\n");
+            buf = parts.pop();
+            for (const part of parts) {
+              const ev = (part.match(/^event: (.*)$/m) || [])[1];
+              const data = (part.match(/^data: (.*)$/m) || [])[1] || "";
+              if (ev === "token") stream += data;
+              if (ev === "error") stream += "\n" + data;
+            }
+            log.textContent = stream;
+            log.scrollTop = log.scrollHeight;
+          }
+        } catch (e) {
+          stream += "\n" + e.message;
+          log.textContent = stream;
+        } finally {
+          send.disabled = false;
+        }
+      };
+      input.onkeydown = (e) => { if (e.key === "Enter") send.click(); };
+    }
     document.body.addEventListener("click", async (e) => {
       const del = e.target.dataset && e.target.dataset.del;
       const stop = e.target.dataset && e.target.dataset.stop;
       if (del) {
         const [kind, id] = del.split(":");
-        const url = kind === "pin" ? "/api/pins/" + id : "/api/what-ifs/" + id;
-        await api(url, { method: "DELETE" });
+        await api((kind === "pin" ? "/api/pins/" : "/api/what-ifs/") + id, { method: "DELETE" });
         render();
       }
       if (stop) {
@@ -194,35 +306,6 @@
         render();
       }
     });
-
-    async function generate(artifact_id) {
-      state.stream = "";
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx, prompt: state.prompt })
-      });
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const parts = buf.split("\n\n");
-        buf = parts.pop();
-        for (const part of parts) {
-          const ev = (part.match(/^event: (.*)$/m) || [])[1];
-          const data = (part.match(/^data: (.*)$/m) || [])[1] || "";
-          if (ev === "token") state.stream += data;
-          if (ev === "error") state.stream += "\n" + data;
-        }
-        const el = document.getElementById("stream");
-        if (el) el.textContent = state.stream;
-      }
-      render();
-    }
-
     window.addEventListener("hashchange", render);
     if (!location.hash) location.hash = "#/catalog";
     render();

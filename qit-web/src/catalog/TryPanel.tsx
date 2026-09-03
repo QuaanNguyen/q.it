@@ -143,7 +143,7 @@ export function TryPanel({
           : "Not loaded";
 
   return (
-    <div className="try">
+    <div className="try embedded">
       <div className="chat">
         <div className="chat-head">
           <span>
