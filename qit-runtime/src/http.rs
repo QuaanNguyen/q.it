@@ -596,7 +596,7 @@ fn reservation_body(row: PinRow, estimate_bytes: u64) -> ReservationBody {
 
 fn reservation_estimate(artifact: &ArtifactRow, row: &PinRow) -> u64 {
     if let Some(package) = row.package_id.as_deref().and_then(owned_package) {
-        return package.estimate_bytes;
+        return package.planner_hint.estimate_bytes;
     }
     let parallel = row
         .serve_profile
