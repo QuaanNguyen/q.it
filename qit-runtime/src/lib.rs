@@ -7,6 +7,7 @@ pub mod http;
 pub mod paths;
 pub mod probe;
 pub mod scan;
+pub mod serve;
 pub mod spa;
 pub mod store;
 pub mod supervisor;

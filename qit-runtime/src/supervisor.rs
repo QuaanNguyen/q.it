@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::serve::{RuntimeRecipe, ServeProfile};
 use crate::store::ArtifactRow;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -24,9 +25,10 @@ pub enum SessionStatus {
 pub struct SessionView {
     pub id: String,
     pub artifact_id: String,
-    pub n_ctx: u32,
-    pub n_gpu_layers: i32,
-    pub n_parallel: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_id: Option<String>,
+    pub runtime_recipe: RuntimeRecipe,
+    pub serve_profile: ServeProfile,
     pub status: SessionStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
@@ -174,9 +176,9 @@ impl Supervisor {
                     view: SessionView {
                         id: row.id,
                         artifact_id: row.artifact_id,
-                        n_ctx: row.n_ctx,
-                        n_gpu_layers: row.n_gpu_layers,
-                        n_parallel: row.n_parallel,
+                        package_id: row.package_id,
+                        runtime_recipe: row.runtime_recipe,
+                        serve_profile: row.serve_profile,
                         status: session_status_from_str(&row.status),
                         last_error: row.last_error,
                         log_path: row.log_path,
@@ -188,18 +190,16 @@ impl Supervisor {
         }
     }
 
-    pub async fn find_by_tuple(
+    pub async fn find_by_profile(
         &self,
         artifact_id: &str,
-        n_ctx: u32,
-        n_gpu_layers: i32,
-        n_parallel: u32,
+        package_id: Option<&str>,
+        serve_profile: &ServeProfile,
     ) -> Option<SessionView> {
         self.sessions.lock().await.values().find_map(|s| {
             if s.view.artifact_id == artifact_id
-                && s.view.n_ctx == n_ctx
-                && s.view.n_gpu_layers == n_gpu_layers
-                && s.view.n_parallel == n_parallel
+                && s.view.package_id.as_deref() == package_id
+                && s.view.serve_profile == *serve_profile
             {
                 Some(s.view.clone())
             } else {
@@ -242,16 +242,14 @@ impl Supervisor {
     pub async fn find_loaded(
         &self,
         artifact_id: &str,
-        n_ctx: u32,
-        n_gpu_layers: i32,
-        n_parallel: u32,
+        package_id: Option<&str>,
+        serve_profile: &ServeProfile,
     ) -> Option<SessionView> {
         self.reap().await;
         self.sessions.lock().await.values().find_map(|s| {
             if s.view.artifact_id == artifact_id
-                && s.view.n_ctx == n_ctx
-                && s.view.n_gpu_layers == n_gpu_layers
-                && s.view.n_parallel == n_parallel
+                && s.view.package_id.as_deref() == package_id
+                && s.view.serve_profile == *serve_profile
                 && s.view.status == SessionStatus::Loaded
             {
                 Some(s.view.clone())
@@ -268,21 +266,27 @@ impl Supervisor {
     pub async fn start(
         &self,
         artifact: &ArtifactRow,
-        n_ctx: u32,
-        n_gpu_layers: i32,
-        n_parallel: u32,
+        package_id: Option<String>,
+        runtime_recipe: RuntimeRecipe,
+        serve_profile: ServeProfile,
         log_path: PathBuf,
     ) -> Result<SessionView, String> {
         self.reap().await;
+        let settings = match runtime_recipe {
+            RuntimeRecipe::LlamaCpp => serve_profile.llama_cpp_settings()?,
+            RuntimeRecipe::TransformersExternal => {
+                return Err("runtime recipe unavailable".into());
+            }
+        };
         if let Some(existing) = self
-            .find_loaded(&artifact.id, n_ctx, n_gpu_layers, n_parallel)
+            .find_loaded(&artifact.id, package_id.as_deref(), &serve_profile)
             .await
         {
             return Ok(existing);
         }
         let log_path_str = log_path.display().to_string();
         let id = self
-            .find_by_tuple(&artifact.id, n_ctx, n_gpu_layers, n_parallel)
+            .find_by_profile(&artifact.id, package_id.as_deref(), &serve_profile)
             .await
             .map(|s| s.id)
             .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -294,9 +298,9 @@ impl Supervisor {
                     view: SessionView {
                         id: id.clone(),
                         artifact_id: artifact.id.clone(),
-                        n_ctx,
-                        n_gpu_layers,
-                        n_parallel,
+                        package_id,
+                        runtime_recipe,
+                        serve_profile: serve_profile.clone(),
                         status: SessionStatus::Starting,
                         last_error: None,
                         log_path: Some(log_path_str),
@@ -308,9 +312,9 @@ impl Supervisor {
         }
         let launched = match self.launcher.launch(LaunchRequest {
             artifact_path: artifact.path.clone(),
-            n_ctx,
-            n_gpu_layers,
-            n_parallel,
+            n_ctx: serve_profile.context_length,
+            n_gpu_layers: settings.gpu_layers,
+            n_parallel: settings.parallel,
             log_path,
         }) {
             Ok(w) => w,

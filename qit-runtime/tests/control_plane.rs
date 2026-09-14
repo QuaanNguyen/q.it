@@ -368,6 +368,134 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
 }
 
 #[tokio::test]
+async fn gguf_package_uses_serve_profile_through_session_lifecycle() {
+    let h = Harness::start_with(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_000_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        stub_launcher(),
+        Some(PathBuf::from("/opt/test/llama-server")),
+    )
+    .await;
+    write_artifact(
+        &h.models,
+        "Qwen",
+        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        100_000,
+        llm_meta(),
+    );
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let package_id = "qit/qwen2.5-0.5b-instruct-q4_k_m";
+    let serve_profile = serde_json::json!({
+        "context_length": 4096,
+        "runtime_settings": {
+            "gpu_layers": 7,
+            "parallel": 2
+        }
+    });
+    let catalog = h.json("/api/catalog").await;
+    assert_eq!(catalog["packages"][0]["ready"], true, "{catalog}");
+    assert_eq!(catalog["packages"][0]["runtime_recipe"], "llama_cpp");
+
+    let pin = h
+        .post_json(
+            "/api/pins",
+            serde_json::json!({
+                "package_id": package_id,
+                "serve_profile": serve_profile
+            }),
+        )
+        .await;
+    assert_eq!(pin.status(), 200);
+    let pin: Value = pin.json().await.unwrap();
+    assert_eq!(pin["package_id"], package_id);
+    assert_eq!(pin["serve_profile"], serve_profile);
+    assert!(pin.get("n_gpu_layers").is_none(), "{pin}");
+    assert!(pin.get("n_parallel").is_none(), "{pin}");
+    let what_if = h
+        .post_json(
+            "/api/what-ifs",
+            serde_json::json!({
+                "package_id": package_id,
+                "serve_profile": serve_profile
+            }),
+        )
+        .await;
+    assert_eq!(what_if.status(), 200);
+
+    let before_start = h.json("/api/capacity").await;
+    let started = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({
+                "package_id": package_id,
+                "serve_profile": serve_profile
+            }),
+        )
+        .await;
+    assert_eq!(started.status(), 200);
+    let started: Value = started.json().await.unwrap();
+    assert_eq!(started["status"], "loaded");
+    assert_eq!(started["package_id"], package_id);
+    assert_eq!(started["serve_profile"], serve_profile);
+    assert!(started.get("n_gpu_layers").is_none(), "{started}");
+    assert!(started.get("n_parallel").is_none(), "{started}");
+    let while_loaded = h.json("/api/capacity").await;
+    assert_eq!(
+        while_loaded["hardware"]["headroom_bytes"],
+        before_start["hardware"]["headroom_bytes"]
+    );
+
+    let generated = h
+        .post_json(
+            "/api/generate",
+            serde_json::json!({
+                "package_id": package_id,
+                "serve_profile": serve_profile,
+                "session_id": started["id"],
+                "messages": [{"role": "user", "content": "hi"}]
+            }),
+        )
+        .await;
+    assert_eq!(generated.status(), 200);
+    let body = generated.text().await.unwrap();
+    assert!(body.contains("event: token"), "{body}");
+    assert!(body.contains("hello"), "{body}");
+    assert!(body.contains("event: done"), "{body}");
+
+    let stopped = h
+        .post_json(
+            &format!("/api/sessions/{}/stop", started["id"].as_str().unwrap()),
+            serde_json::json!({}),
+        )
+        .await;
+    assert_eq!(stopped.status(), 200);
+    let stopped: Value = stopped.json().await.unwrap();
+    assert_eq!(stopped["status"], "not_loaded");
+    let after_stop = h.json("/api/capacity").await;
+    assert_eq!(after_stop["pins"][0]["package_id"], package_id);
+    assert_eq!(after_stop["pins"][0]["serve_profile"], serve_profile);
+    assert_eq!(after_stop["what_ifs"][0]["package_id"], package_id);
+    assert_eq!(after_stop["what_ifs"][0]["serve_profile"], serve_profile);
+    assert_eq!(after_stop["sessions"][0]["package_id"], package_id);
+    assert_eq!(after_stop["sessions"][0]["serve_profile"], serve_profile);
+    let h = h.restart(Some(2_000_000)).await;
+    let after_restart = h.json("/api/capacity").await;
+    assert_eq!(after_restart["pins"][0]["package_id"], package_id);
+    assert_eq!(after_restart["pins"][0]["serve_profile"], serve_profile);
+    assert_eq!(after_restart["what_ifs"].as_array().unwrap().len(), 0);
+    assert_eq!(after_restart["sessions"][0]["package_id"], package_id);
+    assert_eq!(after_restart["sessions"][0]["serve_profile"], serve_profile);
+    assert_eq!(after_restart["sessions"][0]["status"], "not_loaded");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
 async fn scan_registers_gguf_and_ignores_mlx() {
     let h = Harness::start(probe_with_free(None), vec![]).await;
     write_artifact(
@@ -975,7 +1103,9 @@ async fn duplicate_start_reuses_session_row() {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|s| s["artifact_id"] == "org/small.gguf" && s["n_ctx"] == 4096)
+        .filter(|s| {
+            s["artifact_id"] == "org/small.gguf" && s["serve_profile"]["context_length"] == 4096
+        })
         .collect();
     assert_eq!(matches.len(), 1, "{sessions}");
     h.listening.shutdown().await;

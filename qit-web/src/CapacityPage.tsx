@@ -71,7 +71,7 @@ export function CapacityPage() {
             {capacity.sessions.map((s) => (
               <tr key={s.id}>
                 <td>{s.artifact_id}</td>
-                <td>{s.n_ctx / 1024}k</td>
+                <td>{s.serve_profile.context_length / 1024}k</td>
                 <td>
                   <span className={`pill ${statusClass(s.status)}`}>{s.status}</span>
                 </td>
@@ -169,7 +169,7 @@ function ReservationTable({
         {rows.map((r) => (
           <tr key={r.id}>
             <td>{r.artifact_id}</td>
-            <td>{r.n_ctx / 1024}k</td>
+            <td>{r.serve_profile.context_length / 1024}k</td>
             <td>{fmtBytes(r.estimate_bytes)}</td>
             <td>
               <div className="actions">

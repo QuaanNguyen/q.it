@@ -84,7 +84,10 @@ export function useCatalog(): CatalogModel {
   }, [refreshSessions]);
 
   const sessionFor = useCallback(
-    (id: string) => sessions.find((s) => s.artifact_id === id && s.n_ctx === nCtx),
+    (id: string) =>
+      sessions.find(
+        (s) => s.artifact_id === id && s.serve_profile.context_length === nCtx
+      ),
     [sessions, nCtx]
   );
 

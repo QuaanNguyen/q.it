@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::probe::{FixedProbe, HardwareProbe, SystemProbe};
+use crate::serve::ServeProfile;
 use crate::supervisor::{LlamaServerLauncher, WorkerLauncher};
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
@@ -115,24 +116,24 @@ fn bundled_worker_path() -> Option<PathBuf> {
     candidate.exists().then_some(candidate)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct SessionShape {
-    pub artifact_id: String,
+    pub artifact_id: Option<String>,
+    pub package_id: Option<String>,
+    pub serve_profile: Option<ServeProfile>,
     pub n_ctx: Option<u32>,
     pub n_gpu_layers: Option<i32>,
     pub n_parallel: Option<u32>,
 }
 
 impl SessionShape {
-    pub fn n_ctx(&self) -> u32 {
-        self.n_ctx.unwrap_or(DEFAULT_N_CTX)
-    }
-
-    pub fn n_gpu_layers(&self) -> i32 {
-        self.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS)
-    }
-
-    pub fn n_parallel(&self) -> u32 {
-        self.n_parallel.unwrap_or(DEFAULT_N_PARALLEL)
+    pub fn profile(&self) -> ServeProfile {
+        self.serve_profile.clone().unwrap_or_else(|| {
+            ServeProfile::llama_cpp(
+                self.n_ctx.unwrap_or(DEFAULT_N_CTX),
+                self.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS),
+                self.n_parallel.unwrap_or(DEFAULT_N_PARALLEL),
+            )
+        })
     }
 }

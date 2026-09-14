@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::serve::RuntimeRecipe;
+
 #[derive(Clone, Copy)]
 pub enum PackageFormat {
     Gguf,
@@ -13,7 +15,6 @@ impl PackageFormat {
             Self::Transformers => "transformers",
         }
     }
-
     fn library_dir(self, models_dir: &Path) -> std::path::PathBuf {
         match self {
             Self::Gguf => models_dir.to_path_buf(),
@@ -25,39 +26,15 @@ impl PackageFormat {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum RuntimeRecipe {
-    LlamaCpp,
-    TransformersExternal,
-}
-
-impl RuntimeRecipe {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::LlamaCpp => "llama_cpp",
-            Self::TransformersExternal => "transformers_external",
-        }
-    }
-
-    pub fn is_available(self, llama_cpp_path: Option<&Path>) -> bool {
-        match self {
-            Self::LlamaCpp => llama_cpp_path.is_some(),
-            Self::TransformersExternal => false,
-        }
-    }
-}
-
 pub struct PlannerHint {
     pub estimate_bytes: u64,
     pub source: &'static str,
     pub confidence: &'static str,
 }
-
 pub struct PackageFile {
     pub path: &'static str,
     pub role: &'static str,
 }
-
 pub struct OwnedPackage {
     pub id: &'static str,
     pub family: &'static str,
@@ -70,16 +47,23 @@ pub struct OwnedPackage {
 }
 
 impl OwnedPackage {
-    pub fn local_dir(&self, models_dir: &Path) -> std::path::PathBuf {
-        self.format.library_dir(models_dir).join(self.local_dir)
-    }
-
     pub fn has_required_files(&self, models_dir: &Path) -> bool {
-        let package_dir = self.local_dir(models_dir);
+        let package_dir = self.format.library_dir(models_dir).join(self.local_dir);
         self.required_files
             .iter()
             .all(|file| package_dir.join(file.path).is_file())
     }
+    pub fn primary_artifact_id(&self) -> Option<String> {
+        self.required_files
+            .first()
+            .map(|file| format!("{}/{}", self.local_dir, file.path))
+    }
+}
+
+pub fn owned_package(id: &str) -> Option<OwnedPackage> {
+    owned_packages()
+        .into_iter()
+        .find(|package| package.id == id)
 }
 
 pub fn owned_packages() -> [OwnedPackage; 2] {

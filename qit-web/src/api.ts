@@ -30,6 +30,11 @@ export type ModelPackage = {
   readiness_reason: "missing_required_files" | "insufficient_memory" | "runtime_missing" | null;
 };
 
+export type ServeProfile = {
+  context_length: number;
+  runtime_settings: Record<string, unknown>;
+};
+
 export type Catalog = {
   artifacts: Artifact[];
   packages: ModelPackage[];
@@ -52,9 +57,9 @@ export type Hardware = {
 export type Reservation = {
   id: string;
   artifact_id: string;
-  n_ctx: number;
-  n_gpu_layers: number;
-  n_parallel: number;
+  package_id?: string;
+  runtime_recipe: "llama_cpp";
+  serve_profile: ServeProfile;
   estimate_bytes: number;
 };
 
@@ -68,9 +73,9 @@ export type SessionStatus =
 export type Session = {
   id: string;
   artifact_id: string;
-  n_ctx: number;
-  n_gpu_layers: number;
-  n_parallel: number;
+  package_id?: string;
+  runtime_recipe: "llama_cpp";
+  serve_profile: ServeProfile;
   status: SessionStatus;
   last_error?: string;
   log_path?: string;
@@ -143,6 +148,11 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+const serveProfile = (context_length: number): ServeProfile => ({
+  context_length,
+  runtime_settings: {},
+});
+
 export const api = {
   health: () => fetch("/api/health").then((r) => parse<{ ok: boolean }>(r)),
   hardware: () => fetch("/api/hardware").then((r) => parse<Hardware>(r)),
@@ -160,22 +170,25 @@ export const api = {
   updateSettings: (os_reserve_bytes: number | null) =>
     fetch("/api/settings", { ...json({ os_reserve_bytes }), method: "PUT" }).then(
       (r) => parse<Settings>(r)
-    ),
+  ),
   pin: (artifact_id: string, n_ctx: number) =>
-    fetch("/api/pins", json({ artifact_id, n_ctx })).then((r) =>
-      parse<Reservation>(r)
-    ),
+    fetch(
+      "/api/pins",
+      json({ artifact_id, serve_profile: serveProfile(n_ctx) })
+    ).then((r) => parse<Reservation>(r)),
   whatIf: (artifact_id: string, n_ctx: number) =>
-    fetch("/api/what-ifs", json({ artifact_id, n_ctx })).then((r) =>
-      parse<Reservation>(r)
-    ),
+    fetch(
+      "/api/what-ifs",
+      json({ artifact_id, serve_profile: serveProfile(n_ctx) })
+    ).then((r) => parse<Reservation>(r)),
   deletePin: (id: string) => fetch(`/api/pins/${id}`, { method: "DELETE" }),
   deleteWhatIf: (id: string) => fetch(`/api/what-ifs/${id}`, { method: "DELETE" }),
   clearWhatIfs: () => fetch("/api/what-ifs", { method: "DELETE" }),
   start: (artifact_id: string, n_ctx: number) =>
-    fetch("/api/sessions", json({ artifact_id, n_ctx })).then((r) =>
-      parse<Session>(r)
-    ),
+    fetch(
+      "/api/sessions",
+      json({ artifact_id, serve_profile: serveProfile(n_ctx) })
+    ).then((r) => parse<Session>(r)),
   stop: (id: string) =>
     fetch(`/api/sessions/${id}/stop`, { method: "POST" }).then((r) =>
       parse<Session>(r)
@@ -196,7 +209,7 @@ export async function generate(
   handlers: GenerateHandlers
 ): Promise<void> {
   const res = await fetch("/api/generate", {
-    ...json({ artifact_id, n_ctx, messages }),
+    ...json({ artifact_id, serve_profile: serveProfile(n_ctx), messages }),
     signal,
   });
   if (!res.ok) {
