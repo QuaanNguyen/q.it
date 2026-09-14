@@ -508,8 +508,7 @@ impl Supervisor {
                     if let Ok(Some(status)) = child.try_wait() {
                         if !status.success() || session.view.status == SessionStatus::Loaded {
                             session.view.status = SessionStatus::Failed;
-                            session.view.last_error =
-                                Some(format!("worker exited ({status})"));
+                            session.view.last_error = Some(format!("worker exited ({status})"));
                             session.base_url = None;
                             session.child = None;
                         }

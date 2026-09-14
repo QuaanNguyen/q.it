@@ -35,10 +35,7 @@ fn kv_and_state_bytes(artifact: &ArtifactRow, n_ctx: u32, n_parallel: u32) -> u6
     let embed = artifact.embedding_length.unwrap_or(0) as u64;
     let fallback_dim = if embed > 0 { embed / heads } else { 0 };
     let head_dim_k = artifact.planner.key_length.unwrap_or(fallback_dim as u32) as u64;
-    let head_dim_v = artifact
-        .planner
-        .value_length
-        .unwrap_or(fallback_dim as u32) as u64;
+    let head_dim_v = artifact.planner.value_length.unwrap_or(fallback_dim as u32) as u64;
     let kv_layers = artifact
         .planner
         .head_count_kv_layers

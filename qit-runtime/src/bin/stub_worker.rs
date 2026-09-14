@@ -29,9 +29,7 @@ async fn main() {
             "--token-delay-ms" => {
                 stream.token_delay_ms = args.next().and_then(|v| v.parse().ok()).unwrap_or(0)
             }
-            "--n-tokens" => {
-                stream.n_tokens = args.next().and_then(|v| v.parse().ok()).unwrap_or(2)
-            }
+            "--n-tokens" => stream.n_tokens = args.next().and_then(|v| v.parse().ok()).unwrap_or(2),
             "--echo-usage" => stream.echo_usage = true,
             "-m" | "-c" | "-ngl" | "--parallel" | "--host" => {
                 let _ = args.next();
@@ -67,10 +65,7 @@ async fn main() {
                 }
             }),
         )
-        .route(
-            "/v1/chat/completions",
-            post(move |req| chat(stream, req)),
-        );
+        .route("/v1/chat/completions", post(move |req| chat(stream, req)));
     axum::serve(listener, app).await.expect("stub worker");
 }
 
@@ -129,7 +124,9 @@ async fn chat(
         Ok(Event::default().data(payload.to_string()))
     });
     let usage = if shape.echo_usage {
-        vec![Ok(Event::default().data(usage_chunk(&req, shape.n_tokens).to_string()))]
+        vec![Ok(
+            Event::default().data(usage_chunk(&req, shape.n_tokens).to_string())
+        )]
     } else {
         vec![]
     };

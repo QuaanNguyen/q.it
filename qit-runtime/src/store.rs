@@ -120,7 +120,9 @@ impl Store {
 
     pub fn setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
         self.conn
-            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0))
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
             .optional()
     }
 
@@ -142,9 +144,7 @@ impl Store {
     }
 
     pub fn os_reserve_setting(&self) -> rusqlite::Result<Option<u64>> {
-        Ok(self
-            .setting(OS_RESERVE_KEY)?
-            .and_then(|v| v.parse().ok()))
+        Ok(self.setting(OS_RESERVE_KEY)?.and_then(|v| v.parse().ok()))
     }
 
     pub fn set_os_reserve_setting(&self, bytes: Option<u64>) -> rusqlite::Result<()> {
@@ -327,7 +327,9 @@ impl Store {
     }
 
     pub fn delete_session(&self, id: &str) -> rusqlite::Result<bool> {
-        let n = self.conn.execute("DELETE FROM sessions WHERE id = ?1", [id])?;
+        let n = self
+            .conn
+            .execute("DELETE FROM sessions WHERE id = ?1", [id])?;
         Ok(n > 0)
     }
 
