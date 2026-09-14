@@ -330,7 +330,7 @@ fn read_value(file: &mut File, ty: u32) -> Option<Value> {
             file.seek(SeekFrom::Current(8)).ok()?;
             Some(Value::Other)
         }
-        1 | 2 | 3 => {
+        1..=3 => {
             let skip = match ty {
                 1 => 1,
                 2 | 3 => 2,

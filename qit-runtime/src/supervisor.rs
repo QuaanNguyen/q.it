@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::serve::{RuntimeRecipe, ServeProfile};
-use crate::store::ArtifactRow;
+use crate::serve::{RuntimeRecipe, ServeProfile, TargetIdentity};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -24,9 +23,8 @@ pub enum SessionStatus {
 #[derive(Clone, Debug, Serialize)]
 pub struct SessionView {
     pub id: String,
-    pub artifact_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub package_id: Option<String>,
+    #[serde(flatten)]
+    pub target: TargetIdentity,
     pub runtime_recipe: RuntimeRecipe,
     pub serve_profile: ServeProfile,
     pub status: SessionStatus,
@@ -57,7 +55,8 @@ pub fn session_status_from_str(s: &str) -> SessionStatus {
 }
 
 pub struct LaunchRequest {
-    pub artifact_path: PathBuf,
+    pub runtime_recipe: RuntimeRecipe,
+    pub target_path: PathBuf,
     pub n_ctx: u32,
     pub n_gpu_layers: i32,
     pub n_parallel: u32,
@@ -69,6 +68,12 @@ pub struct LaunchedWorker {
     pub base_url: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct ServeTarget {
+    pub identity: TargetIdentity,
+    pub path: PathBuf,
+}
+
 pub trait WorkerLauncher: Send + Sync {
     fn launch(&self, request: LaunchRequest) -> Result<LaunchedWorker, String>;
 }
@@ -77,38 +82,107 @@ pub struct LlamaServerLauncher {
     pub binary: Option<PathBuf>,
 }
 
+pub struct RecipeWorkerLauncher {
+    pub llama_cpp_binary: Option<PathBuf>,
+    pub transformers_external_binary: Option<PathBuf>,
+    pub transformers_external_extra_args: Vec<String>,
+}
+
+impl WorkerLauncher for RecipeWorkerLauncher {
+    fn launch(&self, request: LaunchRequest) -> Result<LaunchedWorker, String> {
+        match request.runtime_recipe {
+            RuntimeRecipe::LlamaCpp => LlamaServerLauncher {
+                binary: self.llama_cpp_binary.clone(),
+            }
+            .launch(request),
+            RuntimeRecipe::TransformersExternal => {
+                let binary = self.transformers_external_binary.as_ref().ok_or_else(|| {
+                    "no Transformers worker binary (set QIT_TRANSFORMERS_WORKER_PATH)".to_string()
+                })?;
+                launch_transformers_external(
+                    binary,
+                    &self.transformers_external_extra_args,
+                    request,
+                )
+            }
+        }
+    }
+}
+
 impl WorkerLauncher for LlamaServerLauncher {
     fn launch(&self, request: LaunchRequest) -> Result<LaunchedWorker, String> {
         let binary = self.binary.as_ref().ok_or_else(|| {
             "no worker binary (set QIT_WORKER_PATH or LLAMA_SERVER_PATH)".to_string()
         })?;
-        let port = free_loopback_port()?;
-        let log =
-            std::fs::File::create(&request.log_path).map_err(|e| format!("worker log: {e}"))?;
-        let err = log.try_clone().map_err(|e| format!("worker log: {e}"))?;
-        let child = Command::new(binary)
-            .arg("--host")
-            .arg("127.0.0.1")
-            .arg("--port")
-            .arg(port.to_string())
-            .arg("-m")
-            .arg(&request.artifact_path)
-            .arg("-c")
-            .arg(request.n_ctx.to_string())
-            .arg("-ngl")
-            .arg(request.n_gpu_layers.to_string())
-            .arg("--parallel")
-            .arg(request.n_parallel.to_string())
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(log))
-            .stderr(Stdio::from(err))
-            .spawn()
-            .map_err(|e| format!("spawn worker: {e}"))?;
-        Ok(LaunchedWorker {
-            child,
-            base_url: format!("http://127.0.0.1:{port}"),
+        launch_worker(binary, request, "worker", |command, port, request| {
+            command
+                .arg("--host")
+                .arg("127.0.0.1")
+                .arg("--port")
+                .arg(port.to_string())
+                .arg("-m")
+                .arg(&request.target_path)
+                .arg("-c")
+                .arg(request.n_ctx.to_string())
+                .arg("-ngl")
+                .arg(request.n_gpu_layers.to_string())
+                .arg("--parallel")
+                .arg(request.n_parallel.to_string());
         })
     }
+}
+
+fn launch_transformers_external(
+    binary: &std::path::Path,
+    extra_args: &[String],
+    request: LaunchRequest,
+) -> Result<LaunchedWorker, String> {
+    launch_worker(
+        binary,
+        request,
+        "Transformers worker",
+        |command, port, request| {
+            command
+                .args(extra_args)
+                .arg("--host")
+                .arg("127.0.0.1")
+                .arg("--port")
+                .arg(port.to_string())
+                .arg("--model")
+                .arg(&request.target_path)
+                .arg("--context-length")
+                .arg(request.n_ctx.to_string());
+        },
+    )
+}
+
+fn launch_worker<F>(
+    binary: &std::path::Path,
+    request: LaunchRequest,
+    worker_name: &str,
+    configure: F,
+) -> Result<LaunchedWorker, String>
+where
+    F: FnOnce(&mut Command, u16, &LaunchRequest),
+{
+    let port = free_loopback_port()?;
+    let log =
+        std::fs::File::create(&request.log_path).map_err(|error| format!("worker log: {error}"))?;
+    let err = log
+        .try_clone()
+        .map_err(|error| format!("worker log: {error}"))?;
+    let mut command = Command::new(binary);
+    configure(&mut command, port, &request);
+    let child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(err))
+        .spawn()
+        .map_err(|error| format!("spawn {worker_name}: {error}"))?;
+    Ok(LaunchedWorker {
+        child,
+        base_url: format!("http://127.0.0.1:{port}"),
+    })
 }
 
 pub struct StubBinLauncher {
@@ -152,6 +226,8 @@ struct LiveSession {
     view: SessionView,
     child: Option<Child>,
     base_url: Option<String>,
+    starting_pid: Option<u32>,
+    stop_requested: bool,
 }
 
 pub struct Supervisor {
@@ -175,8 +251,7 @@ impl Supervisor {
                 LiveSession {
                     view: SessionView {
                         id: row.id,
-                        artifact_id: row.artifact_id,
-                        package_id: row.package_id,
+                        target: row.target,
                         runtime_recipe: row.runtime_recipe,
                         serve_profile: row.serve_profile,
                         status: session_status_from_str(&row.status),
@@ -185,6 +260,8 @@ impl Supervisor {
                     },
                     child: None,
                     base_url: None,
+                    starting_pid: None,
+                    stop_requested: false,
                 },
             );
         }
@@ -192,15 +269,11 @@ impl Supervisor {
 
     pub async fn find_by_profile(
         &self,
-        artifact_id: &str,
-        package_id: Option<&str>,
+        target: &TargetIdentity,
         serve_profile: &ServeProfile,
     ) -> Option<SessionView> {
         self.sessions.lock().await.values().find_map(|s| {
-            if s.view.artifact_id == artifact_id
-                && s.view.package_id.as_deref() == package_id
-                && s.view.serve_profile == *serve_profile
-            {
+            if s.view.target == *target && s.view.serve_profile == *serve_profile {
                 Some(s.view.clone())
             } else {
                 None
@@ -241,14 +314,12 @@ impl Supervisor {
 
     pub async fn find_loaded(
         &self,
-        artifact_id: &str,
-        package_id: Option<&str>,
+        target: &TargetIdentity,
         serve_profile: &ServeProfile,
     ) -> Option<SessionView> {
         self.reap().await;
         self.sessions.lock().await.values().find_map(|s| {
-            if s.view.artifact_id == artifact_id
-                && s.view.package_id.as_deref() == package_id
+            if s.view.target == *target
                 && s.view.serve_profile == *serve_profile
                 && s.view.status == SessionStatus::Loaded
             {
@@ -265,28 +336,19 @@ impl Supervisor {
 
     pub async fn start(
         &self,
-        artifact: &ArtifactRow,
-        package_id: Option<String>,
+        target: &ServeTarget,
         runtime_recipe: RuntimeRecipe,
         serve_profile: ServeProfile,
         log_path: PathBuf,
     ) -> Result<SessionView, String> {
         self.reap().await;
-        let settings = match runtime_recipe {
-            RuntimeRecipe::LlamaCpp => serve_profile.llama_cpp_settings()?,
-            RuntimeRecipe::TransformersExternal => {
-                return Err("runtime recipe unavailable".into());
-            }
-        };
-        if let Some(existing) = self
-            .find_loaded(&artifact.id, package_id.as_deref(), &serve_profile)
-            .await
-        {
+        let (n_gpu_layers, n_parallel) = runtime_recipe.launch_parameters(&serve_profile)?;
+        if let Some(existing) = self.find_loaded(&target.identity, &serve_profile).await {
             return Ok(existing);
         }
         let log_path_str = log_path.display().to_string();
         let id = self
-            .find_by_profile(&artifact.id, package_id.as_deref(), &serve_profile)
+            .find_by_profile(&target.identity, &serve_profile)
             .await
             .map(|s| s.id)
             .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -297,8 +359,7 @@ impl Supervisor {
                 LiveSession {
                     view: SessionView {
                         id: id.clone(),
-                        artifact_id: artifact.id.clone(),
-                        package_id,
+                        target: target.identity.clone(),
                         runtime_recipe,
                         serve_profile: serve_profile.clone(),
                         status: SessionStatus::Starting,
@@ -307,19 +368,28 @@ impl Supervisor {
                     },
                     child: None,
                     base_url: None,
+                    starting_pid: None,
+                    stop_requested: false,
                 },
             );
         }
         let launched = match self.launcher.launch(LaunchRequest {
-            artifact_path: artifact.path.clone(),
+            runtime_recipe,
+            target_path: target.path.clone(),
             n_ctx: serve_profile.context_length,
-            n_gpu_layers: settings.gpu_layers,
-            n_parallel: settings.parallel,
+            n_gpu_layers,
+            n_parallel,
             log_path,
         }) {
             Ok(w) => w,
             Err(e) => {
                 if let Some(s) = self.sessions.lock().await.get_mut(&id) {
+                    if s.stop_requested {
+                        s.stop_requested = false;
+                        s.view.status = SessionStatus::NotLoaded;
+                        s.view.last_error = None;
+                        return Ok(s.view.clone());
+                    }
                     s.view.status = SessionStatus::Failed;
                     s.view.last_error = Some(e.clone());
                 }
@@ -327,10 +397,34 @@ impl Supervisor {
             }
         };
         let mut launched = launched;
+        {
+            let mut guard = self.sessions.lock().await;
+            let Some(session) = guard.get_mut(&id) else {
+                drop(guard);
+                drop(kill_child(launched.child));
+                return Err("session vanished".into());
+            };
+            if session.stop_requested {
+                session.stop_requested = false;
+                session.view.status = SessionStatus::NotLoaded;
+                let view = session.view.clone();
+                drop(guard);
+                drop(kill_child(launched.child));
+                return Ok(view);
+            }
+            session.starting_pid = Some(launched.child.id());
+        }
         if let Err(e) = wait_ready(&launched.base_url, &mut launched.child).await {
             drop(kill_child(launched.child));
             let mut guard = self.sessions.lock().await;
             if let Some(s) = guard.get_mut(&id) {
+                s.starting_pid = None;
+                if s.stop_requested {
+                    s.stop_requested = false;
+                    s.view.status = SessionStatus::NotLoaded;
+                    s.view.last_error = None;
+                    return Ok(s.view.clone());
+                }
                 s.view.status = SessionStatus::Failed;
                 s.view.last_error = Some(e.clone());
                 s.child = None;
@@ -340,8 +434,10 @@ impl Supervisor {
         }
         let mut guard = self.sessions.lock().await;
         if let Some(s) = guard.get_mut(&id) {
-            if s.view.status == SessionStatus::Stopping {
+            s.starting_pid = None;
+            if s.stop_requested || s.view.status == SessionStatus::Stopping {
                 drop(kill_child(launched.child));
+                s.stop_requested = false;
                 s.view.status = SessionStatus::NotLoaded;
                 s.child = None;
                 s.base_url = None;
@@ -368,9 +464,23 @@ impl Supervisor {
         let session = guard
             .get_mut(id)
             .ok_or_else(|| "session not found".to_string())?;
+        if session.view.status == SessionStatus::Starting || session.stop_requested {
+            session.stop_requested = true;
+            if let Some(pid) = session.starting_pid {
+                kill_process(pid);
+            }
+            session.view.status = SessionStatus::NotLoaded;
+            session.base_url = None;
+            session.view.last_error = None;
+            return Ok(Stopped {
+                view: session.view.clone(),
+                peak_rss_bytes: None,
+            });
+        }
         session.view.status = SessionStatus::Stopping;
         let peak_rss_bytes = session.child.take().and_then(reap_child);
         session.base_url = None;
+        session.stop_requested = false;
         session.view.status = SessionStatus::NotLoaded;
         session.view.last_error = None;
         Ok(Stopped {
@@ -419,6 +529,14 @@ fn kill_child(child: Child) -> Result<(), std::io::Error> {
     let _ = reap_child(child);
     Ok(())
 }
+
+#[cfg(unix)]
+fn kill_process(pid: u32) {
+    let _ = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+}
+
+#[cfg(not(unix))]
+fn kill_process(_pid: u32) {}
 
 fn reap_child(child: Child) -> Option<u64> {
     let pid = child.id();

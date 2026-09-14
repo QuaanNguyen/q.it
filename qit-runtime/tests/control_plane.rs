@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,9 +6,99 @@ use qit_runtime::bind;
 use qit_runtime::config::Config;
 use qit_runtime::gguf::{write_test_gguf, GgufMeta};
 use qit_runtime::probe::{FixedProbe, HardwareSnapshot};
-use qit_runtime::supervisor::{LlamaServerLauncher, StubBinLauncher};
+use qit_runtime::supervisor::{LlamaServerLauncher, RecipeWorkerLauncher, StubBinLauncher};
 use serde_json::Value;
 use tempfile::TempDir;
+
+#[tokio::test]
+async fn package_target_migration_removes_fabricated_artifact_identity() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let models = tmp.path().join("models");
+    std::fs::create_dir_all(&home).unwrap();
+    let db_path = home.join("runtime.db");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    conn.execute_batch(
+        r#"
+        CREATE TABLE pins (
+            id TEXT PRIMARY KEY,
+            target_id TEXT NOT NULL,
+            artifact_id TEXT NOT NULL,
+            package_id TEXT,
+            runtime_recipe TEXT NOT NULL,
+            serve_profile_json TEXT NOT NULL,
+            UNIQUE(target_id, serve_profile_json)
+        );
+        CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            target_id TEXT NOT NULL,
+            artifact_id TEXT NOT NULL,
+            package_id TEXT,
+            runtime_recipe TEXT NOT NULL,
+            serve_profile_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            last_error TEXT,
+            log_path TEXT,
+            UNIQUE(target_id, serve_profile_json)
+        );
+        INSERT INTO pins VALUES (
+            'pin', 'Qwen/Qwen2.5-0.5B-Instruct', 'Qwen/Qwen2.5-0.5B-Instruct',
+            'Qwen/Qwen2.5-0.5B-Instruct', 'transformers_external',
+            '{"context_length":4096,"runtime_settings":{}}'
+        );
+        INSERT INTO sessions VALUES (
+            'session', 'qit/qwen2.5-0.5b-instruct-q4_k_m',
+            'Qwen/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+            'qit/qwen2.5-0.5b-instruct-q4_k_m', 'llama_cpp',
+            '{"context_length":4096,"runtime_settings":{"gpu_layers":7,"parallel":2}}',
+            'not_loaded', NULL, NULL
+        );
+        "#,
+    )
+    .unwrap();
+    drop(conn);
+
+    let listening = bind(Config::test(
+        home,
+        models,
+        "127.0.0.1:0".parse().unwrap(),
+        FixedProbe {
+            snapshot: probe_with_free(None),
+        },
+        None,
+        stub_launcher(),
+        Some(2_000_000),
+    ))
+    .await
+    .unwrap();
+    let capacity: Value = reqwest::get(format!("{}/api/capacity", listening.base_url()))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let pin = &capacity["pins"][0];
+    assert_eq!(pin["target_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert!(pin.get("artifact_id").is_none(), "{pin}");
+    assert_eq!(
+        pin["package_id"],
+        "Qwen/Qwen2.5-0.5B-Instruct"
+    );
+    let session = &capacity["sessions"][0];
+    assert_eq!(
+        session["target_id"],
+        "qit/qwen2.5-0.5b-instruct-q4_k_m"
+    );
+    assert_eq!(
+        session["artifact_id"],
+        "Qwen/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    );
+    assert_eq!(
+        session["package_id"],
+        "qit/qwen2.5-0.5b-instruct-q4_k_m"
+    );
+    listening.shutdown().await;
+}
 
 struct Harness {
     _tmp: TempDir,
@@ -55,6 +145,44 @@ impl Harness {
             launcher,
             os_reserve_env,
         );
+        let listening = bind(cfg).await.unwrap();
+        Self {
+            _tmp: tmp,
+            home,
+            models,
+            listening,
+        }
+    }
+
+    async fn start_with_transformers(probe: HardwareSnapshot, extra_args: Vec<String>) -> Self {
+        let worker = PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker"));
+        let launcher = Arc::new(RecipeWorkerLauncher {
+            llama_cpp_binary: None,
+            transformers_external_binary: Some(worker.clone()),
+            transformers_external_extra_args: extra_args,
+        });
+        Self::start_with_transformers_path(probe, worker, launcher).await
+    }
+
+    async fn start_with_transformers_path(
+        probe: HardwareSnapshot,
+        worker: PathBuf,
+        launcher: Arc<dyn qit_runtime::supervisor::WorkerLauncher>,
+    ) -> Self {
+        let tmp = TempDir::new().unwrap();
+        let home = tmp.path().join("home");
+        let models = tmp.path().join("models");
+        std::fs::create_dir_all(&models).unwrap();
+        let cfg = Config::test(
+            home.clone(),
+            models.clone(),
+            "127.0.0.1:0".parse().unwrap(),
+            FixedProbe { snapshot: probe },
+            None,
+            launcher,
+            Some(200_000_000),
+        )
+        .with_transformers_worker_path(worker);
         let listening = bind(cfg).await.unwrap();
         Self {
             _tmp: tmp,
@@ -130,13 +258,13 @@ fn stub_launcher() -> Arc<StubBinLauncher> {
 }
 
 async fn bind_same_home(
-    home: &PathBuf,
-    models: &PathBuf,
+    home: &Path,
+    models: &Path,
     os_reserve_env: Option<u64>,
 ) -> qit_runtime::Listening {
     let cfg = Config::test(
-        home.clone(),
-        models.clone(),
+        home.to_path_buf(),
+        models.to_path_buf(),
         "127.0.0.1:0".parse().unwrap(),
         FixedProbe {
             snapshot: probe_with_free(None),
@@ -163,7 +291,7 @@ fn probe_live(free: Option<u64>, pressure: Option<&str>) -> HardwareSnapshot {
     }
 }
 
-fn write_artifact(dir: &PathBuf, org: &str, name: &str, bytes: usize, meta: GgufMeta) -> PathBuf {
+fn write_artifact(dir: &Path, org: &str, name: &str, bytes: usize, meta: GgufMeta) -> PathBuf {
     let org_dir = dir.join(org);
     std::fs::create_dir_all(&org_dir).unwrap();
     let path = org_dir.join(name);
@@ -364,6 +492,272 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
             "readiness_reason": "runtime_missing"
         })
     );
+    let pin = h
+        .post_json(
+            "/api/pins",
+            serde_json::json!({"package_id": "Qwen/Qwen2.5-0.5B-Instruct"}),
+        )
+        .await;
+    assert_eq!(pin.status(), 200);
+    assert_eq!(
+        pin.json::<Value>().await.unwrap()["estimate_bytes"],
+        1_200_000_000_u64
+    );
+    assert_eq!(h.json("/api/hardware").await["headroom_bytes"], 300_000_000);
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn nonexistent_transformers_worker_keeps_package_not_ready() {
+    let h = Harness::start_with_transformers_path(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        PathBuf::from("/missing/qit-transformers-worker"),
+        stub_launcher(),
+    )
+    .await;
+    write_transformers_package(&h.models);
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .unwrap();
+    assert_eq!(package["ready"], false, "{package}");
+    assert_eq!(package["readiness_reason"], "runtime_missing", "{package}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn transformers_package_launches_after_health_proxies_chat_and_stops() {
+    let h = Harness::start_with_transformers(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec![
+            "--health-warmup-ms".into(),
+            "400".into(),
+            "--echo-usage".into(),
+        ],
+    )
+    .await;
+    let package_dir = write_transformers_package(&h.models);
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .unwrap();
+    assert_eq!(package["ready"], true, "{package}");
+
+    let serve_profile = serde_json::json!({
+        "context_length": 4096,
+        "runtime_settings": {}
+    });
+    let client = reqwest::Client::new();
+    let start_url = h.url("/api/sessions");
+    let start_profile = serve_profile.clone();
+    let start = tokio::spawn(async move {
+        client
+            .post(start_url)
+            .json(&serde_json::json!({
+                "package_id": "Qwen/Qwen2.5-0.5B-Instruct",
+                "serve_profile": start_profile
+            }))
+            .send()
+            .await
+            .unwrap()
+    });
+    let starting = wait_until(&h, "/api/sessions", |sessions| {
+        sessions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|session| session["status"] == "starting")
+    })
+    .await;
+    assert_eq!(starting[0]["runtime_recipe"], "transformers_external");
+
+    let started = start.await.unwrap();
+    assert_eq!(started.status(), 200);
+    let started: Value = started.json().await.unwrap();
+    assert_eq!(started["status"], "loaded");
+    assert_eq!(started["target_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert!(started.get("artifact_id").is_none(), "{started}");
+    assert_eq!(started["package_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert_eq!(started["runtime_recipe"], "transformers_external");
+    assert_eq!(started["serve_profile"], serve_profile);
+    assert_eq!(h.json("/api/hardware").await["headroom_bytes"], 300_000_000);
+    let session_id = started["id"].as_str().unwrap();
+    let log_path = started["log_path"].as_str().unwrap();
+    let pid = worker_pid_from_log(log_path);
+    assert!(process_alive(pid));
+    let log = std::fs::read_to_string(log_path).unwrap();
+    assert!(log.contains("--model"), "{log}");
+    assert!(log.contains(&package_dir.display().to_string()), "{log}");
+    assert!(log.contains("--context-length"), "{log}");
+    assert!(log.contains("4096"), "{log}");
+
+    let generated = reqwest::Client::new()
+        .post(h.url("/api/generate"))
+        .json(&serde_json::json!({
+            "package_id": "Qwen/Qwen2.5-0.5B-Instruct",
+            "serve_profile": serve_profile,
+            "session_id": session_id,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 7
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(generated.status(), 200);
+    let body = generated.text().await.unwrap();
+    let events = sse_events(&body);
+    assert_eq!(events[0], ("token".into(), "hello".into()), "{body}");
+    assert_eq!(events[1], ("token".into(), " world".into()), "{body}");
+    assert_eq!(events.last().unwrap().0, "done", "{body}");
+
+    let stopped = h
+        .post_json(
+            &format!("/api/sessions/{session_id}/stop"),
+            serde_json::json!({}),
+        )
+        .await;
+    assert_eq!(stopped.status(), 200);
+    assert_eq!(
+        stopped.json::<Value>().await.unwrap()["status"],
+        "not_loaded"
+    );
+    assert!(!process_alive(pid), "stub worker {pid} still running");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn transformers_worker_failure_retains_failed_session_and_log() {
+    let h = Harness::start_with_transformers(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec!["--crash".into()],
+    )
+    .await;
+    write_transformers_package(&h.models);
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let response = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"package_id": "Qwen/Qwen2.5-0.5B-Instruct"}),
+        )
+        .await;
+    assert_eq!(response.status(), 400);
+    let error: Value = response.json().await.unwrap();
+    assert!(error["error"].as_str().unwrap().contains("worker exited"));
+    let sessions = h.json("/api/sessions").await;
+    assert_eq!(sessions[0]["status"], "failed", "{sessions}");
+    assert!(
+        sessions[0]["last_error"]
+            .as_str()
+            .unwrap()
+            .contains("worker exited"),
+        "{sessions}"
+    );
+    let log_path = sessions[0]["log_path"].as_str().unwrap();
+    assert!(std::path::Path::new(log_path).is_file(), "{sessions}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn stopping_transformers_package_during_health_wait_cannot_reload_it() {
+    let h = Harness::start_with_transformers(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec!["--health-warmup-ms".into(), "1000".into()],
+    )
+    .await;
+    write_transformers_package(&h.models);
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    let start_url = h.url("/api/sessions");
+    let start = tokio::spawn(async move {
+        reqwest::Client::new()
+            .post(start_url)
+            .json(&serde_json::json!({
+                "package_id": "Qwen/Qwen2.5-0.5B-Instruct"
+            }))
+            .send()
+            .await
+            .unwrap()
+    });
+    let starting = wait_until(&h, "/api/sessions", |sessions| {
+        sessions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|session| session["status"] == "starting")
+    })
+    .await;
+    let session_id = starting[0]["id"].as_str().unwrap().to_string();
+    let log_path = starting[0]["log_path"].as_str().unwrap();
+    let pid = wait_for_worker_pid(log_path).await;
+    let stopped = h
+        .post_json(
+            &format!("/api/sessions/{session_id}/stop"),
+            serde_json::json!({}),
+        )
+        .await;
+    assert_eq!(stopped.status(), 200);
+    assert_eq!(
+        stopped.json::<Value>().await.unwrap()["status"],
+        "not_loaded"
+    );
+
+    let start_response = start.await.unwrap();
+    assert_eq!(start_response.status(), 200);
+    let start_response: Value = start_response.json().await.unwrap();
+    if start_response["status"] == "loaded" {
+        h.post_json(
+            &format!("/api/sessions/{session_id}/stop"),
+            serde_json::json!({}),
+        )
+        .await;
+    }
+    assert_eq!(start_response["status"], "not_loaded", "{start_response}");
+    let sessions = h.json("/api/sessions").await;
+    assert_eq!(sessions[0]["status"], "not_loaded", "{sessions}");
+    assert!(!process_alive(pid), "stub worker {pid} still running");
     h.listening.shutdown().await;
 }
 
@@ -492,6 +886,19 @@ async fn gguf_package_uses_serve_profile_through_session_lifecycle() {
     assert_eq!(after_restart["sessions"][0]["package_id"], package_id);
     assert_eq!(after_restart["sessions"][0]["serve_profile"], serve_profile);
     assert_eq!(after_restart["sessions"][0]["status"], "not_loaded");
+    let restarted = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({
+                "package_id": package_id,
+                "serve_profile": serve_profile
+            }),
+        )
+        .await;
+    assert_eq!(restarted.status(), 200);
+    let restarted: Value = restarted.json().await.unwrap();
+    assert_eq!(restarted["id"], started["id"]);
+    assert_eq!(h.json("/api/sessions").await.as_array().unwrap().len(), 1);
     h.listening.shutdown().await;
 }
 
@@ -798,9 +1205,24 @@ async fn wait_until<F: Fn(&Value) -> bool>(h: &Harness, path: &str, ok: F) -> Va
 
 fn worker_pid_from_log(log_path: &str) -> u32 {
     let log = std::fs::read_to_string(log_path).unwrap();
+    worker_pid(&log).expect("stub worker pid in log")
+}
+
+fn worker_pid(log: &str) -> Option<u32> {
     log.lines()
         .find_map(|l| l.strip_prefix("stub worker pid ").and_then(|p| p.trim().parse().ok()))
-        .expect("stub worker pid in log")
+}
+
+async fn wait_for_worker_pid(log_path: &str) -> u32 {
+    for _ in 0..50 {
+        if let Ok(log) = std::fs::read_to_string(log_path) {
+            if let Some(pid) = worker_pid(&log) {
+                return pid;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("stub worker pid not found in {log_path}");
 }
 
 fn process_alive(pid: u32) -> bool {

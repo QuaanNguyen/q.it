@@ -56,9 +56,10 @@ export type Hardware = {
 
 export type Reservation = {
   id: string;
-  artifact_id: string;
+  target_id: string;
+  artifact_id?: string;
   package_id?: string;
-  runtime_recipe: "llama_cpp";
+  runtime_recipe: "llama_cpp" | "transformers_external";
   serve_profile: ServeProfile;
   estimate_bytes: number;
 };
@@ -72,9 +73,10 @@ export type SessionStatus =
 
 export type Session = {
   id: string;
-  artifact_id: string;
+  target_id: string;
+  artifact_id?: string;
   package_id?: string;
-  runtime_recipe: "llama_cpp";
+  runtime_recipe: "llama_cpp" | "transformers_external";
   serve_profile: ServeProfile;
   status: SessionStatus;
   last_error?: string;

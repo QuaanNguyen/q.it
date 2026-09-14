@@ -5,8 +5,8 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::probe::{FixedProbe, HardwareProbe, SystemProbe};
-use crate::serve::ServeProfile;
-use crate::supervisor::{LlamaServerLauncher, WorkerLauncher};
+use crate::serve::{RuntimeRecipe, ServeProfile};
+use crate::supervisor::{RecipeWorkerLauncher, WorkerLauncher};
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 2471;
@@ -22,6 +22,7 @@ pub struct Config {
     pub models_dir: PathBuf,
     pub os_reserve_bytes: Option<u64>,
     pub worker_path: Option<PathBuf>,
+    pub transformers_worker_path: Option<PathBuf>,
     pub probe: Arc<dyn HardwareProbe>,
     pub worker_launcher: Arc<dyn WorkerLauncher>,
 }
@@ -43,8 +44,11 @@ impl Config {
             .ok()
             .and_then(|v| v.parse().ok());
         let worker_path = resolve_worker_path();
-        let worker_launcher: Arc<dyn WorkerLauncher> = Arc::new(LlamaServerLauncher {
-            binary: worker_path.clone(),
+        let transformers_worker_path = resolve_transformers_worker_path();
+        let worker_launcher: Arc<dyn WorkerLauncher> = Arc::new(RecipeWorkerLauncher {
+            llama_cpp_binary: worker_path.clone(),
+            transformers_external_binary: transformers_worker_path.clone(),
+            transformers_external_extra_args: Vec::new(),
         });
         Ok(Self {
             listen,
@@ -52,6 +56,7 @@ impl Config {
             models_dir,
             os_reserve_bytes,
             worker_path,
+            transformers_worker_path,
             probe: Arc::new(SystemProbe),
             worker_launcher,
         })
@@ -72,9 +77,15 @@ impl Config {
             models_dir,
             os_reserve_bytes,
             worker_path,
+            transformers_worker_path: None,
             probe: Arc::new(probe),
             worker_launcher,
         }
+    }
+
+    pub fn with_transformers_worker_path(mut self, path: PathBuf) -> Self {
+        self.transformers_worker_path = Some(path);
+        self
     }
 }
 
@@ -87,16 +98,19 @@ pub fn resolve_worker_path() -> Option<PathBuf> {
         .or_else(homebrew_worker_path)
 }
 
+pub fn resolve_transformers_worker_path() -> Option<PathBuf> {
+    std::env::var("QIT_TRANSFORMERS_WORKER_PATH")
+        .ok()
+        .map(PathBuf::from)
+}
+
 fn homebrew_worker_path() -> Option<PathBuf> {
-    for candidate in [
+    [
         PathBuf::from("/opt/homebrew/bin/llama-server"),
         PathBuf::from("/usr/local/bin/llama-server"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
 }
 
 fn default_home() -> PathBuf {
@@ -127,13 +141,12 @@ pub struct SessionShape {
 }
 
 impl SessionShape {
-    pub fn profile(&self) -> ServeProfile {
-        self.serve_profile.clone().unwrap_or_else(|| {
-            ServeProfile::llama_cpp(
-                self.n_ctx.unwrap_or(DEFAULT_N_CTX),
-                self.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS),
-                self.n_parallel.unwrap_or(DEFAULT_N_PARALLEL),
-            )
-        })
+    pub fn profile(&self, runtime_recipe: RuntimeRecipe) -> Result<ServeProfile, String> {
+        runtime_recipe.profile(
+            self.serve_profile.clone(),
+            self.n_ctx.unwrap_or(DEFAULT_N_CTX),
+            self.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS),
+            self.n_parallel.unwrap_or(DEFAULT_N_PARALLEL),
+        )
     }
 }

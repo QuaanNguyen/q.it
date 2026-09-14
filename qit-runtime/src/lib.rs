@@ -63,6 +63,7 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
         probe: config.probe.clone(),
         os_reserve_override: config.os_reserve_bytes,
         worker_path: config.worker_path.clone(),
+        transformers_worker_path: config.transformers_worker_path.clone(),
         supervisor,
         what_ifs: Arc::new(Mutex::new(Vec::new())),
         generate_slot: Arc::new(Semaphore::new(1)),

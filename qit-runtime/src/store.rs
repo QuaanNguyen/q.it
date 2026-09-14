@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::gguf::{ArtifactKind, PlannerHints};
-use crate::serve::{RuntimeRecipe, ServeProfile};
+use crate::serve::{RuntimeRecipe, ServeProfile, TargetIdentity};
 
 #[derive(Clone, Debug)]
 pub struct ArtifactRow {
@@ -26,8 +26,7 @@ pub struct ArtifactRow {
 #[derive(Clone, Debug)]
 pub struct PinRow {
     pub id: String,
-    pub artifact_id: String,
-    pub package_id: Option<String>,
+    pub target: TargetIdentity,
     pub runtime_recipe: RuntimeRecipe,
     pub serve_profile: ServeProfile,
 }
@@ -44,8 +43,7 @@ pub struct MeasurementRow {
 #[derive(Clone, Debug)]
 pub struct SessionRow {
     pub id: String,
-    pub artifact_id: String,
-    pub package_id: Option<String>,
+    pub target: TargetIdentity,
     pub runtime_recipe: RuntimeRecipe,
     pub serve_profile: ServeProfile,
     pub status: String,
@@ -84,7 +82,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS pins (
                 id TEXT PRIMARY KEY,
                 target_id TEXT NOT NULL,
-                artifact_id TEXT NOT NULL,
+                artifact_id TEXT,
                 package_id TEXT,
                 runtime_recipe TEXT NOT NULL,
                 serve_profile_json TEXT NOT NULL,
@@ -100,7 +98,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 target_id TEXT NOT NULL,
-                artifact_id TEXT NOT NULL,
+                artifact_id TEXT,
                 package_id TEXT,
                 runtime_recipe TEXT NOT NULL,
                 serve_profile_json TEXT NOT NULL,
@@ -214,16 +212,15 @@ impl Store {
 
     pub fn insert_pin(&self, pin: &PinRow) -> rusqlite::Result<()> {
         let serve_profile_json = serde_json::to_string(&pin.serve_profile).unwrap_or_default();
-        let target_id = pin.package_id.as_deref().unwrap_or(&pin.artifact_id);
         self.conn.execute(
             "INSERT INTO pins (
                 id, target_id, artifact_id, package_id, runtime_recipe, serve_profile_json
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 pin.id,
-                target_id,
-                pin.artifact_id,
-                pin.package_id,
+                pin.target.id(),
+                pin.target.artifact_id(),
+                pin.target.package_id(),
                 pin.runtime_recipe.as_str(),
                 serve_profile_json
             ],
@@ -238,16 +235,15 @@ impl Store {
 
     pub fn pins(&self) -> rusqlite::Result<Vec<PinRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, artifact_id, package_id, runtime_recipe, serve_profile_json
+            "SELECT id, target_id, artifact_id, package_id, runtime_recipe, serve_profile_json
              FROM pins ORDER BY target_id, serve_profile_json",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok(PinRow {
                 id: r.get(0)?,
-                artifact_id: r.get(1)?,
-                package_id: r.get(2)?,
-                runtime_recipe: RuntimeRecipe::parse(&r.get::<_, String>(3)?),
-                serve_profile: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(),
+                target: map_target(r, 1, 2, 3)?,
+                runtime_recipe: RuntimeRecipe::parse(&r.get::<_, String>(4)?),
+                serve_profile: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
             })
         })?;
         rows.collect()
@@ -302,7 +298,6 @@ impl Store {
 
     pub fn upsert_session(&self, row: &SessionRow) -> rusqlite::Result<()> {
         let serve_profile_json = serde_json::to_string(&row.serve_profile).unwrap_or_default();
-        let target_id = row.package_id.as_deref().unwrap_or(&row.artifact_id);
         self.conn.execute(
             "INSERT INTO sessions (
                 id, target_id, artifact_id, package_id, runtime_recipe, serve_profile_json,
@@ -318,9 +313,9 @@ impl Store {
                 log_path = excluded.log_path",
             params![
                 row.id,
-                target_id,
-                row.artifact_id,
-                row.package_id,
+                row.target.id(),
+                row.target.artifact_id(),
+                row.target.package_id(),
                 row.runtime_recipe.as_str(),
                 serve_profile_json,
                 row.status,
@@ -338,20 +333,19 @@ impl Store {
 
     pub fn sessions(&self) -> rusqlite::Result<Vec<SessionRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, artifact_id, package_id, runtime_recipe, serve_profile_json,
+            "SELECT id, target_id, artifact_id, package_id, runtime_recipe, serve_profile_json,
                     status, last_error, log_path
              FROM sessions ORDER BY target_id, serve_profile_json",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok(SessionRow {
                 id: r.get(0)?,
-                artifact_id: r.get(1)?,
-                package_id: r.get(2)?,
-                runtime_recipe: RuntimeRecipe::parse(&r.get::<_, String>(3)?),
-                serve_profile: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(),
-                status: r.get(5)?,
-                last_error: r.get(6)?,
-                log_path: r.get(7)?,
+                target: map_target(r, 1, 2, 3)?,
+                runtime_recipe: RuntimeRecipe::parse(&r.get::<_, String>(4)?),
+                serve_profile: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
+                status: r.get(6)?,
+                last_error: r.get(7)?,
+                log_path: r.get(8)?,
             })
         })?;
         rows.collect()
@@ -379,6 +373,25 @@ fn map_artifact(r: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactRow> {
         kind: ArtifactKind::parse(&kind),
         planner,
         confidence: r.get(13)?,
+    })
+}
+
+fn map_target(
+    row: &rusqlite::Row<'_>,
+    target_index: usize,
+    artifact_index: usize,
+    package_index: usize,
+) -> rusqlite::Result<TargetIdentity> {
+    let target_id: String = row.get(target_index)?;
+    let artifact_id: Option<String> = row.get(artifact_index)?;
+    let package_id: Option<String> = row.get(package_index)?;
+    Ok(if package_id.is_some() {
+        TargetIdentity::Package {
+            id: target_id,
+            artifact_id,
+        }
+    } else {
+        TargetIdentity::Artifact(artifact_id.unwrap_or(target_id))
     })
 }
 
@@ -411,7 +424,7 @@ fn ensure_serve_tables(conn: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE pins (
                 id TEXT PRIMARY KEY,
                 target_id TEXT NOT NULL,
-                artifact_id TEXT NOT NULL,
+                artifact_id TEXT,
                 package_id TEXT,
                 runtime_recipe TEXT NOT NULL,
                 serve_profile_json TEXT NOT NULL,
@@ -441,7 +454,7 @@ fn ensure_serve_tables(conn: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE sessions (
                 id TEXT PRIMARY KEY,
                 target_id TEXT NOT NULL,
-                artifact_id TEXT NOT NULL,
+                artifact_id TEXT,
                 package_id TEXT,
                 runtime_recipe TEXT NOT NULL,
                 serve_profile_json TEXT NOT NULL,
@@ -465,7 +478,56 @@ fn ensure_serve_tables(conn: &Connection) -> rusqlite::Result<()> {
             "#,
         )?;
     }
+    make_artifact_nullable(conn, "pins")?;
+    make_artifact_nullable(conn, "sessions")?;
     Ok(())
+}
+
+fn make_artifact_nullable(conn: &Connection, table: &str) -> rusqlite::Result<()> {
+    if !column_is_not_null(conn, table, "artifact_id")? {
+        return Ok(());
+    }
+    let (extra_columns, copied_columns) = if table == "pins" {
+        (String::new(), "runtime_recipe, serve_profile_json")
+    } else {
+        (
+            "status TEXT NOT NULL, last_error TEXT, log_path TEXT,".to_string(),
+            "runtime_recipe, serve_profile_json, status, last_error, log_path",
+        )
+    };
+    conn.execute_batch(&format!(
+        "BEGIN IMMEDIATE;
+         ALTER TABLE {table} RENAME TO {table}_required_artifact;
+         CREATE TABLE {table} (
+             id TEXT PRIMARY KEY,
+             target_id TEXT NOT NULL,
+             artifact_id TEXT,
+             package_id TEXT,
+             runtime_recipe TEXT NOT NULL,
+             serve_profile_json TEXT NOT NULL,
+             {extra_columns}
+             UNIQUE(target_id, serve_profile_json)
+         );
+         INSERT INTO {table} (id, target_id, artifact_id, package_id, {copied_columns})
+         SELECT id, target_id,
+             CASE WHEN package_id IS NOT NULL AND artifact_id = target_id
+                 THEN NULL ELSE artifact_id END,
+             package_id, {copied_columns}
+         FROM {table}_required_artifact;
+         DROP TABLE {table}_required_artifact;
+         COMMIT;"
+    ))
+}
+
+fn column_is_not_null(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(row.get::<_, i64>(3)? != 0);
+        }
+    }
+    Ok(false)
 }
 
 fn table_columns(conn: &Connection, table: &str) -> rusqlite::Result<Vec<String>> {

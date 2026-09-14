@@ -258,17 +258,17 @@
 
     function tableReservations(rows, kind) {
       if (!rows.length) return "<p class='muted'>None</p>";
-      return "<table><thead><tr><th>Artifact</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>" +
+      return "<table><thead><tr><th>Target</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>" +
         rows.map((r) =>
-          "<tr><td>" + esc(r.artifact_id) + "</td><td>" + r.serve_profile.context_length + "</td><td>" + fmtBytes(r.estimate_bytes) +
+          "<tr><td>" + esc(r.target_id) + "</td><td>" + r.serve_profile.context_length + "</td><td>" + fmtBytes(r.estimate_bytes) +
           "</td><td><button data-del='" + kind + ":" + esc(r.id) + "'>Remove</button></td></tr>"
         ).join("") + "</tbody></table>";
     }
     function tableSessions(rows) {
       if (!rows.length) return "<p class='muted'>None</p>";
-      return "<table><thead><tr><th>Id</th><th>Artifact</th><th>Status</th><th></th></tr></thead><tbody>" +
+      return "<table><thead><tr><th>Id</th><th>Target</th><th>Status</th><th></th></tr></thead><tbody>" +
         rows.map((s) =>
-          "<tr><td>" + esc(s.id.slice(0, 8)) + "</td><td>" + esc(s.artifact_id) + "</td><td>" + esc(s.status) +
+          "<tr><td>" + esc(s.id.slice(0, 8)) + "</td><td>" + esc(s.target_id) + "</td><td>" + esc(s.status) +
           "</td><td><button data-stop='" + esc(s.id) + "'>Stop</button></td></tr>"
         ).join("") + "</tbody></table>";
     }

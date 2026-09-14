@@ -58,6 +58,9 @@ impl OwnedPackage {
             .first()
             .map(|file| format!("{}/{}", self.local_dir, file.path))
     }
+    pub fn package_dir(&self, models_dir: &Path) -> std::path::PathBuf {
+        self.format.library_dir(models_dir).join(self.local_dir)
+    }
 }
 
 pub fn owned_package(id: &str) -> Option<OwnedPackage> {

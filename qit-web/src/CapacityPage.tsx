@@ -60,7 +60,7 @@ export function CapacityPage() {
         <table>
           <thead>
             <tr>
-              <th>Artifact</th>
+              <th>Target</th>
               <th>Context</th>
               <th>Status</th>
               <th>Detail</th>
@@ -70,7 +70,7 @@ export function CapacityPage() {
           <tbody>
             {capacity.sessions.map((s) => (
               <tr key={s.id}>
-                <td>{s.artifact_id}</td>
+                <td>{s.target_id}</td>
                 <td>{s.serve_profile.context_length / 1024}k</td>
                 <td>
                   <span className={`pill ${statusClass(s.status)}`}>{s.status}</span>
@@ -159,7 +159,7 @@ function ReservationTable({
     <table>
       <thead>
         <tr>
-          <th>Artifact</th>
+          <th>Target</th>
           <th>Context</th>
           <th>Estimate</th>
           <th></th>
@@ -168,7 +168,7 @@ function ReservationTable({
       <tbody>
         {rows.map((r) => (
           <tr key={r.id}>
-            <td>{r.artifact_id}</td>
+            <td>{r.target_id}</td>
             <td>{r.serve_profile.context_length / 1024}k</td>
             <td>{fmtBytes(r.estimate_bytes)}</td>
             <td>

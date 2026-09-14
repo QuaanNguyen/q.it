@@ -34,6 +34,7 @@ Do not add a second production test seam unless the control plane cannot express
 | `QIT_OS_RESERVE_BYTES` | Planner OS reserve override |
 | `QIT_PORT` | Listen port (default `2471`) |
 | `QIT_WORKER_PATH` / `LLAMA_SERVER_PATH` | Real `llama-server` for local inference |
+| `QIT_TRANSFORMERS_WORKER_PATH` | External OpenAI-compatible Transformers worker |
 | `QIT_WEB_DIST` | Optional path to built `qit-web/dist` for production UI |
 
 ## Milestone 1 status
