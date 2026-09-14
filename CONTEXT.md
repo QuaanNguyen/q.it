@@ -13,7 +13,7 @@ A scan-time label from GGUF headers: instruct, base, embedding, rerank, vision_p
 _Avoid_: model type, chat-capable
 
 **Backend**:
-An inference engine implementation behind a common session interface. Milestone 1 implements GGUF via a child `llama-server` process; MLX and others are future backends.
+An inference engine implementation behind a common session interface. Milestone 1 implements GGUF via a child `llama-server` process.
 _Avoid_: engine, provider
 
 **Capacity planner**:

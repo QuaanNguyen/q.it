@@ -74,8 +74,13 @@ fn sysctl_string(name: &str) -> Option<String> {
     let mut len = 0usize;
     let cname = std::ffi::CString::new(name).ok()?;
     unsafe {
-        if libc::sysctlbyname(cname.as_ptr(), std::ptr::null_mut(), &mut len, std::ptr::null_mut(), 0)
-            != 0
+        if libc::sysctlbyname(
+            cname.as_ptr(),
+            std::ptr::null_mut(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        ) != 0
         {
             return None;
         }

@@ -244,7 +244,7 @@ async fn stable_budget_ignores_free_ram() {
 }
 
 #[tokio::test]
-async fn scan_registers_gguf_and_ignores_mlx() {
+async fn scan_registers_gguf_only() {
     let h = Harness::start(probe_with_free(None), vec![]).await;
     write_artifact(
         &h.models,
@@ -253,17 +253,10 @@ async fn scan_registers_gguf_and_ignores_mlx() {
         100_000,
         llm_meta(),
     );
-    std::fs::create_dir_all(h.models.join("..").join("mlx").join("microsoft")).unwrap();
-    std::fs::write(
-        h.models
-            .join("..")
-            .join("mlx")
-            .join("microsoft")
-            .join("model.safetensors"),
-        [0u8; 32],
-    )
-    .unwrap();
-    std::fs::write(h.models.join("microsoft").join("notes.txt"), "nope").ok();
+    let other = h.models.join("microsoft");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("model.safetensors"), [0u8; 32]).unwrap();
+    std::fs::write(other.join("notes.txt"), "nope").unwrap();
     let catalog = h
         .post_json("/api/scan", serde_json::json!({}))
         .await
@@ -463,10 +456,7 @@ async fn generate_streams_and_records_metrics() {
         .find(|a| a["id"] == "org/small.gguf")
         .unwrap();
     assert!(small["throughput_tps"].as_f64().is_some(), "{small}");
-    assert!(
-        small["peak_rss_bytes"].as_u64().unwrap_or(0) > 0,
-        "{small}"
-    );
+    assert!(small["peak_rss_bytes"].as_u64().unwrap_or(0) > 0, "{small}");
     let sessions = h.json("/api/sessions").await;
     let loaded = sessions
         .as_array()
@@ -547,7 +537,10 @@ async fn wait_until<F: Fn(&Value) -> bool>(h: &Harness, path: &str, ok: F) -> Va
 fn worker_pid_from_log(log_path: &str) -> u32 {
     let log = std::fs::read_to_string(log_path).unwrap();
     log.lines()
-        .find_map(|l| l.strip_prefix("stub worker pid ").and_then(|p| p.trim().parse().ok()))
+        .find_map(|l| {
+            l.strip_prefix("stub worker pid ")
+                .and_then(|p| p.trim().parse().ok())
+        })
         .expect("stub worker pid in log")
 }
 
@@ -684,12 +677,18 @@ async fn os_reserve_setting_moves_budget_and_survives_restart() {
 
     let h = h.restart(None).await;
     let reset = h
-        .put_json("/api/settings", serde_json::json!({"os_reserve_bytes": null}))
+        .put_json(
+            "/api/settings",
+            serde_json::json!({"os_reserve_bytes": null}),
+        )
         .await;
     assert_eq!(reset.status(), 200);
     assert_eq!(h.json("/api/hardware").await["os_reserve_bytes"], 2_500_000);
     let rejected = h
-        .put_json("/api/settings", serde_json::json!({"os_reserve_bytes": 20_000_000}))
+        .put_json(
+            "/api/settings",
+            serde_json::json!({"os_reserve_bytes": 20_000_000}),
+        )
         .await;
     assert_eq!(rejected.status(), 400);
     h.listening.shutdown().await;
@@ -715,11 +714,7 @@ fn sse_events(body: &str) -> Vec<(String, String)> {
 
 #[tokio::test]
 async fn generate_accepts_messages_and_reports_usage_on_done() {
-    let h = Harness::start(
-        probe_with_free(None),
-        vec!["--echo-usage".into()],
-    )
-    .await;
+    let h = Harness::start(probe_with_free(None), vec!["--echo-usage".into()]).await;
     write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
     h.post_json("/api/scan", serde_json::json!({})).await;
     let body = reqwest::Client::new()
@@ -774,7 +769,10 @@ async fn hardware_reports_worker_path() {
     let worker = PathBuf::from("/opt/test/llama-server");
     let h = Harness::start_with(probe_with_free(None), launcher, Some(worker.clone())).await;
     let hw = h.json("/api/hardware").await;
-    assert_eq!(hw["worker_path"].as_str().unwrap(), worker.to_string_lossy());
+    assert_eq!(
+        hw["worker_path"].as_str().unwrap(),
+        worker.to_string_lossy()
+    );
     h.listening.shutdown().await;
 }
 
@@ -797,14 +795,20 @@ async fn start_without_worker_binary_returns_install_message() {
     assert_eq!(resp.status(), 400);
     let body: Value = resp.json().await.unwrap();
     let err = body["error"].as_str().unwrap();
-    assert!(err.contains("QIT_WORKER_PATH") || err.contains("llama-server"), "{err}");
+    assert!(
+        err.contains("QIT_WORKER_PATH") || err.contains("llama-server"),
+        "{err}"
+    );
     h.listening.shutdown().await;
 }
 
 #[tokio::test]
 async fn worker_waits_for_health_200_before_loaded() {
-    let h = Harness::start(probe_with_free(None), vec!["--health-warmup-ms".into(), "400".into()])
-        .await;
+    let h = Harness::start(
+        probe_with_free(None),
+        vec!["--health-warmup-ms".into(), "400".into()],
+    )
+    .await;
     write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
     h.post_json("/api/scan", serde_json::json!({})).await;
     let started = h
@@ -834,8 +838,11 @@ async fn duplicate_start_reuses_session_row() {
         .json::<Value>()
         .await
         .unwrap();
-    h.post_json(&format!("/api/sessions/{}/stop", first["id"]), serde_json::json!({}))
-        .await;
+    h.post_json(
+        &format!("/api/sessions/{}/stop", first["id"]),
+        serde_json::json!({}),
+    )
+    .await;
     let second = h
         .post_json(
             "/api/sessions",
@@ -1022,8 +1029,8 @@ fn hybrid_meta() -> GgufMeta {
         embedding_length: Some(3136),
         head_count: Some(40),
         head_count_kv_layers: Some(vec![
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0,
-            0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0,
+            0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ]),
         feed_forward_layers: Some(vec![
             0, 12544, 0, 12544, 0, 12544, 0, 0, 12544, 0, 12544, 0, 0, 12544, 0, 12544, 0, 0,
@@ -1112,6 +1119,9 @@ async fn generate_refused_for_embedding_artifact() {
         .await;
     assert_eq!(refused.status(), 400);
     let body: Value = refused.json().await.unwrap();
-    assert!(body["error"].as_str().unwrap().contains("embedding"), "{body}");
+    assert!(
+        body["error"].as_str().unwrap().contains("embedding"),
+        "{body}"
+    );
     h.listening.shutdown().await;
 }

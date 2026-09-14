@@ -122,10 +122,7 @@ impl GgufMeta {
 
 pub fn classify_kind(meta: &GgufMeta) -> ArtifactKind {
     let arch = meta.architecture.as_deref().unwrap_or("");
-    if meta.general_type.as_deref() == Some("mmproj")
-        || arch == "clip"
-        || meta.has_clip_keys
-    {
+    if meta.general_type.as_deref() == Some("mmproj") || arch == "clip" || meta.has_clip_keys {
         return ArtifactKind::VisionProjector;
     }
     if let Some(ty) = meta.general_type.as_deref() {
@@ -136,9 +133,7 @@ pub fn classify_kind(meta: &GgufMeta) -> ArtifactKind {
     if meta.pooling_type == Some(4) || meta.has_classifier_labels || meta.has_rerank_template {
         return ArtifactKind::Rerank;
     }
-    if meta
-        .pooling_type
-        .is_some_and(|p| (1..=3).contains(&p))
+    if meta.pooling_type.is_some_and(|p| (1..=3).contains(&p))
         || meta.causal_attn == Some(false)
         || EMBED_ARCHS.contains(&arch)
     {
@@ -406,10 +401,16 @@ pub fn write_test_gguf(path: &Path, meta: &GgufMeta) -> std::io::Result<()> {
         ));
     }
     if let Some(layers) = &meta.feed_forward_layers {
-        kvs.push((format!("{arch}.feed_forward_length"), TestVal::Arr(layers.clone())));
+        kvs.push((
+            format!("{arch}.feed_forward_length"),
+            TestVal::Arr(layers.clone()),
+        ));
     }
     if let Some(v) = meta.key_length {
-        kvs.push((format!("{arch}.attention.key_length"), TestVal::U64(v as u64)));
+        kvs.push((
+            format!("{arch}.attention.key_length"),
+            TestVal::U64(v as u64),
+        ));
     }
     if let Some(v) = meta.value_length {
         kvs.push((
@@ -436,7 +437,10 @@ pub fn write_test_gguf(path: &Path, meta: &GgufMeta) -> std::io::Result<()> {
         kvs.push((format!("{arch}.attention.causal"), TestVal::Bool(v)));
     }
     if meta.has_chat_template {
-        kvs.push(("tokenizer.chat_template".into(), TestVal::Str("{% endif %}".into())));
+        kvs.push((
+            "tokenizer.chat_template".into(),
+            TestVal::Str("{% endif %}".into()),
+        ));
     }
     if meta.has_rerank_template {
         kvs.push((

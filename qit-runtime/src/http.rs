@@ -341,13 +341,7 @@ async fn start_session(
     let n_parallel = shape.n_parallel();
     let result = state
         .supervisor
-        .start(
-            &artifact,
-            n_ctx,
-            n_gpu_layers,
-            n_parallel,
-            log,
-        )
+        .start(&artifact, n_ctx, n_gpu_layers, n_parallel, log)
         .await
         .map_err(|e| {
             tracing::warn!(
@@ -357,14 +351,7 @@ async fn start_session(
             );
             ApiError::bad(e)
         });
-    persist_session_tuple(
-        &state,
-        &shape.artifact_id,
-        n_ctx,
-        n_gpu_layers,
-        n_parallel,
-    )
-    .await;
+    persist_session_tuple(&state, &shape.artifact_id, n_ctx, n_gpu_layers, n_parallel).await;
     result.map(Json)
 }
 
@@ -463,21 +450,15 @@ async fn generate(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
     tokio::spawn(async move {
         let token_tx = tx.clone();
-        let result = proxy_generate(
-            &base_url,
-            &messages,
-            max_tokens,
-            cancel_rx,
-            move |token| {
-                let token_tx = token_tx.clone();
-                async move {
-                    token_tx
-                        .send(Ok(Event::default().event("token").data(token)))
-                        .await
-                        .map_err(|_| "client closed".to_string())
-                }
-            },
-        )
+        let result = proxy_generate(&base_url, &messages, max_tokens, cancel_rx, move |token| {
+            let token_tx = token_tx.clone();
+            async move {
+                token_tx
+                    .send(Ok(Event::default().event("token").data(token)))
+                    .await
+                    .map_err(|_| "client closed".to_string())
+            }
+        })
         .await;
         match result {
             Ok(outcome) => {
@@ -640,7 +621,11 @@ struct OsReserve {
     effective: u64,
 }
 
-fn os_reserve(state: &AppState, store: &Store, unified_memory_bytes: u64) -> Result<OsReserve, ApiError> {
+fn os_reserve(
+    state: &AppState,
+    store: &Store,
+    unified_memory_bytes: u64,
+) -> Result<OsReserve, ApiError> {
     let setting = store.os_reserve_setting().map_err(ApiError::from)?;
     let (source, chosen) = match (state.os_reserve_override, setting) {
         (Some(env), _) => (OsReserveSource::Env, Some(env)),
@@ -735,10 +720,7 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
         memory_pressure: snap.memory_pressure,
         free_ram_bytes: snap.free_ram_bytes,
         loaded_rss_bytes: state.supervisor.loaded_rss_bytes().await,
-        worker_path: state
-            .worker_path
-            .as_ref()
-            .map(|p| p.display().to_string()),
+        worker_path: state.worker_path.as_ref().map(|p| p.display().to_string()),
     })
 }
 
