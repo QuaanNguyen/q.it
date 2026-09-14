@@ -16,6 +16,22 @@ export type Artifact = {
   generate_supported: boolean;
 };
 
+export type ModelPackage = {
+  id: string;
+  family: string;
+  name: string;
+  format: string;
+  estimate_bytes: number;
+  fits: boolean;
+  ready: boolean;
+  readiness_reason: "missing_required_files" | "insufficient_memory" | "runtime_missing" | null;
+};
+
+export type Catalog = {
+  artifacts: Artifact[];
+  packages: ModelPackage[];
+};
+
 export type Hardware = {
   device_class: string;
   chip: string;
@@ -129,11 +145,11 @@ export const api = {
   hardware: () => fetch("/api/hardware").then((r) => parse<Hardware>(r)),
   scan: () =>
     fetch("/api/scan", { method: "POST" }).then((r) =>
-      parse<{ artifacts: Artifact[] }>(r)
+      parse<Catalog>(r)
     ),
   catalog: (n_ctx: number) =>
     fetch(`/api/catalog?n_ctx=${n_ctx}`).then((r) =>
-      parse<{ artifacts: Artifact[] }>(r)
+      parse<Catalog>(r)
     ),
   capacity: () => fetch("/api/capacity").then((r) => parse<Capacity>(r)),
   sessions: () => fetch("/api/sessions").then((r) => parse<Session[]>(r)),

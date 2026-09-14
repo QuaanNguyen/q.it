@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{watch, Mutex, Semaphore};
 use uuid::Uuid;
 
+use crate::catalog::owned_packages;
 use crate::config::{SessionShape, DEFAULT_N_CTX, DEFAULT_N_GPU_LAYERS, DEFAULT_N_PARALLEL};
 use crate::estimate::{classify, estimate_bytes, Fit};
 use crate::paths::Paths;
@@ -68,6 +69,7 @@ pub struct HardwareBody {
 #[derive(Serialize)]
 pub struct CatalogBody {
     pub artifacts: Vec<ArtifactBody>,
+    pub packages: Vec<PackageBody>,
 }
 
 #[derive(Serialize)]
@@ -87,6 +89,26 @@ pub struct ArtifactBody {
     pub peak_rss_bytes: Option<u64>,
     pub kind: String,
     pub generate_supported: bool,
+}
+
+#[derive(Serialize)]
+pub struct PackageBody {
+    pub id: String,
+    pub family: String,
+    pub name: String,
+    pub format: String,
+    pub estimate_bytes: u64,
+    pub fits: bool,
+    pub ready: bool,
+    pub readiness_reason: Option<ReadinessReason>,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadinessReason {
+    MissingRequiredFiles,
+    InsufficientMemory,
+    RuntimeMissing,
 }
 
 #[derive(Serialize)]
@@ -611,7 +633,35 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
             generate_supported: artifact.kind.generate_supported(),
         });
     }
-    Ok(CatalogBody { artifacts: list })
+    let packages = owned_packages()
+        .into_iter()
+        .map(|package| {
+            let fits = package.estimate_bytes <= hw.headroom_bytes;
+            let readiness_reason = if !package.has_required_files(&state.paths.models_dir) {
+                Some(ReadinessReason::MissingRequiredFiles)
+            } else if !fits {
+                Some(ReadinessReason::InsufficientMemory)
+            } else if state.worker_path.is_none() {
+                Some(ReadinessReason::RuntimeMissing)
+            } else {
+                None
+            };
+            PackageBody {
+                id: package.id.into(),
+                family: package.family.into(),
+                name: package.name.into(),
+                format: package.format.into(),
+                estimate_bytes: package.estimate_bytes,
+                fits,
+                ready: readiness_reason.is_none(),
+                readiness_reason,
+            }
+        })
+        .collect();
+    Ok(CatalogBody {
+        artifacts: list,
+        packages,
+    })
 }
 
 #[derive(Serialize)]

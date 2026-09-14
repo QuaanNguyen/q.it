@@ -1,12 +1,32 @@
 # q.it
 
-Local catalog and capacity planner for open-weights GGUF artifacts on Apple Silicon. Users see what fits this machine, reserve capacity, and run inference through supervised worker processes without managing ports or backends manually.
+Offline-capable catalog and capacity planner for local open-weights artifacts and owned model packages on edge devices.
+Users see what fits this machine, reserve capacity, and run inference through supervised worker processes without managing ports or backends manually.
 
 ## Language
 
 **Artifact**:
-A single installable GGUF file plus metadata (org, filename, bytes, architecture, context length, confidence, **kind**). The runnable unit in the catalog; not a model family name alone.
-_Avoid_: model (when meaning a file), package
+A single scanned GGUF file plus metadata (org, filename, bytes, architecture, context length, confidence, **kind**).
+Existing artifact workflows remain runnable while the catalog adds model packages.
+_Avoid_: model (when meaning a file)
+
+**Model package**:
+A specific servable unit in the owned catalog, including its family, format, required files, memory estimate, and readiness.
+A model package can require one or more local files.
+_Avoid_: model, artifact, package family
+
+**Package family**:
+Editorial metadata that groups related model packages without owning fit or readiness.
+_Avoid_: model package, runnable unit
+
+**Readiness**:
+A binary model-package state indicating whether q.it can serve it now.
+When readiness is No, one **readiness reason** explains the blocker.
+_Avoid_: availability, installed
+
+**Readiness reason**:
+The single current blocker that keeps a model package from being ready, such as missing required files, insufficient memory, or a missing runtime.
+_Avoid_: status message, warning
 
 **Artifact kind**:
 A scan-time label from GGUF headers: instruct, base, embedding, rerank, vision_projector, or unknown. **Try** is offered only for instruct.
@@ -25,7 +45,8 @@ The `qit-runtime` HTTP API under `/api` plus SSE for generation. The browser and
 _Avoid_: API layer (alone), server
 
 **Fit**:
-A planner label (Fits / Tight / No) for whether an artifact's estimated bytes fit remaining **headroom** at a given context length. Based on **stable budget**, not currently free RAM.
+A planner assessment of whether estimated bytes fit remaining **headroom**, based on **stable budget** rather than currently free RAM.
+Artifacts display Fits / Tight / No while model packages expose a binary yes or no.
 _Avoid_: compatible, runs
 
 **Headroom**:

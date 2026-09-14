@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type Artifact, type Session } from "../api";
+import { api, type Artifact, type ModelPackage, type Session } from "../api";
 import type { RowStatus } from "./StartControl";
 
 const PRESETS = [4096, 8192, 16384, 32768];
@@ -27,6 +27,7 @@ export type RowModel = {
 };
 
 export type CatalogModel = {
+  packages: ModelPackage[];
   rows: RowModel[];
   presets: number[];
   nCtx: number;
@@ -47,6 +48,7 @@ export type CatalogModel = {
 export function useCatalog(): CatalogModel {
   const [nCtx, setNCtx] = useState(4096);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [packages, setPackages] = useState<ModelPackage[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [pending, setPending] = useState<Record<string, Pending>>({});
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
@@ -64,6 +66,7 @@ export function useCatalog(): CatalogModel {
       setWorkerPath(hw.worker_path);
       const [cat, live] = await Promise.all([api.catalog(nCtx), api.sessions()]);
       setArtifacts(cat.artifacts);
+      setPackages(cat.packages);
       setSessions(live);
       setError(null);
     } catch (e) {
@@ -185,6 +188,7 @@ export function useCatalog(): CatalogModel {
   );
 
   return {
+    packages,
     rows,
     presets: presetsForArtifacts(artifacts),
     nCtx,

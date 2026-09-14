@@ -1,4 +1,4 @@
-import { fmtBytes } from "../api";
+import { fmtBytes, type ModelPackage } from "../api";
 import { RowActions } from "./RowActions";
 import { TryPanel } from "./TryPanel";
 import { useCatalog, type CatalogModel, type RowModel } from "./useCatalog";
@@ -8,16 +8,58 @@ export function CatalogPage() {
   return (
     <>
       <h1>Catalog</h1>
-      <p className="lede">One card per artifact. Try opens inside the card.</p>
+      <p className="lede">Owned model packages and local GGUF artifacts.</p>
       {model.error && <div className="error">{model.error}</div>}
       <WorkerWarning model={model} />
       <Toolbar model={model} />
+      <h2>Owned packages</h2>
+      {model.packages.map((modelPackage) => (
+        <PackageCard key={modelPackage.id} modelPackage={modelPackage} />
+      ))}
+      <h2>Local GGUF artifacts</h2>
       {model.rows.length === 0 && <Empty model={model} />}
       {model.rows.map((row) => (
         <ArtifactCard key={row.artifact.id} row={row} model={model} />
       ))}
     </>
   );
+}
+
+function PackageCard({ modelPackage }: { modelPackage: ModelPackage }) {
+  return (
+    <div className="card">
+      <div className="head">
+        <span className="name">{modelPackage.name}</span>
+        <span className="package-statuses">
+          <span className={`pill ${modelPackage.fits ? "Fits" : "No"}`}>
+            {modelPackage.fits ? "Fits" : "Doesn't fit"}
+          </span>
+          <span className={`pill ${modelPackage.ready ? "Fits" : "No"}`}>
+            {modelPackage.ready ? "Ready" : "Not ready"}
+          </span>
+        </span>
+      </div>
+      <div className="meta">
+        <span>{modelPackage.family}</span>
+        <span>{modelPackage.format.toUpperCase()}</span>
+        <span>est. {fmtBytes(modelPackage.estimate_bytes)}</span>
+      </div>
+      {modelPackage.readiness_reason && (
+        <p className="readiness-reason">
+          {readinessReason(modelPackage.readiness_reason)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function readinessReason(reason: NonNullable<ModelPackage["readiness_reason"]>): string {
+  const labels = {
+    missing_required_files: "Missing required files",
+    insufficient_memory: "Insufficient memory",
+    runtime_missing: "Runtime missing",
+  };
+  return labels[reason];
 }
 
 function ArtifactCard({ row, model }: { row: RowModel; model: CatalogModel }) {

@@ -244,6 +244,35 @@ async fn stable_budget_ignores_free_ram() {
 }
 
 #[tokio::test]
+async fn owned_package_is_visible_offline_with_missing_required_files() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_000_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(1),
+        },
+        vec![],
+    )
+    .await;
+    let catalog = h.json("/api/catalog").await;
+    let packages = catalog["packages"].as_array().unwrap();
+    assert_eq!(packages.len(), 1, "{catalog}");
+    let package = &packages[0];
+    assert_eq!(package["id"], "qit/qwen2.5-0.5b-instruct-q4_k_m");
+    assert_eq!(package["family"], "Qwen 2.5");
+    assert_eq!(package["name"], "Qwen2.5 0.5B Instruct Q4_K_M");
+    assert_eq!(package["format"], "gguf");
+    assert_eq!(package["fits"], true);
+    assert_eq!(package["ready"], false);
+    assert_eq!(package["readiness_reason"], "missing_required_files");
+    assert!(package["estimate_bytes"].as_u64().unwrap() > 1);
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
 async fn scan_registers_gguf_and_ignores_mlx() {
     let h = Harness::start(probe_with_free(None), vec![]).await;
     write_artifact(
