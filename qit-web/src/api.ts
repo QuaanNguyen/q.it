@@ -22,6 +22,9 @@ export type ModelPackage = {
   name: string;
   format: string;
   estimate_bytes: number;
+  estimate_source: string;
+  estimate_confidence: string;
+  runtime_recipe: "llama_cpp" | "transformers_external";
   fits: boolean;
   ready: boolean;
   readiness_reason: "missing_required_files" | "insufficient_memory" | "runtime_missing" | null;

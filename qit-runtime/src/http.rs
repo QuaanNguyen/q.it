@@ -98,6 +98,9 @@ pub struct PackageBody {
     pub name: String,
     pub format: String,
     pub estimate_bytes: u64,
+    pub estimate_source: String,
+    pub estimate_confidence: String,
+    pub runtime_recipe: String,
     pub fits: bool,
     pub ready: bool,
     pub readiness_reason: Option<ReadinessReason>,
@@ -636,12 +639,15 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
     let packages = owned_packages()
         .into_iter()
         .map(|package| {
-            let fits = package.estimate_bytes <= hw.headroom_bytes;
+            let fits = package.planner_hint.estimate_bytes <= hw.headroom_bytes;
             let readiness_reason = if !package.has_required_files(&state.paths.models_dir) {
                 Some(ReadinessReason::MissingRequiredFiles)
             } else if !fits {
                 Some(ReadinessReason::InsufficientMemory)
-            } else if state.worker_path.is_none() {
+            } else if !package
+                .runtime_recipe
+                .is_available(state.worker_path.as_deref())
+            {
                 Some(ReadinessReason::RuntimeMissing)
             } else {
                 None
@@ -650,8 +656,11 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
                 id: package.id.into(),
                 family: package.family.into(),
                 name: package.name.into(),
-                format: package.format.into(),
-                estimate_bytes: package.estimate_bytes,
+                format: package.format.as_str().into(),
+                estimate_bytes: package.planner_hint.estimate_bytes,
+                estimate_source: package.planner_hint.source.into(),
+                estimate_confidence: package.planner_hint.confidence.into(),
+                runtime_recipe: package.runtime_recipe.as_str().into(),
                 fits,
                 ready: readiness_reason.is_none(),
                 readiness_reason,

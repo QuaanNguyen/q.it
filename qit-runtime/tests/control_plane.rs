@@ -189,6 +189,31 @@ fn llm_meta() -> GgufMeta {
     }
 }
 
+fn write_transformers_package(models: &std::path::Path) -> PathBuf {
+    let package = models
+        .parent()
+        .unwrap()
+        .join("transformers")
+        .join("Qwen")
+        .join("Qwen2.5-0.5B-Instruct");
+    std::fs::create_dir_all(&package).unwrap();
+    for (name, contents) in [
+        ("config.json", r#"{"model_type":"qwen2"}"#),
+        ("tokenizer.json", r#"{"version":"1.0"}"#),
+        ("tokenizer_config.json", r#"{"model_max_length":32768}"#),
+        (
+            "model.safetensors.index.json",
+            r#"{"weight_map":{"a":"model-00001-of-00002.safetensors","b":"model-00002-of-00002.safetensors"}}"#,
+        ),
+        ("model-00001-of-00002.safetensors", "weights-1"),
+        ("model-00002-of-00002.safetensors", "weights-2"),
+        ("README.md", "# Qwen2.5 0.5B Instruct"),
+    ] {
+        std::fs::write(package.join(name), contents).unwrap();
+    }
+    package
+}
+
 #[tokio::test]
 async fn health_and_shell_pages() {
     let h = Harness::start(probe_with_free(Some(100)), vec![]).await;
@@ -259,8 +284,10 @@ async fn owned_package_is_visible_offline_with_missing_required_files() {
     .await;
     let catalog = h.json("/api/catalog").await;
     let packages = catalog["packages"].as_array().unwrap();
-    assert_eq!(packages.len(), 1, "{catalog}");
-    let package = &packages[0];
+    let package = packages
+        .iter()
+        .find(|package| package["id"] == "qit/qwen2.5-0.5b-instruct-q4_k_m")
+        .unwrap();
     assert_eq!(package["id"], "qit/qwen2.5-0.5b-instruct-q4_k_m");
     assert_eq!(package["family"], "Qwen 2.5");
     assert_eq!(package["name"], "Qwen2.5 0.5B Instruct Q4_K_M");
@@ -269,6 +296,74 @@ async fn owned_package_is_visible_offline_with_missing_required_files() {
     assert_eq!(package["ready"], false);
     assert_eq!(package["readiness_reason"], "missing_required_files");
     assert!(package["estimate_bytes"].as_u64().unwrap() > 1);
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn complete_local_transformers_package_reports_runtime_missing() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(1),
+        },
+        vec![],
+    )
+    .await;
+    let package_dir = write_transformers_package(&h.models);
+    std::fs::remove_file(package_dir.join("model-00002-of-00002.safetensors")).unwrap();
+    let incomplete = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let incomplete_package = incomplete["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .unwrap();
+    assert_eq!(
+        incomplete_package["readiness_reason"],
+        "missing_required_files"
+    );
+    std::fs::write(
+        package_dir.join("model-00002-of-00002.safetensors"),
+        "weights-2",
+    )
+    .unwrap();
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .unwrap();
+    assert_eq!(
+        package,
+        &serde_json::json!({
+            "id": "Qwen/Qwen2.5-0.5B-Instruct",
+            "family": "Qwen 2.5",
+            "name": "Qwen2.5 0.5B Instruct",
+            "format": "transformers",
+            "estimate_bytes": 1_200_000_000_u64,
+            "estimate_source": "qit_catalog",
+            "estimate_confidence": "high",
+            "runtime_recipe": "transformers_external",
+            "fits": true,
+            "ready": false,
+            "readiness_reason": "runtime_missing"
+        })
+    );
     h.listening.shutdown().await;
 }
 
