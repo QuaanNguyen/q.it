@@ -13,7 +13,7 @@ pub mod store;
 pub mod supervisor;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex, Semaphore};
@@ -58,6 +58,7 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
     let supervisor = Arc::new(Supervisor::new(config.worker_launcher.clone()));
     supervisor.hydrate(session_rows).await;
     let state = AppState {
+        packages: Arc::new(RwLock::new(Vec::new())),
         paths,
         store: Arc::new(Mutex::new(store)),
         probe: config.probe.clone(),

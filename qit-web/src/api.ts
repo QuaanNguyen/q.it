@@ -25,6 +25,18 @@ export type ModelPackage = {
   estimate_source: string;
   estimate_confidence: string;
   runtime_recipe: "llama_cpp" | "transformers_external";
+  capabilities: {
+    inputs: string[];
+    outputs: string[];
+    tasks: string[];
+  };
+  files: {
+    path: string;
+    role: string;
+    bytes: number | null;
+    sha256: string | null;
+    source: string;
+  }[];
   fits: boolean;
   ready: boolean;
   readiness_reason: "missing_required_files" | "insufficient_memory" | "runtime_missing" | null;
@@ -190,6 +202,11 @@ export const api = {
     fetch(
       "/api/sessions",
       json({ artifact_id, serve_profile: serveProfile(n_ctx) })
+    ).then((r) => parse<Session>(r)),
+  startPackage: (package_id: string, n_ctx: number) =>
+    fetch(
+      "/api/sessions",
+      json({ package_id, serve_profile: serveProfile(n_ctx) })
     ).then((r) => parse<Session>(r)),
   stop: (id: string) =>
     fetch(`/api/sessions/${id}/stop`, { method: "POST" }).then((r) =>

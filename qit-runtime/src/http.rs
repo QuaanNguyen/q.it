@@ -1,5 +1,5 @@
 use std::convert::Infallible;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use std::path::{Path as FilePath, PathBuf};
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{watch, Mutex, Semaphore};
 use uuid::Uuid;
 
-use crate::catalog::{owned_package, owned_packages};
+use crate::catalog::{catalog_package, catalog_packages, CatalogPackage};
 use crate::config::{SessionShape, DEFAULT_N_CTX, DEFAULT_N_PARALLEL};
 use crate::estimate::{classify, estimate_bytes, Fit};
 use crate::paths::Paths;
@@ -34,6 +34,7 @@ const DEFAULT_MAX_TOKENS: u32 = 512;
 #[derive(Clone)]
 pub struct AppState {
     pub paths: Paths,
+    pub packages: Arc<RwLock<Vec<CatalogPackage>>>,
     pub store: Arc<Mutex<Store>>,
     pub probe: Arc<dyn HardwareProbe>,
     pub os_reserve_override: Option<u64>,
@@ -104,9 +105,27 @@ pub struct PackageBody {
     pub estimate_source: String,
     pub estimate_confidence: String,
     pub runtime_recipe: String,
+    pub capabilities: PackageCapabilitiesBody,
+    pub files: Vec<PackageFileBody>,
     pub fits: bool,
     pub ready: bool,
     pub readiness_reason: Option<ReadinessReason>,
+}
+
+#[derive(Serialize)]
+pub struct PackageCapabilitiesBody {
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    pub tasks: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct PackageFileBody {
+    pub path: String,
+    pub role: String,
+    pub bytes: Option<u64>,
+    pub sha256: Option<String>,
+    pub source: String,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -271,12 +290,13 @@ async fn capacity(State(state): State<AppState>) -> Result<Json<CapacityBody>, A
     let artifacts = store.artifacts().map_err(ApiError::from)?;
     let pins = store.pins().map_err(ApiError::from)?;
     drop(store);
+    let packages = state.packages.read().unwrap().clone();
     let what_ifs = state.what_ifs.lock().await.clone();
     let sessions = state.supervisor.list().await;
     Ok(Json(CapacityBody {
         hardware,
-        pins: map_reservations(&artifacts, &pins),
-        what_ifs: map_reservations(&artifacts, &what_ifs),
+        pins: map_reservations(&artifacts, &pins, &packages),
+        what_ifs: map_reservations(&artifacts, &what_ifs, &packages),
         sessions,
     }))
 }
@@ -357,6 +377,7 @@ async fn start_session(
     let store = state.store.lock().await;
     let resolved = resolve_serve(&state, &store, &shape, ResolveIntent::Launch)?;
     drop(store);
+    require_package_fit(&state, &resolved).await?;
     let log = state.paths.worker_log(&Uuid::new_v4().to_string());
     let target = resolved.target.identity.clone();
     let runtime_recipe = resolved.runtime_recipe;
@@ -439,6 +460,7 @@ async fn generate(
         existing
     } else {
         ephemeral = true;
+        require_package_fit(&state, &resolved).await?;
         let log = state.paths.worker_log(&Uuid::new_v4().to_string());
         state
             .supervisor
@@ -549,17 +571,29 @@ async fn generate(
     Ok(sse)
 }
 
-fn map_reservations(artifacts: &[ArtifactRow], rows: &[PinRow]) -> Vec<ReservationBody> {
+fn map_reservations(
+    artifacts: &[ArtifactRow],
+    rows: &[PinRow],
+    packages: &[CatalogPackage],
+) -> Vec<ReservationBody> {
     rows.iter()
         .map(|row| {
-            let estimate = reservation_estimate_for_row(artifacts, row);
+            let estimate = reservation_estimate_for_row(artifacts, row, packages);
             reservation_body(row.clone(), estimate)
         })
         .collect()
 }
 
-fn reservation_estimate_for_row(artifacts: &[ArtifactRow], row: &PinRow) -> u64 {
-    if let Some(package) = row.target.package_id().and_then(owned_package) {
+fn reservation_estimate_for_row(
+    artifacts: &[ArtifactRow],
+    row: &PinRow,
+    packages: &[CatalogPackage],
+) -> u64 {
+    if let Some(package) = row
+        .target
+        .package_id()
+        .and_then(|id| catalog_package(packages, id))
+    {
         return package.planner_hint.estimate_bytes;
     }
     artifacts
@@ -580,9 +614,6 @@ fn reservation_body(row: PinRow, estimate_bytes: u64) -> ReservationBody {
 }
 
 fn reservation_estimate(artifact: &ArtifactRow, row: &PinRow) -> u64 {
-    if let Some(package) = row.target.package_id().and_then(owned_package) {
-        return package.planner_hint.estimate_bytes;
-    }
     let parallel = row
         .serve_profile
         .llama_cpp_settings()
@@ -597,6 +628,32 @@ struct ResolvedServe {
     serve_profile: ServeProfile,
     estimate_bytes: u64,
     generate_error: Option<String>,
+}
+
+async fn require_package_fit(state: &AppState, resolved: &ResolvedServe) -> Result<(), ApiError> {
+    if resolved.target.identity.package_id().is_none() {
+        return Ok(());
+    }
+    let has_matching_pin = state
+        .store
+        .lock()
+        .await
+        .pins()
+        .map_err(ApiError::from)?
+        .iter()
+        .any(|pin| {
+            pin.target == resolved.target.identity && pin.serve_profile == resolved.serve_profile
+        });
+    if has_matching_pin {
+        return Ok(());
+    }
+    let headroom = hardware_body(state).await?.headroom_bytes;
+    if resolved.estimate_bytes > headroom {
+        return Err(ApiError::bad(
+            "model package does not fit the stable budget",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -618,9 +675,10 @@ fn resolve_serve(
             ));
         }
         (Some(package_id), None) => {
-            let package = owned_package(package_id)
+            let packages = state.packages.read().unwrap();
+            let package = catalog_package(&packages, package_id)
                 .ok_or_else(|| ApiError::not_found("model package not found"))?;
-            if !package.has_required_files(&state.paths.models_dir) {
+            if !package.required_files_match_scan() {
                 return Err(ApiError::bad("model package is missing required files"));
             }
             let artifact = if package.runtime_recipe.requires_artifact() {
@@ -639,7 +697,7 @@ fn resolve_serve(
                 path: artifact
                     .as_ref()
                     .map(|artifact| artifact.path.clone())
-                    .unwrap_or_else(|| package.package_dir(&state.paths.models_dir)),
+                    .unwrap_or_else(|| package.package_dir.clone()),
             };
             (target, package.runtime_recipe, artifact)
         }
@@ -669,7 +727,10 @@ fn resolve_serve(
     if let Some(artifact) = &artifact {
         validate_n_ctx(artifact, serve_profile.context_length)?;
     }
-    let estimate_bytes = if let Some(package) = target.identity.package_id().and_then(owned_package)
+    let estimate_bytes = if let Some(package) = target
+        .identity
+        .package_id()
+        .and_then(|id| catalog_package(&state.packages.read().unwrap(), id))
     {
         package.planner_hint.estimate_bytes
     } else {
@@ -728,6 +789,8 @@ pub async fn rescan(state: &AppState) -> Result<(), ApiError> {
     let rows = scan_library(&state.paths.models_dir);
     let store = state.store.lock().await;
     store.replace_artifacts(&rows).map_err(ApiError::from)?;
+    drop(store);
+    *state.packages.write().unwrap() = catalog_packages(&state.paths.models_dir);
     Ok(())
 }
 
@@ -758,11 +821,15 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
             generate_supported: artifact.kind.generate_supported(),
         });
     }
-    let packages = owned_packages()
+    let packages = state
+        .packages
+        .read()
+        .unwrap()
+        .clone()
         .into_iter()
         .map(|package| {
             let fits = package.planner_hint.estimate_bytes <= hw.headroom_bytes;
-            let readiness_reason = if !package.has_required_files(&state.paths.models_dir) {
+            let readiness_reason = if !package.required_files_match_scan() {
                 Some(ReadinessReason::MissingRequiredFiles)
             } else if !fits {
                 Some(ReadinessReason::InsufficientMemory)
@@ -780,6 +847,22 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
                 estimate_source: package.planner_hint.source.into(),
                 estimate_confidence: package.planner_hint.confidence.into(),
                 runtime_recipe: package.runtime_recipe.as_str().into(),
+                capabilities: PackageCapabilitiesBody {
+                    inputs: package.capabilities.inputs,
+                    outputs: package.capabilities.outputs,
+                    tasks: package.capabilities.tasks,
+                },
+                files: package
+                    .required_files
+                    .into_iter()
+                    .map(|file| PackageFileBody {
+                        path: file.path,
+                        role: file.role.into(),
+                        bytes: file.bytes,
+                        sha256: file.sha256,
+                        source: file.source.into(),
+                    })
+                    .collect(),
                 fits,
                 ready: readiness_reason.is_none(),
                 readiness_reason,
@@ -881,11 +964,12 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
     let artifacts = store.artifacts().map_err(ApiError::from)?;
     let pins = store.pins().map_err(ApiError::from)?;
     drop(store);
+    let packages = state.packages.read().unwrap().clone();
     let what_ifs = state.what_ifs.lock().await.clone();
     let sessions = state.supervisor.list().await;
     let mut used = 0u64;
     for row in pins.iter().chain(what_ifs.iter()) {
-        used = used.saturating_add(reservation_estimate_for_row(&artifacts, row));
+        used = used.saturating_add(reservation_estimate_for_row(&artifacts, row, &packages));
     }
     for session in sessions
         .iter()
@@ -903,7 +987,7 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
             runtime_recipe: session.runtime_recipe,
             serve_profile: session.serve_profile.clone(),
         };
-        used = used.saturating_add(reservation_estimate_for_row(&artifacts, &row));
+        used = used.saturating_add(reservation_estimate_for_row(&artifacts, &row, &packages));
     }
     Ok(HardwareBody {
         device_class: snap.device_class,
@@ -922,7 +1006,7 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
 
 fn runtime_available(state: &AppState, runtime_recipe: RuntimeRecipe) -> bool {
     match runtime_recipe {
-        RuntimeRecipe::LlamaCpp => state.worker_path.is_some(),
+        RuntimeRecipe::LlamaCpp => state.worker_path.as_deref().is_some_and(executable_file),
         RuntimeRecipe::TransformersExternal => state
             .transformers_worker_path
             .as_deref()

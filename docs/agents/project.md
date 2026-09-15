@@ -4,7 +4,7 @@ Supplements `CONTEXT.md` and ADRs with repo-specific facts agents need repeatedl
 
 ## Product direction
 
-Local inference runtime for Apple Silicon (v1). Users browse **artifacts**, see **fit** against a **stable budget**, **pin** or **what-if** capacity, **start/stop** worker children, and **Try** an artifact in a multi-turn window whose transcript lives only in the browser. Not a chat product; agents and Hub install are later milestones on the same control plane.
+Local inference runtime for Apple Silicon (v1). Users browse **artifacts** and **model packages**, see **fit** against a **stable budget**, **pin** or **what-if** capacity, start and stop worker children, and Try an artifact in a multi-turn window whose transcript lives only in the browser. Model packages are grouped by family, but fit, readiness, files, capabilities, and actions stay package-specific. Not a chat product; agents and Hub install are later milestones on the same control plane.
 
 Parent spec: GitHub issue [#1](https://github.com/QuaanNguyen/q.it/issues/1). Tracer bullets [#2–#7](https://github.com/QuaanNguyen/q.it/issues/2). Local copies: `.scratch/milestone-1-catalog-capacity/`.
 
@@ -33,7 +33,7 @@ Do not add a second production test seam unless the control plane cannot express
 | `QIT_MODELS_DIR` | GGUF library scan root (default `$QIT_HOME/models/gguf`; maintainer uses `~/models/gguf`) |
 | `QIT_OS_RESERVE_BYTES` | Planner OS reserve override |
 | `QIT_PORT` | Listen port (default `2471`) |
-| `QIT_WORKER_PATH` / `LLAMA_SERVER_PATH` | Real `llama-server` for local inference |
+| `QIT_WORKER_PATH` / `LLAMA_SERVER_PATH` | Executable `llama-server` for local inference |
 | `QIT_TRANSFORMERS_WORKER_PATH` | External OpenAI-compatible Transformers worker |
 | `QIT_WEB_DIST` | Optional path to built `qit-web/dist` for production UI |
 
@@ -44,6 +44,14 @@ Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](htt
 ## Generate API
 
 `POST /api/generate` takes `messages: [{role, content}]` (or a one-message `prompt`), optional `max_tokens` (default 512), and streams SSE `token` events. `done` carries `{prompt_tokens, completion_tokens, n_ctx}` from the worker's usage chunk; the UI's context square reads it. One generate at a time: a concurrent request gets `409 generate in flight`.
+
+## Offline package catalog
+
+The catalog always contains the bundled Qwen GGUF package definition.
+Local Transformers text-chat packages are discovered below the sibling `transformers` library using `config.json`, tokenizer files, safetensors or a safetensors index, and `README.md` or `modelcard.md` as the model card.
+The scan caches local file size, modified time, and SHA-256 metadata, then exposes package capabilities, planner-hint provenance, readiness, and one clear readiness reason through `/api/catalog`.
+Complete local weights produce the normal file-based planner hint, while config architecture fields provide a lower-confidence fallback for incomplete packages.
+Only packages q.it can serve through the external OpenAI-compatible worker are catalogued.
 
 ## UI notes
 

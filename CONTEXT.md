@@ -1,6 +1,6 @@
 # q.it
 
-Offline-capable catalog and capacity planner for local open-weights artifacts and owned model packages on edge devices.
+Offline-capable catalog and capacity planner for local open-weights artifacts and model packages on Apple Silicon.
 Users see what fits this machine, reserve capacity, and run inference through supervised worker processes without managing ports or backends manually.
 
 ## Language
@@ -11,7 +11,7 @@ Existing artifact workflows remain runnable while the catalog adds model package
 _Avoid_: model (when meaning a file)
 
 **Model package**:
-A specific servable unit in the owned catalog, including its family, format, required files, memory estimate, and readiness.
+A specific servable unit in the catalog, including its family, format, required files, capabilities, memory estimate, and readiness.
 A model package can require one or more local files.
 _Avoid_: model, artifact, package family
 
@@ -27,6 +27,18 @@ _Avoid_: availability, installed
 **Readiness reason**:
 The single current blocker that keeps a model package from being ready, such as missing required files, insufficient memory, or a missing runtime.
 _Avoid_: status message, warning
+
+**Runtime recipe**:
+The package-selected worker integration that validates a serve profile and launches a worker.
+_Avoid_: backend setting, engine configuration
+
+**Serve profile**:
+The context length and runtime-specific settings for one target.
+_Avoid_: session tuple, universal runtime knobs
+
+**Target identity**:
+The artifact or model package selected for a reservation or session.
+_Avoid_: artifact id, package id
 
 **Artifact kind**:
 A scan-time label from GGUF headers: instruct, base, embedding, rerank, vision_projector, or unknown. **Try** is offered only for instruct.
@@ -62,7 +74,8 @@ A persisted reservation that consumes planner **headroom** and survives daemon r
 _Avoid_: bookmark, favorite
 
 **Session**:
-A capacity and runtime row identified by `(artifact_id, n_ctx, n_gpu_layers, n_parallel)`. Drives spawn flags and KV estimates. Two sessions with different `n_ctx` are distinct.
+A capacity and runtime row identified by a target identity and serve profile.
+Two sessions with different context lengths or runtime settings are distinct.
 _Avoid_: slot, job
 
 **Stable budget**:

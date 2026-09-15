@@ -333,6 +333,95 @@ fn write_transformers_package(models: &std::path::Path) -> PathBuf {
     package
 }
 
+fn write_local_transformers_package(models: &Path, org: &str, name: &str) -> PathBuf {
+    let package = models
+        .parent()
+        .unwrap()
+        .join("transformers")
+        .join(org)
+        .join(name);
+    std::fs::create_dir_all(&package).unwrap();
+    for (filename, contents) in [
+        (
+            "config.json",
+            r#"{"model_type":"qwen2","architectures":["Qwen2ForCausalLM"]}"#,
+        ),
+        ("tokenizer.json", r#"{"version":"1.0"}"#),
+        ("tokenizer_config.json", r#"{"model_max_length":32768}"#),
+        ("model.safetensors", "weights"),
+        ("README.md", "# Local chat package"),
+    ] {
+        std::fs::write(package.join(filename), contents).unwrap();
+    }
+    package
+}
+
+fn write_sentencepiece_transformers_package(models: &Path) -> PathBuf {
+    let package = models
+        .parent()
+        .unwrap()
+        .join("transformers")
+        .join("acme")
+        .join("sentencepiece-chat");
+    std::fs::create_dir_all(&package).unwrap();
+    for (filename, contents) in [
+        (
+            "config.json",
+            r#"{"architectures":["LlamaForCausalLM"],"model_type":"llama"}"#,
+        ),
+        ("tokenizer.model", "sentencepiece"),
+        ("model.safetensors", "weights"),
+        ("modelcard.md", "# SentencePiece chat package"),
+    ] {
+        std::fs::write(package.join(filename), contents).unwrap();
+    }
+    package
+}
+
+fn write_bpe_transformers_package(models: &Path) -> PathBuf {
+    let package = models
+        .parent()
+        .unwrap()
+        .join("transformers")
+        .join("acme")
+        .join("bpe-chat");
+    std::fs::create_dir_all(&package).unwrap();
+    for (filename, contents) in [
+        (
+            "config.json",
+            r#"{"architectures":["MistralForCausalLM"],"model_type":"mistral"}"#,
+        ),
+        ("vocab.json", r#"{"hello":0}"#),
+        ("merges.txt", "#version: 0.2"),
+        ("model.safetensors", "weights"),
+        ("README.md", "# BPE chat package"),
+    ] {
+        std::fs::write(package.join(filename), contents).unwrap();
+    }
+    package
+}
+
+fn write_config_estimated_transformers_package(models: &Path) -> PathBuf {
+    let package = models
+        .parent()
+        .unwrap()
+        .join("transformers")
+        .join("acme")
+        .join("config-estimated-chat");
+    std::fs::create_dir_all(&package).unwrap();
+    for (filename, contents) in [
+        (
+            "config.json",
+            r#"{"architectures":["LlamaForCausalLM"],"model_type":"llama","hidden_size":64,"num_hidden_layers":2,"intermediate_size":256,"vocab_size":32000,"num_attention_heads":8,"num_key_value_heads":2}"#,
+        ),
+        ("tokenizer.model", "sentencepiece"),
+        ("modelcard.md", "# Config estimated chat package"),
+    ] {
+        std::fs::write(package.join(filename), contents).unwrap();
+    }
+    package
+}
+
 #[tokio::test]
 async fn health_and_shell_pages() {
     let h = Harness::start(probe_with_free(Some(100)), vec![]).await;
@@ -467,22 +556,16 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
         .iter()
         .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
         .unwrap();
-    assert_eq!(
-        package,
-        &serde_json::json!({
-            "id": "Qwen/Qwen2.5-0.5B-Instruct",
-            "family": "Qwen 2.5",
-            "name": "Qwen2.5 0.5B Instruct",
-            "format": "transformers",
-            "estimate_bytes": 1_200_000_000_u64,
-            "estimate_source": "qit_catalog",
-            "estimate_confidence": "high",
-            "runtime_recipe": "transformers_external",
-            "fits": true,
-            "ready": false,
-            "readiness_reason": "runtime_missing"
-        })
-    );
+    assert_eq!(package["id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert_eq!(package["family"], "Qwen 2.5");
+    assert_eq!(package["format"], "transformers");
+    assert_eq!(package["estimate_bytes"], 1_200_000_000_u64);
+    assert_eq!(package["estimate_source"], "qit_catalog");
+    assert_eq!(package["estimate_confidence"], "high");
+    assert_eq!(package["runtime_recipe"], "transformers_external");
+    assert_eq!(package["fits"], true);
+    assert_eq!(package["ready"], false);
+    assert_eq!(package["readiness_reason"], "runtime_missing");
     let pin = h
         .post_json(
             "/api/pins",
@@ -495,6 +578,188 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
         1_200_000_000_u64
     );
     assert_eq!(h.json("/api/hardware").await["headroom_bytes"], 300_000_000);
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn local_transformers_package_is_discovered_from_its_metadata() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(1),
+        },
+        vec![],
+    )
+    .await;
+    write_local_transformers_package(&h.models, "acme", "edge-chat");
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "acme/edge-chat")
+        .expect("discovered local package");
+
+    assert_eq!(package["format"], "transformers");
+    assert_eq!(package["family"], "Qwen");
+    assert_eq!(package["estimate_source"], "local_files");
+    assert_eq!(package["estimate_confidence"], "medium");
+    assert_eq!(
+        package["capabilities"],
+        serde_json::json!({
+            "inputs": ["text"],
+            "outputs": ["text"],
+            "tasks": ["chat"]
+        })
+    );
+    let weights = package["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["path"] == "model.safetensors")
+        .expect("weights metadata");
+    assert_eq!(weights["role"], "weights");
+    assert_eq!(weights["bytes"], 7);
+    assert_eq!(
+        weights["sha256"],
+        "9a129038d9a00aed0cf6a7ea059ca50a813449061ab87848cf1a13eafdf33b2c"
+    );
+    assert_eq!(weights["source"], "local_scan");
+    assert_eq!(package["fits"], true);
+    assert_eq!(package["ready"], false);
+    assert_eq!(package["readiness_reason"], "runtime_missing");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn local_transformers_package_supports_sentencepiece_tokenizers_and_model_cards() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(1),
+        },
+        vec![],
+    )
+    .await;
+    write_sentencepiece_transformers_package(&h.models);
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "acme/sentencepiece-chat")
+        .expect("discovered sentencepiece package");
+
+    assert_eq!(package["readiness_reason"], "runtime_missing");
+    assert!(package["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|file| file["path"] == "tokenizer.model"));
+    assert!(package["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|file| file["path"] == "modelcard.md"));
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn local_transformers_package_supports_bpe_tokenizers() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(1),
+        },
+        vec![],
+    )
+    .await;
+    write_bpe_transformers_package(&h.models);
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "acme/bpe-chat")
+        .expect("discovered BPE package");
+
+    assert_eq!(package["readiness_reason"], "runtime_missing");
+    assert!(package["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|file| file["path"] == "vocab.json"));
+    assert!(package["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|file| file["path"] == "merges.txt"));
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn local_transformers_package_uses_config_estimate_when_weights_are_missing() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(1),
+        },
+        vec![],
+    )
+    .await;
+    write_config_estimated_transformers_package(&h.models);
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "acme/config-estimated-chat")
+        .expect("discovered config-estimated package");
+
+    assert_eq!(package["estimate_source"], "config_architecture");
+    assert_eq!(package["estimate_confidence"], "low");
+    assert!(package["estimate_bytes"].as_u64().unwrap() > 0);
+    assert_eq!(package["readiness_reason"], "missing_required_files");
     h.listening.shutdown().await;
 }
 
@@ -528,6 +793,79 @@ async fn nonexistent_transformers_worker_keeps_package_not_ready() {
         .unwrap();
     assert_eq!(package["ready"], false, "{package}");
     assert_eq!(package["readiness_reason"], "runtime_missing", "{package}");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn changed_transformers_package_is_not_ready_after_scan() {
+    let h = Harness::start_with_transformers(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec![],
+    )
+    .await;
+    let package_dir = write_transformers_package(&h.models);
+    h.post_json("/api/scan", serde_json::json!({})).await;
+    std::fs::write(
+        package_dir.join("model-00002-of-00002.safetensors"),
+        "replaced!",
+    )
+    .unwrap();
+
+    let catalog = h.json("/api/catalog").await;
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .unwrap();
+    assert_eq!(package["ready"], false, "{package}");
+    assert_eq!(package["readiness_reason"], "missing_required_files");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn nonexistent_gguf_worker_keeps_package_not_ready() {
+    let h = Harness::start_with(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_000_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        stub_launcher(),
+        Some(PathBuf::from("/missing/llama-server")),
+    )
+    .await;
+    write_artifact(
+        &h.models,
+        "Qwen",
+        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        100_000,
+        llm_meta(),
+    );
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "qit/qwen2.5-0.5b-instruct-q4_k_m")
+        .unwrap();
+    assert_eq!(package["ready"], false, "{package}");
+    assert_eq!(package["readiness_reason"], "runtime_missing");
     h.listening.shutdown().await;
 }
 
@@ -643,6 +981,51 @@ async fn transformers_package_launches_after_health_proxies_chat_and_stops() {
         "not_loaded"
     );
     assert!(!process_alive(pid), "stub worker {pid} still running");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn insufficient_memory_package_is_refused_before_worker_launch() {
+    let h = Harness::start_with_transformers(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 1_000_000_000,
+            metal_recommended_working_set_bytes: Some(500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: Some(900_000_000),
+        },
+        vec![],
+    )
+    .await;
+    write_transformers_package(&h.models);
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .unwrap();
+    assert_eq!(package["fits"], false);
+    assert_eq!(package["readiness_reason"], "insufficient_memory");
+
+    let start = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"package_id": "Qwen/Qwen2.5-0.5B-Instruct"}),
+        )
+        .await;
+    assert_eq!(start.status(), 400);
+    assert_eq!(
+        start.json::<Value>().await.unwrap()["error"],
+        "model package does not fit the stable budget"
+    );
+    assert!(h.json("/api/sessions").await.as_array().unwrap().is_empty());
     h.listening.shutdown().await;
 }
 
@@ -764,7 +1147,7 @@ async fn gguf_package_uses_serve_profile_through_session_lifecycle() {
             free_ram_bytes: None,
         },
         stub_launcher(),
-        Some(PathBuf::from("/opt/test/llama-server")),
+        Some(PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker"))),
     )
     .await;
     write_artifact(

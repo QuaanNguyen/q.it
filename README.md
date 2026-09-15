@@ -1,6 +1,20 @@
 # q.it
 
-Local catalog and capacity planner for GGUF artifacts on Apple Silicon.
+q.it is an offline package catalog and capacity planner for local open-weight inference on Apple Silicon.
+It scans local GGUF artifacts and supported local Transformers packages, calculates fit from a stable memory budget, and supervises workers behind one local HTTP and SSE control plane.
+
+## Supported packages
+
+GGUF artifacts are discovered below `QIT_MODELS_DIR`.
+q.it offers its bundled low-memory Qwen GGUF package when the required local file is present.
+
+Transformers packages are discovered below the sibling `transformers` directory.
+For example, `QIT_MODELS_DIR=$HOME/models/gguf` makes q.it inspect `$HOME/models/transformers`.
+Supported text-chat packages need `config.json`, a recognized tokenizer layout (`tokenizer.json`, `tokenizer.model`, or `vocab.json` with `merges.txt`), a model card (`README.md` or `modelcard.md`), and either `model.safetensors` or the safetensors files listed by `model.safetensors.index.json`.
+The catalog reports each package's file roles, sizes, SHA-256 hashes, source provenance, capabilities, fit, and one readiness reason.
+
+The verified host platform is macOS on Apple Silicon.
+Other platforms report unknown hardware capacity and are not a supported local-serving target.
 
 ## Run
 
@@ -8,24 +22,43 @@ Local catalog and capacity planner for GGUF artifacts on Apple Silicon.
 QIT_MODELS_DIR="$HOME/models/gguf" cargo run -p qit-runtime
 ```
 
-Open http://127.0.0.1:2471
+Open http://127.0.0.1:2471.
 
-Start and Try need `llama-server` (`brew install llama.cpp` is auto-discovered on Apple Silicon). Override with `QIT_WORKER_PATH` or `LLAMA_SERVER_PATH` if needed.
-Transformers packages need an OpenAI-compatible worker configured with `QIT_TRANSFORMERS_WORKER_PATH`.
-q.it launches it with `--host`, `--port`, `--model`, and `--context-length`, then waits for `/health` before proxying `/v1/chat/completions`.
+GGUF Start and Try use `llama-server`.
+Install it with `brew install llama.cpp`, or set `QIT_WORKER_PATH` or `LLAMA_SERVER_PATH` to an executable.
 
-Optional:
+Transformers text-chat packages need an executable OpenAI-compatible worker set through `QIT_TRANSFORMERS_WORKER_PATH`.
+q.it starts the worker on a private loopback port with `--host`, `--port`, `--model`, and `--context-length`.
+It waits for `/health` before marking the session Loaded, proxies `/v1/chat/completions` as q.it SSE, records failure details and logs, and stops the worker on session cleanup.
 
-- `QIT_HOME` — app state (default `~/Library/Application Support/q.it`)
-- `QIT_OS_RESERVE_BYTES` — planner OS reserve; overrides the value saved on the Settings page
-- `QIT_PORT` — listen port (default 2471)
-- `QIT_WORKER_PATH` or `LLAMA_SERVER_PATH` — llama-server binary for real inference
-- `QIT_TRANSFORMERS_WORKER_PATH` - external Transformers worker binary
+q.it never downloads model files, Python, PyTorch, or catalog data at runtime.
 
-Web UI in development:
+## Use
+
+Choose Scan library after adding or changing local files.
+The Catalog groups alternatives by family and recommends the smallest ready package that fits the current stable budget.
+Packages with missing files, an unavailable runtime, or insufficient memory are not ready.
+Packages that fail the stable-budget check cannot start a worker.
+
+The control plane is available under `/api`.
+Use `/api/catalog` to inspect artifacts and packages, `/api/capacity` to inspect reservations and sessions, `/api/sessions` to start or stop a package, and `POST /api/generate` for SSE text generation against a Loaded session.
+
+## Configuration
+
+- `QIT_HOME` - app state root, defaulting to `~/Library/Application Support/q.it`
+- `QIT_MODELS_DIR` - GGUF library root, defaulting to `$QIT_HOME/models/gguf`
+- `QIT_OS_RESERVE_BYTES` - stable-budget operating-system reserve override
+- `QIT_PORT` - HTTP listen port, defaulting to `2471`
+- `QIT_WORKER_PATH` or `LLAMA_SERVER_PATH` - `llama-server` executable
+- `QIT_TRANSFORMERS_WORKER_PATH` - external OpenAI-compatible Transformers worker executable
+- `QIT_WEB_DIST` - optional built web asset directory
+
+## Web development
 
 ```bash
-cd qit-web && npm install && npm run dev
+cd qit-web
+npm install
+npm run dev
 ```
 
-Vite proxies `/api` to the runtime.
+Vite proxies `/api` to the local runtime.

@@ -1,5 +1,6 @@
 import { fmtBytes, type ModelPackage } from "../api";
 import { RowActions } from "./RowActions";
+import { StartControl } from "./StartControl";
 import { TryPanel } from "./TryPanel";
 import { useCatalog, type CatalogModel, type RowModel } from "./useCatalog";
 
@@ -13,9 +14,8 @@ export function CatalogPage() {
       <WorkerWarning model={model} />
       <Toolbar model={model} />
       <h2>Owned packages</h2>
-      {model.packages.map((modelPackage) => (
-        <PackageCard key={modelPackage.id} modelPackage={modelPackage} />
-      ))}
+      <PackageRecommendation packages={model.packages} />
+      <PackageFamilies packages={model.packages} model={model} />
       <h2>Local GGUF artifacts</h2>
       {model.rows.length === 0 && <Empty model={model} />}
       {model.rows.map((row) => (
@@ -25,7 +25,48 @@ export function CatalogPage() {
   );
 }
 
-function PackageCard({ modelPackage }: { modelPackage: ModelPackage }) {
+function PackageRecommendation({ packages }: { packages: ModelPackage[] }) {
+  const recommended = packages
+    .filter((modelPackage) => modelPackage.ready && modelPackage.fits)
+    .sort((left, right) => left.estimate_bytes - right.estimate_bytes)[0];
+  if (!recommended) return null;
+  return (
+    <p className="note">
+      Recommended for this device: <strong>{recommended.name}</strong> at{" "}
+      {fmtBytes(recommended.estimate_bytes)}.
+    </p>
+  );
+}
+
+function PackageFamilies({ packages, model }: { packages: ModelPackage[]; model: CatalogModel }) {
+  const families = new Map<string, ModelPackage[]>();
+  for (const modelPackage of packages) {
+    const alternatives = families.get(modelPackage.family) ?? [];
+    alternatives.push(modelPackage);
+    families.set(modelPackage.family, alternatives);
+  }
+  return (
+    <>
+      {[...families.entries()].map(([family, alternatives]) => (
+        <section className="package-family" key={family}>
+          <h3>{family}</h3>
+          {alternatives.map((modelPackage) => (
+            <PackageCard key={modelPackage.id} modelPackage={modelPackage} model={model} />
+          ))}
+        </section>
+      ))}
+    </>
+  );
+}
+
+function PackageCard({
+  modelPackage,
+  model,
+}: {
+  modelPackage: ModelPackage;
+  model: CatalogModel;
+}) {
+  const state = model.packageState(modelPackage.id);
   return (
     <div className="card">
       <div className="head">
@@ -40,14 +81,27 @@ function PackageCard({ modelPackage }: { modelPackage: ModelPackage }) {
         </span>
       </div>
       <div className="meta">
-        <span>{modelPackage.family}</span>
         <span>{modelPackage.format.toUpperCase()}</span>
         <span>est. {fmtBytes(modelPackage.estimate_bytes)}</span>
+        <span>{modelPackage.capabilities.inputs.join(", ")} in</span>
+        <span>{modelPackage.capabilities.outputs.join(", ")} out</span>
+        <span>{modelPackage.capabilities.tasks.join(", ")}</span>
       </div>
       {modelPackage.readiness_reason && (
         <p className="readiness-reason">
           {readinessReason(modelPackage.readiness_reason)}
         </p>
+      )}
+      {modelPackage.ready && (
+        <div className="actions">
+          <StartControl
+            status={state.status}
+            error={state.error}
+            onStart={() => void model.startPackage(modelPackage.id)}
+            onStop={() => void model.stop(modelPackage.id)}
+            onInspect={model.inspect}
+          />
+        </div>
       )}
     </div>
   );
