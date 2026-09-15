@@ -582,7 +582,7 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
 }
 
 #[tokio::test]
-async fn local_transformers_package_is_discovered_from_its_metadata() {
+async fn unknown_local_causal_lm_is_not_cataloged() {
     let h = Harness::start(
         HardwareSnapshot {
             device_class: "apple_silicon".into(),
@@ -603,46 +603,16 @@ async fn local_transformers_package_is_discovered_from_its_metadata() {
         .json::<Value>()
         .await
         .unwrap();
-    let package = catalog["packages"]
+    assert!(catalog["packages"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "acme/edge-chat")
-        .expect("discovered local package");
-
-    assert_eq!(package["format"], "transformers");
-    assert_eq!(package["family"], "Qwen");
-    assert_eq!(package["estimate_source"], "local_files");
-    assert_eq!(package["estimate_confidence"], "medium");
-    assert_eq!(
-        package["capabilities"],
-        serde_json::json!({
-            "inputs": ["text"],
-            "outputs": ["text"],
-            "tasks": ["chat"]
-        })
-    );
-    let weights = package["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|file| file["path"] == "model.safetensors")
-        .expect("weights metadata");
-    assert_eq!(weights["role"], "weights");
-    assert_eq!(weights["bytes"], 7);
-    assert_eq!(
-        weights["sha256"],
-        "9a129038d9a00aed0cf6a7ea059ca50a813449061ab87848cf1a13eafdf33b2c"
-    );
-    assert_eq!(weights["source"], "local_scan");
-    assert_eq!(package["fits"], true);
-    assert_eq!(package["ready"], false);
-    assert_eq!(package["readiness_reason"], "runtime_missing");
+        .all(|package| package["id"] != "acme/edge-chat"));
     h.listening.shutdown().await;
 }
 
 #[tokio::test]
-async fn local_transformers_package_supports_sentencepiece_tokenizers_and_model_cards() {
+async fn unknown_sentencepiece_causal_lm_is_not_cataloged() {
     let h = Harness::start(
         HardwareSnapshot {
             device_class: "apple_silicon".into(),
@@ -663,29 +633,16 @@ async fn local_transformers_package_supports_sentencepiece_tokenizers_and_model_
         .json::<Value>()
         .await
         .unwrap();
-    let package = catalog["packages"]
+    assert!(catalog["packages"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "acme/sentencepiece-chat")
-        .expect("discovered sentencepiece package");
-
-    assert_eq!(package["readiness_reason"], "runtime_missing");
-    assert!(package["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|file| file["path"] == "tokenizer.model"));
-    assert!(package["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|file| file["path"] == "modelcard.md"));
+        .all(|package| package["id"] != "acme/sentencepiece-chat"));
     h.listening.shutdown().await;
 }
 
 #[tokio::test]
-async fn local_transformers_package_supports_bpe_tokenizers() {
+async fn unknown_bpe_causal_lm_is_not_cataloged() {
     let h = Harness::start(
         HardwareSnapshot {
             device_class: "apple_silicon".into(),
@@ -706,29 +663,16 @@ async fn local_transformers_package_supports_bpe_tokenizers() {
         .json::<Value>()
         .await
         .unwrap();
-    let package = catalog["packages"]
+    assert!(catalog["packages"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "acme/bpe-chat")
-        .expect("discovered BPE package");
-
-    assert_eq!(package["readiness_reason"], "runtime_missing");
-    assert!(package["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|file| file["path"] == "vocab.json"));
-    assert!(package["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|file| file["path"] == "merges.txt"));
+        .all(|package| package["id"] != "acme/bpe-chat"));
     h.listening.shutdown().await;
 }
 
 #[tokio::test]
-async fn local_transformers_package_uses_config_estimate_when_weights_are_missing() {
+async fn unknown_incomplete_causal_lm_is_not_cataloged() {
     let h = Harness::start(
         HardwareSnapshot {
             device_class: "apple_silicon".into(),
@@ -749,17 +693,11 @@ async fn local_transformers_package_uses_config_estimate_when_weights_are_missin
         .json::<Value>()
         .await
         .unwrap();
-    let package = catalog["packages"]
+    assert!(catalog["packages"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "acme/config-estimated-chat")
-        .expect("discovered config-estimated package");
-
-    assert_eq!(package["estimate_source"], "config_architecture");
-    assert_eq!(package["estimate_confidence"], "low");
-    assert!(package["estimate_bytes"].as_u64().unwrap() > 0);
-    assert_eq!(package["readiness_reason"], "missing_required_files");
+        .all(|package| package["id"] != "acme/config-estimated-chat"));
     h.listening.shutdown().await;
 }
 

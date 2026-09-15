@@ -8,9 +8,10 @@ It scans local GGUF artifacts and supported local Transformers packages, calcula
 GGUF artifacts are discovered below `QIT_MODELS_DIR`.
 q.it offers its bundled low-memory Qwen GGUF package when the required local file is present.
 
-Transformers packages are discovered below the sibling `transformers` directory.
-For example, `QIT_MODELS_DIR=$HOME/models/gguf` makes q.it inspect `$HOME/models/transformers`.
-Supported text-chat packages need `config.json`, a recognized tokenizer layout (`tokenizer.json`, `tokenizer.model`, or `vocab.json` with `merges.txt`), a model card (`README.md` or `modelcard.md`), and either `model.safetensors` or the safetensors files listed by `model.safetensors.index.json`.
+The bundled Qwen Transformers package resolves below the sibling `transformers` directory.
+For example, `QIT_MODELS_DIR=$HOME/models/gguf` makes q.it look for it at `$HOME/models/transformers/Qwen/Qwen2.5-0.5B-Instruct`.
+It requires `config.json`, `tokenizer.json`, `tokenizer_config.json`, `README.md`, `model.safetensors.index.json`, and the two safetensor shards named by that index.
+Other local checkpoint directories are not cataloged or offered for serving until q.it owns a tested package recipe for them.
 The catalog reports each package's file roles, sizes, SHA-256 hashes, source provenance, capabilities, fit, and one readiness reason.
 
 The verified host platform is macOS on Apple Silicon.

@@ -47,11 +47,10 @@ Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](htt
 
 ## Offline package catalog
 
-The catalog always contains the bundled Qwen GGUF package definition.
-Local Transformers text-chat packages are discovered below the sibling `transformers` library using `config.json`, tokenizer files, safetensors or a safetensors index, and `README.md` or `modelcard.md` as the model card.
-The scan caches local file size, modified time, and SHA-256 metadata, then exposes package capabilities, planner-hint provenance, readiness, and one clear readiness reason through `/api/catalog`.
-Complete local weights produce the normal file-based planner hint, while config architecture fields provide a lower-confidence fallback for incomplete packages.
-Only packages q.it can serve through the external OpenAI-compatible worker are catalogued.
+The catalog always contains bundled Qwen GGUF and Qwen Transformers package definitions.
+The Transformers package resolves below the sibling `transformers` library at `Qwen/Qwen2.5-0.5B-Instruct` and requires its declared config, tokenizer, model-card, index, and safetensor-shard files.
+The scan records local file size, modified time, and SHA-256 metadata, then exposes package capabilities, catalog planner-hint provenance, readiness, and one clear readiness reason through `/api/catalog`.
+Other local checkpoint directories are not catalogued until q.it owns a tested package recipe and external-worker contract for them.
 
 ## UI notes
 
