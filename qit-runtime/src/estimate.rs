@@ -30,7 +30,7 @@ fn kv_and_state_bytes(artifact: &ArtifactRow, n_ctx: u32, n_parallel: u32) -> u6
     if layers == 0 {
         return 0;
     }
-    let n_ctx_eff = ((n_ctx as u64) + 255) / 256 * 256;
+    let n_ctx_eff = (n_ctx as u64).div_ceil(256) * 256;
     let heads = artifact.head_count.unwrap_or(1).max(1) as u64;
     let embed = artifact.embedding_length.unwrap_or(0) as u64;
     let fallback_dim = if embed > 0 { embed / heads } else { 0 };

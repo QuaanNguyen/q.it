@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type Artifact, type Session } from "../api";
+import { api, type Artifact, type ModelPackage, type Session } from "../api";
 import type { RowStatus } from "./StartControl";
 
 const PRESETS = [4096, 8192, 16384, 32768];
@@ -27,6 +27,7 @@ export type RowModel = {
 };
 
 export type CatalogModel = {
+  packages: ModelPackage[];
   rows: RowModel[];
   presets: number[];
   nCtx: number;
@@ -36,7 +37,9 @@ export type CatalogModel = {
   tryFor: string | null;
   rescan: () => Promise<void>;
   start: (id: string) => Promise<void>;
+  startPackage: (id: string) => Promise<void>;
   stop: (id: string) => Promise<void>;
+  packageState: (id: string) => { status: RowStatus; error?: string };
   pin: (id: string) => Promise<void>;
   whatIf: (id: string) => Promise<void>;
   openTry: (id: string) => void;
@@ -47,6 +50,7 @@ export type CatalogModel = {
 export function useCatalog(): CatalogModel {
   const [nCtx, setNCtx] = useState(4096);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [packages, setPackages] = useState<ModelPackage[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [pending, setPending] = useState<Record<string, Pending>>({});
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
@@ -64,6 +68,7 @@ export function useCatalog(): CatalogModel {
       setWorkerPath(hw.worker_path);
       const [cat, live] = await Promise.all([api.catalog(nCtx), api.sessions()]);
       setArtifacts(cat.artifacts);
+      setPackages(cat.packages);
       setSessions(live);
       setError(null);
     } catch (e) {
@@ -81,7 +86,10 @@ export function useCatalog(): CatalogModel {
   }, [refreshSessions]);
 
   const sessionFor = useCallback(
-    (id: string) => sessions.find((s) => s.artifact_id === id && s.n_ctx === nCtx),
+    (id: string) =>
+      sessions.find(
+        (s) => s.target_id === id && s.serve_profile.context_length === nCtx
+      ),
     [sessions, nCtx]
   );
 
@@ -137,24 +145,59 @@ export function useCatalog(): CatalogModel {
     [sessionFor, refreshSessions, tryFor]
   );
 
+  const startPackage = useCallback(
+    async (id: string) => {
+      setPending((p) => ({ ...p, [id]: "starting" }));
+      setLocalErrors((e) => {
+        const next = { ...e };
+        delete next[id];
+        return next;
+      });
+      try {
+        await api.startPackage(id, nCtx);
+      } catch (e) {
+        setLocalErrors((errs) => ({
+          ...errs,
+          [id]: e instanceof Error ? e.message : String(e),
+        }));
+      } finally {
+        setPending((p) => {
+          const next = { ...p };
+          delete next[id];
+          return next;
+        });
+        await refreshSessions().catch(() => {});
+      }
+    },
+    [nCtx, refreshSessions]
+  );
+
+  const packageState = useCallback(
+    (id: string): { status: RowStatus; error?: string } => {
+      const session = sessionFor(id);
+      const busy = pending[id];
+      const error = localErrors[id] ?? session?.last_error;
+      if (busy) return { status: busy, error };
+      if (session?.status === "loaded") return { status: "loaded", error };
+      if (session?.status === "failed" || error) return { status: "failed", error };
+      return { status: "idle", error };
+    },
+    [localErrors, pending, sessionFor]
+  );
+
   const rows = useMemo<RowModel[]>(
     () =>
       artifacts.map((artifact) => {
         const session = sessionFor(artifact.id);
-        const busy = pending[artifact.id];
-        const localError = localErrors[artifact.id];
-        let status: RowStatus = "idle";
-        if (busy) status = busy;
-        else if (session?.status === "loaded") status = "loaded";
-        else if (session?.status === "failed" || localError) status = "failed";
+        const state = packageState(artifact.id);
         return {
           artifact,
           session,
-          status,
-          error: localError ?? session?.last_error,
+          status: state.status,
+          error: state.error,
         };
       }),
-    [artifacts, sessionFor, pending, localErrors]
+    [artifacts, packageState, sessionFor]
   );
 
   const openTry = useCallback(
@@ -185,6 +228,7 @@ export function useCatalog(): CatalogModel {
   );
 
   return {
+    packages,
     rows,
     presets: presetsForArtifacts(artifacts),
     nCtx,
@@ -194,7 +238,9 @@ export function useCatalog(): CatalogModel {
     tryFor,
     rescan,
     start,
+    startPackage,
     stop,
+    packageState,
     pin,
     whatIf,
     openTry,

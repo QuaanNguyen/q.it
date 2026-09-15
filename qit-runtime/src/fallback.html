@@ -57,6 +57,8 @@
     .card .name { font-family: var(--serif); font-size: 1.1rem; }
     .card .meta { display: flex; gap: 1rem; color: var(--muted); font-size: 0.85rem; margin: 0.35rem 0 0.75rem; }
     .actions { display: flex; gap: 0.35rem; align-items: center; justify-content: flex-end; }
+    .package-statuses { display: flex; gap: 0.4rem; }
+    .readiness-reason { color: var(--danger); margin: 0.6rem 0 0; }
     .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
     .pill.Fits { background: var(--ok-soft); color: var(--ok); }
     .pill.Tight { background: var(--warn-soft); color: var(--warn); }
@@ -108,6 +110,9 @@
         "<option value='" + n + "'" + (n === state.n_ctx ? " selected" : "") + ">" + (n / 1024) + "k</option>"
       ).join("") + "</select>";
     }
+    function serveProfile() {
+      return { context_length: state.n_ctx, runtime_settings: {} };
+    }
 
     async function render() {
       const route = nav();
@@ -158,16 +163,40 @@
         await api("/api/scan", { method: "POST" });
         const catalog = await api("/api/catalog?n_ctx=" + state.n_ctx);
         const artifacts = catalog.artifacts || [];
+        const packages = catalog.packages || [];
         root.innerHTML =
-          "<h1>Catalog</h1><p class='lede'>One card per artifact. Try opens inside the card.</p>" +
+          "<h1>Catalog</h1><p class='lede'>Owned model packages and local GGUF artifacts.</p>" +
           "<div class='toolbar'><label class='muted'>Context " + ctxSelect() + "</label><button id='rescan'>Scan library</button></div>" +
-          "<div id='cards'></div>";
+          "<h2>Owned packages</h2><div id='package-cards'></div>" +
+          "<h2>Local GGUF artifacts</h2><div id='artifact-cards'></div>";
         document.getElementById("nctx").onchange = (e) => { state.n_ctx = Number(e.target.value); render(); };
         document.getElementById("rescan").onclick = () => render();
-        const cards = document.getElementById("cards");
+        const packageCards = document.getElementById("package-cards");
+        for (const p of packages) {
+          const el = document.createElement("article");
+          el.className = "card";
+          el.innerHTML =
+            "<div class='head'><span class='name'></span><span class='package-statuses'><span class='pill fit'></span><span class='pill ready'></span></span></div>" +
+            "<div class='meta'><span></span><span></span><span></span></div><p class='readiness-reason'></p>";
+          el.querySelector(".name").textContent = p.name;
+          const fit = el.querySelector(".fit");
+          fit.textContent = p.fits ? "Fits" : "Doesn't fit";
+          fit.className = "pill fit " + (p.fits ? "Fits" : "No");
+          const ready = el.querySelector(".ready");
+          ready.textContent = p.ready ? "Ready" : "Not ready";
+          ready.className = "pill ready " + (p.ready ? "Fits" : "No");
+          const meta = el.querySelectorAll(".meta span");
+          meta[0].textContent = p.family;
+          meta[1].textContent = p.format.toUpperCase();
+          meta[2].textContent = "est. " + fmtBytes(p.estimate_bytes);
+          const reason = el.querySelector(".readiness-reason");
+          reason.textContent = readinessReason(p.readiness_reason);
+          reason.hidden = !p.readiness_reason;
+          packageCards.appendChild(el);
+        }
+        const cards = document.getElementById("artifact-cards");
         if (!artifacts.length) {
           cards.innerHTML = "<p class='muted'>No GGUF files found under the library root.</p>";
-          return;
         }
         for (const a of artifacts) {
           const el = document.createElement("article");
@@ -219,29 +248,37 @@
       }
     }
 
+    function readinessReason(reason) {
+      return {
+        missing_required_files: "Missing required files",
+        insufficient_memory: "Insufficient memory",
+        runtime_missing: "Runtime missing",
+      }[reason] || "";
+    }
+
     function tableReservations(rows, kind) {
       if (!rows.length) return "<p class='muted'>None</p>";
-      return "<table><thead><tr><th>Artifact</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>" +
+      return "<table><thead><tr><th>Target</th><th>n_ctx</th><th>Estimate</th><th></th></tr></thead><tbody>" +
         rows.map((r) =>
-          "<tr><td>" + esc(r.artifact_id) + "</td><td>" + r.n_ctx + "</td><td>" + fmtBytes(r.estimate_bytes) +
+          "<tr><td>" + esc(r.target_id) + "</td><td>" + r.serve_profile.context_length + "</td><td>" + fmtBytes(r.estimate_bytes) +
           "</td><td><button data-del='" + kind + ":" + esc(r.id) + "'>Remove</button></td></tr>"
         ).join("") + "</tbody></table>";
     }
     function tableSessions(rows) {
       if (!rows.length) return "<p class='muted'>None</p>";
-      return "<table><thead><tr><th>Id</th><th>Artifact</th><th>Status</th><th></th></tr></thead><tbody>" +
+      return "<table><thead><tr><th>Id</th><th>Target</th><th>Status</th><th></th></tr></thead><tbody>" +
         rows.map((s) =>
-          "<tr><td>" + esc(s.id.slice(0, 8)) + "</td><td>" + esc(s.artifact_id) + "</td><td>" + esc(s.status) +
+          "<tr><td>" + esc(s.id.slice(0, 8)) + "</td><td>" + esc(s.target_id) + "</td><td>" + esc(s.status) +
           "</td><td><button data-stop='" + esc(s.id) + "'>Stop</button></td></tr>"
         ).join("") + "</tbody></table>";
     }
     async function reserve(url, artifact_id) {
-      await api(url, { method: "POST", body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx }) });
+      await api(url, { method: "POST", body: JSON.stringify({ artifact_id, serve_profile: serveProfile() }) });
       location.hash = "#/capacity";
       render();
     }
     async function start(artifact_id) {
-      await api("/api/sessions", { method: "POST", body: JSON.stringify({ artifact_id, n_ctx: state.n_ctx }) });
+      await api("/api/sessions", { method: "POST", body: JSON.stringify({ artifact_id, serve_profile: serveProfile() }) });
       location.hash = "#/capacity";
       render();
     }
@@ -263,7 +300,7 @@
           const res = await fetch("/api/generate", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ artifact_id: artifact.id, n_ctx: state.n_ctx, prompt }),
+            body: JSON.stringify({ artifact_id: artifact.id, serve_profile: serveProfile(), prompt }),
           });
           if (!res.ok) throw new Error(await res.text());
           const reader = res.body.getReader();

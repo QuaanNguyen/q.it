@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod config;
 pub mod error;
 pub mod estimate;
@@ -6,12 +7,13 @@ pub mod http;
 pub mod paths;
 pub mod probe;
 pub mod scan;
+pub mod serve;
 pub mod spa;
 pub mod store;
 pub mod supervisor;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex, Semaphore};
@@ -56,11 +58,13 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
     let supervisor = Arc::new(Supervisor::new(config.worker_launcher.clone()));
     supervisor.hydrate(session_rows).await;
     let state = AppState {
+        packages: Arc::new(RwLock::new(Vec::new())),
         paths,
         store: Arc::new(Mutex::new(store)),
         probe: config.probe.clone(),
         os_reserve_override: config.os_reserve_bytes,
         worker_path: config.worker_path.clone(),
+        transformers_worker_path: config.transformers_worker_path.clone(),
         supervisor,
         what_ifs: Arc::new(Mutex::new(Vec::new())),
         generate_slot: Arc::new(Semaphore::new(1)),

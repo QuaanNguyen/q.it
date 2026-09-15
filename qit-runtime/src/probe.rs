@@ -187,7 +187,7 @@ pub fn budget_bytes(snapshot: &HardwareSnapshot, os_reserve_bytes: u64) -> u64 {
 }
 
 pub fn resolve_os_reserve(unified_memory_bytes: u64, override_bytes: Option<u64>) -> u64 {
-    override_bytes.unwrap_or_else(|| {
+    override_bytes.unwrap_or({
         ((unified_memory_bytes as f64) * crate::config::DEFAULT_OS_RESERVE_FRACTION) as u64
     })
 }

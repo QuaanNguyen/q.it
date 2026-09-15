@@ -1,8 +1,8 @@
 use std::convert::Infallible;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use std::path::PathBuf;
+use std::path::{Path as FilePath, PathBuf};
 
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -15,15 +15,18 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{watch, Mutex, Semaphore};
 use uuid::Uuid;
 
-use crate::config::{SessionShape, DEFAULT_N_CTX, DEFAULT_N_GPU_LAYERS, DEFAULT_N_PARALLEL};
+use crate::catalog::{catalog_package, catalog_packages, CatalogPackage};
+use crate::config::{SessionShape, DEFAULT_N_CTX, DEFAULT_N_PARALLEL};
 use crate::estimate::{classify, estimate_bytes, Fit};
 use crate::paths::Paths;
 use crate::probe::{budget_bytes, resolve_os_reserve, HardwareProbe, HardwareSnapshot};
 use crate::scan::scan_library;
+use crate::serve::{RuntimeRecipe, ServeProfile, TargetIdentity};
 use crate::spa::index_html;
 use crate::store::{ArtifactRow, MeasurementRow, PinRow, SessionRow, Store};
 use crate::supervisor::{
-    proxy_generate, session_status_str, ChatMessage, SessionStatus, SessionView, Supervisor,
+    proxy_generate, session_status_str, ChatMessage, ServeTarget, SessionStatus, SessionView,
+    Supervisor,
 };
 
 const DEFAULT_MAX_TOKENS: u32 = 512;
@@ -31,10 +34,12 @@ const DEFAULT_MAX_TOKENS: u32 = 512;
 #[derive(Clone)]
 pub struct AppState {
     pub paths: Paths,
+    pub packages: Arc<RwLock<Vec<CatalogPackage>>>,
     pub store: Arc<Mutex<Store>>,
     pub probe: Arc<dyn HardwareProbe>,
     pub os_reserve_override: Option<u64>,
     pub worker_path: Option<PathBuf>,
+    pub transformers_worker_path: Option<PathBuf>,
     pub supervisor: Arc<Supervisor>,
     pub what_ifs: Arc<Mutex<Vec<PinRow>>>,
     pub generate_slot: Arc<Semaphore>,
@@ -68,6 +73,7 @@ pub struct HardwareBody {
 #[derive(Serialize)]
 pub struct CatalogBody {
     pub artifacts: Vec<ArtifactBody>,
+    pub packages: Vec<PackageBody>,
 }
 
 #[derive(Serialize)]
@@ -90,6 +96,47 @@ pub struct ArtifactBody {
 }
 
 #[derive(Serialize)]
+pub struct PackageBody {
+    pub id: String,
+    pub family: String,
+    pub name: String,
+    pub format: String,
+    pub estimate_bytes: u64,
+    pub estimate_source: String,
+    pub estimate_confidence: String,
+    pub runtime_recipe: String,
+    pub capabilities: PackageCapabilitiesBody,
+    pub files: Vec<PackageFileBody>,
+    pub fits: bool,
+    pub ready: bool,
+    pub readiness_reason: Option<ReadinessReason>,
+}
+
+#[derive(Serialize)]
+pub struct PackageCapabilitiesBody {
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    pub tasks: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct PackageFileBody {
+    pub path: String,
+    pub role: String,
+    pub bytes: Option<u64>,
+    pub sha256: Option<String>,
+    pub source: String,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadinessReason {
+    MissingRequiredFiles,
+    InsufficientMemory,
+    RuntimeMissing,
+}
+
+#[derive(Serialize)]
 pub struct CapacityBody {
     pub hardware: HardwareBody,
     pub pins: Vec<ReservationBody>,
@@ -100,16 +147,18 @@ pub struct CapacityBody {
 #[derive(Serialize)]
 pub struct ReservationBody {
     pub id: String,
-    pub artifact_id: String,
-    pub n_ctx: u32,
-    pub n_gpu_layers: i32,
-    pub n_parallel: u32,
+    #[serde(flatten)]
+    pub target: TargetIdentity,
+    pub runtime_recipe: RuntimeRecipe,
+    pub serve_profile: ServeProfile,
     pub estimate_bytes: u64,
 }
 
 #[derive(Deserialize)]
 pub struct GenerateBody {
-    pub artifact_id: String,
+    pub artifact_id: Option<String>,
+    pub package_id: Option<String>,
+    pub serve_profile: Option<ServeProfile>,
     pub prompt: Option<String>,
     pub messages: Option<Vec<ChatMessage>>,
     pub max_tokens: Option<u32>,
@@ -128,6 +177,17 @@ impl GenerateBody {
                 content: prompt.clone(),
             }]),
             _ => Err(ApiError::bad("messages or prompt is required")),
+        }
+    }
+
+    fn session_shape(&self) -> SessionShape {
+        SessionShape {
+            artifact_id: self.artifact_id.clone(),
+            package_id: self.package_id.clone(),
+            serve_profile: self.serve_profile.clone(),
+            n_ctx: self.n_ctx,
+            n_gpu_layers: self.n_gpu_layers,
+            n_parallel: self.n_parallel,
         }
     }
 }
@@ -230,12 +290,13 @@ async fn capacity(State(state): State<AppState>) -> Result<Json<CapacityBody>, A
     let artifacts = store.artifacts().map_err(ApiError::from)?;
     let pins = store.pins().map_err(ApiError::from)?;
     drop(store);
+    let packages = state.packages.read().unwrap().clone();
     let what_ifs = state.what_ifs.lock().await.clone();
     let sessions = state.supervisor.list().await;
     Ok(Json(CapacityBody {
         hardware,
-        pins: map_reservations(&artifacts, &pins),
-        what_ifs: map_reservations(&artifacts, &what_ifs),
+        pins: map_reservations(&artifacts, &pins, &packages),
+        what_ifs: map_reservations(&artifacts, &what_ifs, &packages),
         sessions,
     }))
 }
@@ -245,26 +306,17 @@ async fn add_what_if(
     Json(shape): Json<SessionShape>,
 ) -> Result<Json<ReservationBody>, ApiError> {
     let store = state.store.lock().await;
-    let artifact = require_artifact(&store, &shape.artifact_id)?;
-    validate_n_ctx(&artifact, shape.n_ctx())?;
+    let resolved = resolve_serve(&state, &store, &shape, ResolveIntent::Reserve)?;
+    let estimate = resolved.estimate_bytes;
     let row = PinRow {
         id: Uuid::new_v4().to_string(),
-        artifact_id: shape.artifact_id.clone(),
-        n_ctx: shape.n_ctx(),
-        n_gpu_layers: shape.n_gpu_layers(),
-        n_parallel: shape.n_parallel(),
+        target: resolved.target.identity,
+        runtime_recipe: resolved.runtime_recipe,
+        serve_profile: resolved.serve_profile,
     };
-    let estimate = estimate_bytes(&artifact, row.n_ctx, row.n_parallel);
     drop(store);
     state.what_ifs.lock().await.push(row.clone());
-    Ok(Json(ReservationBody {
-        id: row.id,
-        artifact_id: row.artifact_id,
-        n_ctx: row.n_ctx,
-        n_gpu_layers: row.n_gpu_layers,
-        n_parallel: row.n_parallel,
-        estimate_bytes: estimate,
-    }))
+    Ok(Json(reservation_body(row, estimate)))
 }
 
 async fn clear_what_ifs(State(state): State<AppState>) -> StatusCode {
@@ -290,25 +342,16 @@ async fn add_pin(
     Json(shape): Json<SessionShape>,
 ) -> Result<Json<ReservationBody>, ApiError> {
     let store = state.store.lock().await;
-    let artifact = require_artifact(&store, &shape.artifact_id)?;
-    validate_n_ctx(&artifact, shape.n_ctx())?;
+    let resolved = resolve_serve(&state, &store, &shape, ResolveIntent::Reserve)?;
+    let estimate = resolved.estimate_bytes;
     let row = PinRow {
         id: Uuid::new_v4().to_string(),
-        artifact_id: shape.artifact_id.clone(),
-        n_ctx: shape.n_ctx(),
-        n_gpu_layers: shape.n_gpu_layers(),
-        n_parallel: shape.n_parallel(),
+        target: resolved.target.identity,
+        runtime_recipe: resolved.runtime_recipe,
+        serve_profile: resolved.serve_profile,
     };
     store.insert_pin(&row).map_err(ApiError::from)?;
-    let estimate = estimate_bytes(&artifact, row.n_ctx, row.n_parallel);
-    Ok(Json(ReservationBody {
-        id: row.id,
-        artifact_id: row.artifact_id,
-        n_ctx: row.n_ctx,
-        n_gpu_layers: row.n_gpu_layers,
-        n_parallel: row.n_parallel,
-        estimate_bytes: estimate,
-    }))
+    Ok(Json(reservation_body(row, estimate)))
 }
 
 async fn delete_pin(
@@ -332,26 +375,26 @@ async fn start_session(
     Json(shape): Json<SessionShape>,
 ) -> Result<Json<SessionView>, ApiError> {
     let store = state.store.lock().await;
-    let artifact = require_artifact(&store, &shape.artifact_id)?;
-    validate_n_ctx(&artifact, shape.n_ctx())?;
+    let resolved = resolve_serve(&state, &store, &shape, ResolveIntent::Launch)?;
     drop(store);
+    require_package_fit(&state, &resolved).await?;
     let log = state.paths.worker_log(&Uuid::new_v4().to_string());
-    let n_ctx = shape.n_ctx();
-    let n_gpu_layers = shape.n_gpu_layers();
-    let n_parallel = shape.n_parallel();
+    let target = resolved.target.identity.clone();
+    let runtime_recipe = resolved.runtime_recipe;
+    let serve_profile = resolved.serve_profile.clone();
     let result = state
         .supervisor
-        .start(&artifact, n_ctx, n_gpu_layers, n_parallel, log)
+        .start(&resolved.target, runtime_recipe, serve_profile.clone(), log)
         .await
         .map_err(|e| {
             tracing::warn!(
-                artifact_id = %shape.artifact_id,
+                target_id = %target.id(),
                 error = %e,
                 "session start failed"
             );
             ApiError::bad(e)
         });
-    persist_session_tuple(&state, &shape.artifact_id, n_ctx, n_gpu_layers, n_parallel).await;
+    persist_session_profile(&state, &target, &serve_profile).await;
     result.map(Json)
 }
 
@@ -380,21 +423,15 @@ async fn generate(
     State(state): State<AppState>,
     Json(body): Json<GenerateBody>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>> + Send>, ApiError> {
-    let n_ctx = body.n_ctx.unwrap_or(DEFAULT_N_CTX);
-    let n_gpu_layers = body.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS);
-    let n_parallel = body.n_parallel.unwrap_or(DEFAULT_N_PARALLEL);
     let messages = body.messages()?;
     let max_tokens = body.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
     let store = state.store.lock().await;
-    let artifact = require_artifact(&store, &body.artifact_id)?;
-    validate_n_ctx(&artifact, n_ctx)?;
-    if !artifact.kind.generate_supported() {
-        return Err(ApiError::bad(format!(
-            "Try is only for instruct artifacts, this one is {}",
-            artifact.kind.as_str()
-        )));
+    let resolved = resolve_serve(&state, &store, &body.session_shape(), ResolveIntent::Launch)?;
+    if let Some(error) = &resolved.generate_error {
+        return Err(ApiError::bad(error));
     }
     drop(store);
+    let n_ctx = resolved.serve_profile.context_length;
     let slot = state
         .generate_slot
         .clone()
@@ -407,24 +444,36 @@ async fn generate(
             .supervisor
             .get(id)
             .await
-            .filter(|s| s.status == SessionStatus::Loaded)
-            .ok_or_else(|| ApiError::bad("session is not loaded"))?
+            .filter(|session| {
+                session.status == SessionStatus::Loaded
+                    && session.target == resolved.target.identity
+                    && session.serve_profile == resolved.serve_profile
+            })
+            .ok_or_else(|| {
+                ApiError::bad("session is not loaded for the requested target and serve profile")
+            })?
     } else if let Some(existing) = state
         .supervisor
-        .find_loaded(&artifact.id, n_ctx, n_gpu_layers, n_parallel)
+        .find_loaded(&resolved.target.identity, &resolved.serve_profile)
         .await
     {
         existing
     } else {
         ephemeral = true;
+        require_package_fit(&state, &resolved).await?;
         let log = state.paths.worker_log(&Uuid::new_v4().to_string());
         state
             .supervisor
-            .start(&artifact, n_ctx, n_gpu_layers, n_parallel, log)
+            .start(
+                &resolved.target,
+                resolved.runtime_recipe,
+                resolved.serve_profile.clone(),
+                log,
+            )
             .await
             .map_err(|e| {
                 tracing::warn!(
-                    artifact_id = %body.artifact_id,
+                    target_id = %resolved.target.identity.id(),
                     error = %e,
                     "generate worker start failed"
                 );
@@ -443,7 +492,8 @@ async fn generate(
         .ok_or_else(|| ApiError::bad("worker has no endpoint"))?;
 
     let (cancel_tx, cancel_rx) = watch::channel(false);
-    let artifact_id = artifact.id.clone();
+    let target_id = resolved.target.identity.id().to_string();
+    let measurement_artifact_id = resolved.target.identity.artifact_id().map(str::to_string);
     let runtime = state.clone();
     let session_id = session.id.clone();
 
@@ -477,15 +527,16 @@ async fn generate(
                 } else {
                     runtime.supervisor.sample_resident(&session_id).await
                 };
-                let store = runtime.store.lock().await;
-                let _ = store.upsert_measurement(&MeasurementRow {
-                    artifact_id,
-                    throughput_tps: tps,
-                    peak_rss_bytes: peak,
-                    n_tokens: Some(outcome.n_tokens),
-                    generation_ms: Some(outcome.generation_ms),
-                });
-                drop(store);
+                if let Some(artifact_id) = measurement_artifact_id {
+                    let store = runtime.store.lock().await;
+                    let _ = store.upsert_measurement(&MeasurementRow {
+                        artifact_id,
+                        throughput_tps: tps,
+                        peak_rss_bytes: peak,
+                        n_tokens: Some(outcome.n_tokens),
+                        generation_ms: Some(outcome.generation_ms),
+                    });
+                }
                 let usage = outcome.usage.unwrap_or_default();
                 let done = GenerateDone {
                     prompt_tokens: usage.prompt_tokens,
@@ -498,7 +549,7 @@ async fn generate(
             Err(e) => {
                 if e != "client closed" {
                     tracing::warn!(
-                        artifact_id = %artifact_id,
+                        target_id = %target_id,
                         error = %e,
                         "generate failed"
                     );
@@ -520,24 +571,200 @@ async fn generate(
     Ok(sse)
 }
 
-fn map_reservations(artifacts: &[ArtifactRow], rows: &[PinRow]) -> Vec<ReservationBody> {
+fn map_reservations(
+    artifacts: &[ArtifactRow],
+    rows: &[PinRow],
+    packages: &[CatalogPackage],
+) -> Vec<ReservationBody> {
     rows.iter()
         .map(|row| {
-            let estimate = artifacts
-                .iter()
-                .find(|a| a.id == row.artifact_id)
-                .map(|a| estimate_bytes(a, row.n_ctx, row.n_parallel))
-                .unwrap_or(0);
-            ReservationBody {
-                id: row.id.clone(),
-                artifact_id: row.artifact_id.clone(),
-                n_ctx: row.n_ctx,
-                n_gpu_layers: row.n_gpu_layers,
-                n_parallel: row.n_parallel,
-                estimate_bytes: estimate,
-            }
+            let estimate = reservation_estimate_for_row(artifacts, row, packages);
+            reservation_body(row.clone(), estimate)
         })
         .collect()
+}
+
+fn reservation_estimate_for_row(
+    artifacts: &[ArtifactRow],
+    row: &PinRow,
+    packages: &[CatalogPackage],
+) -> u64 {
+    if let Some(package) = row
+        .target
+        .package_id()
+        .and_then(|id| catalog_package(packages, id))
+    {
+        return package.planner_hint.estimate_bytes;
+    }
+    artifacts
+        .iter()
+        .find(|artifact| Some(artifact.id.as_str()) == row.target.artifact_id())
+        .map(|artifact| reservation_estimate(artifact, row))
+        .unwrap_or(0)
+}
+
+fn reservation_body(row: PinRow, estimate_bytes: u64) -> ReservationBody {
+    ReservationBody {
+        id: row.id,
+        target: row.target,
+        runtime_recipe: row.runtime_recipe,
+        serve_profile: row.serve_profile,
+        estimate_bytes,
+    }
+}
+
+fn reservation_estimate(artifact: &ArtifactRow, row: &PinRow) -> u64 {
+    let parallel = row
+        .serve_profile
+        .llama_cpp_settings()
+        .map(|settings| settings.parallel)
+        .unwrap_or(DEFAULT_N_PARALLEL);
+    estimate_bytes(artifact, row.serve_profile.context_length, parallel)
+}
+
+struct ResolvedServe {
+    target: ServeTarget,
+    runtime_recipe: RuntimeRecipe,
+    serve_profile: ServeProfile,
+    estimate_bytes: u64,
+    generate_error: Option<String>,
+}
+
+async fn require_package_fit(state: &AppState, resolved: &ResolvedServe) -> Result<(), ApiError> {
+    if resolved.target.identity.package_id().is_none() {
+        return Ok(());
+    }
+    let has_matching_pin = state
+        .store
+        .lock()
+        .await
+        .pins()
+        .map_err(ApiError::from)?
+        .iter()
+        .any(|pin| {
+            pin.target == resolved.target.identity && pin.serve_profile == resolved.serve_profile
+        });
+    if has_matching_pin {
+        return Ok(());
+    }
+    let headroom = hardware_body(state).await?.headroom_bytes;
+    if resolved.estimate_bytes > headroom {
+        return Err(ApiError::bad(
+            "model package does not fit the stable budget",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResolveIntent {
+    Reserve,
+    Launch,
+}
+
+fn resolve_serve(
+    state: &AppState,
+    store: &Store,
+    shape: &SessionShape,
+    intent: ResolveIntent,
+) -> Result<ResolvedServe, ApiError> {
+    let (target, runtime_recipe, artifact) = match (&shape.package_id, &shape.artifact_id) {
+        (Some(_), Some(_)) => {
+            return Err(ApiError::bad(
+                "specify exactly one of package_id or artifact_id",
+            ));
+        }
+        (Some(package_id), None) => {
+            let packages = state.packages.read().unwrap();
+            let package = catalog_package(&packages, package_id)
+                .ok_or_else(|| ApiError::not_found("model package not found"))?;
+            if !package.required_files_match_scan() {
+                return Err(ApiError::bad("model package is missing required files"));
+            }
+            let artifact = if package.runtime_recipe.requires_artifact() {
+                let artifact_id = package
+                    .primary_artifact_id()
+                    .ok_or_else(|| ApiError::bad("model package has no servable files"))?;
+                Some(require_artifact(store, &artifact_id)?)
+            } else {
+                None
+            };
+            let target = ServeTarget {
+                identity: TargetIdentity::Package {
+                    id: package.id.into(),
+                    artifact_id: artifact.as_ref().map(|artifact| artifact.id.clone()),
+                },
+                path: artifact
+                    .as_ref()
+                    .map(|artifact| artifact.path.clone())
+                    .unwrap_or_else(|| package.package_dir.clone()),
+            };
+            (target, package.runtime_recipe, artifact)
+        }
+        (None, Some(artifact_id)) => {
+            let artifact = require_artifact(store, artifact_id)?;
+            (
+                artifact_target(&artifact),
+                RuntimeRecipe::LlamaCpp,
+                Some(artifact),
+            )
+        }
+        (None, None) => {
+            return Err(ApiError::bad(
+                "specify exactly one of package_id or artifact_id",
+            ));
+        }
+    };
+    let serve_profile = shape.profile(runtime_recipe).map_err(ApiError::bad)?;
+    if intent == ResolveIntent::Launch
+        && runtime_recipe == RuntimeRecipe::TransformersExternal
+        && !runtime_available(state, runtime_recipe)
+    {
+        return Err(ApiError::bad(
+            "model package runtime is not available (set QIT_TRANSFORMERS_WORKER_PATH)",
+        ));
+    }
+    if let Some(artifact) = &artifact {
+        validate_n_ctx(artifact, serve_profile.context_length)?;
+    }
+    let estimate_bytes = if let Some(package) = target
+        .identity
+        .package_id()
+        .and_then(|id| catalog_package(&state.packages.read().unwrap(), id))
+    {
+        package.planner_hint.estimate_bytes
+    } else {
+        let artifact = artifact
+            .as_ref()
+            .ok_or_else(|| ApiError::bad("serve target has no capacity estimate"))?;
+        let parallel = serve_profile
+            .llama_cpp_settings()
+            .map(|settings| settings.parallel)
+            .unwrap_or(DEFAULT_N_PARALLEL);
+        estimate_bytes(artifact, serve_profile.context_length, parallel)
+    };
+    let generate_error = artifact.as_ref().and_then(|artifact| {
+        (!artifact.kind.generate_supported()).then(|| {
+            format!(
+                "Try is only for instruct artifacts, this one is {}",
+                artifact.kind.as_str()
+            )
+        })
+    });
+    Ok(ResolvedServe {
+        target,
+        runtime_recipe,
+        serve_profile,
+        estimate_bytes,
+        generate_error,
+    })
+}
+
+fn artifact_target(artifact: &ArtifactRow) -> ServeTarget {
+    ServeTarget {
+        identity: TargetIdentity::Artifact(artifact.id.clone()),
+        path: artifact.path.clone(),
+    }
 }
 
 fn require_artifact(store: &Store, id: &str) -> Result<ArtifactRow, ApiError> {
@@ -562,6 +789,8 @@ pub async fn rescan(state: &AppState) -> Result<(), ApiError> {
     let rows = scan_library(&state.paths.models_dir);
     let store = state.store.lock().await;
     store.replace_artifacts(&rows).map_err(ApiError::from)?;
+    drop(store);
+    *state.packages.write().unwrap() = catalog_packages(&state.paths.models_dir);
     Ok(())
 }
 
@@ -592,7 +821,58 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
             generate_supported: artifact.kind.generate_supported(),
         });
     }
-    Ok(CatalogBody { artifacts: list })
+    let packages = state
+        .packages
+        .read()
+        .unwrap()
+        .clone()
+        .into_iter()
+        .map(|package| {
+            let fits = package.planner_hint.estimate_bytes <= hw.headroom_bytes;
+            let readiness_reason = if !package.required_files_match_scan() {
+                Some(ReadinessReason::MissingRequiredFiles)
+            } else if !fits {
+                Some(ReadinessReason::InsufficientMemory)
+            } else if !runtime_available(state, package.runtime_recipe) {
+                Some(ReadinessReason::RuntimeMissing)
+            } else {
+                None
+            };
+            PackageBody {
+                id: package.id.into(),
+                family: package.family.into(),
+                name: package.name.into(),
+                format: package.format.as_str().into(),
+                estimate_bytes: package.planner_hint.estimate_bytes,
+                estimate_source: package.planner_hint.source.into(),
+                estimate_confidence: package.planner_hint.confidence.into(),
+                runtime_recipe: package.runtime_recipe.as_str().into(),
+                capabilities: PackageCapabilitiesBody {
+                    inputs: package.capabilities.inputs,
+                    outputs: package.capabilities.outputs,
+                    tasks: package.capabilities.tasks,
+                },
+                files: package
+                    .required_files
+                    .into_iter()
+                    .map(|file| PackageFileBody {
+                        path: file.path,
+                        role: file.role.into(),
+                        bytes: file.bytes,
+                        sha256: file.sha256,
+                        source: file.source.into(),
+                    })
+                    .collect(),
+                fits,
+                ready: readiness_reason.is_none(),
+                readiness_reason,
+            }
+        })
+        .collect();
+    Ok(CatalogBody {
+        artifacts: list,
+        packages,
+    })
 }
 
 #[derive(Serialize)]
@@ -684,30 +964,30 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
     let artifacts = store.artifacts().map_err(ApiError::from)?;
     let pins = store.pins().map_err(ApiError::from)?;
     drop(store);
+    let packages = state.packages.read().unwrap().clone();
     let what_ifs = state.what_ifs.lock().await.clone();
     let sessions = state.supervisor.list().await;
     let mut used = 0u64;
     for row in pins.iter().chain(what_ifs.iter()) {
-        if let Some(a) = artifacts.iter().find(|a| a.id == row.artifact_id) {
-            used = used.saturating_add(estimate_bytes(a, row.n_ctx, row.n_parallel));
-        }
+        used = used.saturating_add(reservation_estimate_for_row(&artifacts, row, &packages));
     }
     for session in sessions
         .iter()
         .filter(|s| matches!(s.status, SessionStatus::Loaded | SessionStatus::Starting))
     {
-        let already_pinned = pins.iter().any(|p| {
-            p.artifact_id == session.artifact_id
-                && p.n_ctx == session.n_ctx
-                && p.n_gpu_layers == session.n_gpu_layers
-                && p.n_parallel == session.n_parallel
-        });
+        let already_pinned = pins
+            .iter()
+            .any(|p| p.target == session.target && p.serve_profile == session.serve_profile);
         if already_pinned {
             continue;
         }
-        if let Some(a) = artifacts.iter().find(|a| a.id == session.artifact_id) {
-            used = used.saturating_add(estimate_bytes(a, session.n_ctx, session.n_parallel));
-        }
+        let row = PinRow {
+            id: session.id.clone(),
+            target: session.target.clone(),
+            runtime_recipe: session.runtime_recipe,
+            serve_profile: session.serve_profile.clone(),
+        };
+        used = used.saturating_add(reservation_estimate_for_row(&artifacts, &row, &packages));
     }
     Ok(HardwareBody {
         device_class: snap.device_class,
@@ -722,6 +1002,34 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
         loaded_rss_bytes: state.supervisor.loaded_rss_bytes().await,
         worker_path: state.worker_path.as_ref().map(|p| p.display().to_string()),
     })
+}
+
+fn runtime_available(state: &AppState, runtime_recipe: RuntimeRecipe) -> bool {
+    match runtime_recipe {
+        RuntimeRecipe::LlamaCpp => state.worker_path.as_deref().is_some_and(executable_file),
+        RuntimeRecipe::TransformersExternal => state
+            .transformers_worker_path
+            .as_deref()
+            .is_some_and(executable_file),
+    }
+}
+
+fn executable_file(path: &FilePath) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 pub struct ApiError {
@@ -785,10 +1093,9 @@ impl std::fmt::Debug for ApiError {
 async fn persist_session(state: &AppState, view: &SessionView) {
     let row = SessionRow {
         id: view.id.clone(),
-        artifact_id: view.artifact_id.clone(),
-        n_ctx: view.n_ctx,
-        n_gpu_layers: view.n_gpu_layers,
-        n_parallel: view.n_parallel,
+        target: view.target.clone(),
+        runtime_recipe: view.runtime_recipe,
+        serve_profile: view.serve_profile.clone(),
         status: session_status_str(view.status).to_string(),
         last_error: view.last_error.clone(),
         log_path: view.log_path.clone(),
@@ -797,16 +1104,14 @@ async fn persist_session(state: &AppState, view: &SessionView) {
     let _ = store.upsert_session(&row);
 }
 
-async fn persist_session_tuple(
+async fn persist_session_profile(
     state: &AppState,
-    artifact_id: &str,
-    n_ctx: u32,
-    n_gpu_layers: i32,
-    n_parallel: u32,
+    target: &TargetIdentity,
+    serve_profile: &ServeProfile,
 ) {
     if let Some(view) = state
         .supervisor
-        .find_by_tuple(artifact_id, n_ctx, n_gpu_layers, n_parallel)
+        .find_by_profile(target, serve_profile)
         .await
     {
         persist_session(state, &view).await;

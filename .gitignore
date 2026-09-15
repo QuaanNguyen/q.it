@@ -1,11 +1,4 @@
-.venv/
-venv/
-__pycache__/
-*.pyc
 .DS_Store
-.ruff_cache/
-.pytest_cache/
-.mypy_cache/
 /target
 /qit-web/node_modules
 /qit-web/dist

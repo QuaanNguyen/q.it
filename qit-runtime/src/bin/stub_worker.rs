@@ -16,7 +16,8 @@ async fn main() {
     let mut delay_ms = 0u64;
     let mut health_warmup_ms = 0u64;
     let mut stream = StreamShape::default();
-    let mut args = std::env::args().skip(1);
+    let command_args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args = command_args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--port" => port = args.next().and_then(|v| v.parse().ok()).unwrap_or(0),
@@ -42,6 +43,10 @@ async fn main() {
     if delay_ms > 0 {
         tokio::time::sleep(Duration::from_millis(delay_ms)).await;
     }
+    println!(
+        "stub worker args {}",
+        serde_json::to_string(&command_args).unwrap()
+    );
     println!("stub worker pid {}", std::process::id());
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = TcpListener::bind(addr).await.expect("bind stub worker");
