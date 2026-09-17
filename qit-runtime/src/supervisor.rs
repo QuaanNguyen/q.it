@@ -615,6 +615,7 @@ pub struct GenerateOutcome {
     pub n_tokens: u32,
     pub generation_ms: f64,
     pub usage: Option<Usage>,
+    pub cancelled: bool,
 }
 
 enum WorkerFrame {
@@ -653,9 +654,11 @@ where
     let t0 = std::time::Instant::now();
     let mut n_tokens = 0u32;
     let mut usage = None;
+    let mut cancelled = false;
     let mut buf = bytes::BytesMut::new();
     while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
         if *cancel.borrow() {
+            cancelled = true;
             break;
         }
         buf.extend_from_slice(&chunk);
@@ -675,6 +678,7 @@ where
         n_tokens,
         generation_ms: t0.elapsed().as_secs_f64() * 1000.0,
         usage,
+        cancelled,
     })
 }
 
@@ -712,4 +716,21 @@ fn parse_openai_sse(frame: &[u8]) -> WorkerFrame {
         return WorkerFrame::Other;
     }
     WorkerFrame::Other
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_openai_sse, WorkerFrame};
+
+    #[test]
+    fn parses_text_delta_without_treating_empty_delta_as_text() {
+        assert!(matches!(
+            parse_openai_sse(b"data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\n"),
+            WorkerFrame::Token(value) if value == "hello"
+        ));
+        assert!(matches!(
+            parse_openai_sse(b"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":0}}\n\n"),
+            WorkerFrame::Usage(value) if value.prompt_tokens == 4 && value.completion_tokens == 0
+        ));
+    }
 }

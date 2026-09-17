@@ -512,6 +512,14 @@ async fn generate(
         .await;
         match result {
             Ok(outcome) => {
+                if outcome.cancelled {
+                    if ephemeral {
+                        let _ = runtime.supervisor.stop(&session_id).await;
+                    }
+                    drop(cancel_tx);
+                    drop(slot);
+                    return;
+                }
                 let tps = if outcome.generation_ms > 0.0 {
                     Some((outcome.n_tokens as f64) / (outcome.generation_ms / 1000.0))
                 } else {

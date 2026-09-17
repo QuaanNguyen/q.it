@@ -1,8 +1,8 @@
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-
-use sha2::{Digest, Sha256};
 
 use crate::serve::RuntimeRecipe;
 
@@ -94,10 +94,9 @@ pub fn catalog_package(packages: &[CatalogPackage], id: &str) -> Option<CatalogP
 }
 
 pub fn catalog_packages(models_dir: &Path) -> Vec<CatalogPackage> {
-    vec![
-        known_gguf_package(models_dir),
-        known_transformers_package(models_dir),
-    ]
+    let mut packages = vec![known_gguf_package(models_dir)];
+    packages.extend(discover_transformers_packages(models_dir));
+    packages
 }
 
 fn known_gguf_package(models_dir: &Path) -> CatalogPackage {
@@ -123,17 +122,77 @@ fn known_gguf_package(models_dir: &Path) -> CatalogPackage {
     }
 }
 
-fn known_transformers_package(models_dir: &Path) -> CatalogPackage {
-    let package_dir = models_dir
+fn discover_transformers_packages(models_dir: &Path) -> Vec<CatalogPackage> {
+    let root = models_dir
         .parent()
         .unwrap_or(models_dir)
-        .join("transformers")
-        .join("Qwen")
-        .join("Qwen2.5-0.5B-Instruct");
+        .join("transformers");
+    let Ok(orgs) = std::fs::read_dir(&root) else {
+        return Vec::new();
+    };
+    orgs.flatten()
+        .filter(|e| e.path().is_dir())
+        .flat_map(|org| {
+            let Ok(models) = std::fs::read_dir(org.path()) else {
+                return Vec::new();
+            };
+            models
+                .flatten()
+                .filter_map(|entry| {
+                    transformers_package(&org.file_name().to_string_lossy(), &entry.path())
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn transformers_package(org: &str, package_dir: &Path) -> Option<CatalogPackage> {
+    let config: Value =
+        serde_json::from_slice(&std::fs::read(package_dir.join("config.json")).ok()?).ok()?;
+    let model_type = config["model_type"].as_str()?;
+    let (family, name) = match model_type {
+        "qwen2" if package_dir.file_name()?.to_string_lossy() == "Qwen2.5-0.5B-Instruct" => {
+            ("Qwen 2.5", "Qwen2.5 0.5B Instruct")
+        }
+        "qwen2" => return None,
+        "qwen3_5" => ("Qwen 3.5", "Qwen3.5 0.8B"),
+        "gemma4" => ("Gemma 4", "Gemma 4 E2B it QAT Mobile"),
+        _ => return None,
+    };
+    if !package_dir.join("tokenizer.json").is_file()
+        || !package_dir.join("tokenizer_config.json").is_file()
+        || !package_dir.join("README.md").is_file()
+    {
+        return None;
+    }
+    let mut required_files = vec![
+        local_file(package_dir, "config.json", "config"),
+        local_file(package_dir, "tokenizer.json", "tokenizer"),
+        local_file(package_dir, "tokenizer_config.json", "tokenizer"),
+        local_file(package_dir, "README.md", "model_card"),
+    ];
+    for entry in std::fs::read_dir(package_dir).ok()?.flatten() {
+        let file = entry.file_name().to_string_lossy().to_string();
+        if file.ends_with(".safetensors") || file == "model.safetensors.index.json" {
+            required_files.push(local_file(package_dir, &file, "weights"));
+        }
+    }
+    if let Some(index) = std::fs::read(package_dir.join("model.safetensors.index.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+    {
+        if let Some(weights) = index["weight_map"].as_object() {
+            for file in weights.values().filter_map(Value::as_str) {
+                if !required_files.iter().any(|item| item.path == file) {
+                    required_files.push(local_file(package_dir, file, "weights"));
+                }
+            }
+        }
+    }
     CatalogPackage {
-        id: "Qwen/Qwen2.5-0.5B-Instruct".into(),
-        family: "Qwen 2.5".into(),
-        name: "Qwen2.5 0.5B Instruct".into(),
+        id: format!("{org}/{}", package_dir.file_name()?.to_string_lossy()),
+        family: family.into(),
+        name: name.into(),
         format: PackageFormat::Transformers,
         planner_hint: PlannerHint {
             estimate_bytes: 1_200_000_000,
@@ -142,22 +201,11 @@ fn known_transformers_package(models_dir: &Path) -> CatalogPackage {
         },
         capabilities: text_chat_capabilities(),
         runtime_recipe: RuntimeRecipe::TransformersExternal,
-        package_dir: package_dir.clone(),
+        package_dir: package_dir.to_path_buf(),
         artifact_id: None,
-        required_files: vec![
-            local_file(&package_dir, "config.json", "config"),
-            local_file(&package_dir, "tokenizer.json", "tokenizer"),
-            local_file(&package_dir, "tokenizer_config.json", "tokenizer"),
-            local_file(
-                &package_dir,
-                "model.safetensors.index.json",
-                "weights_index",
-            ),
-            local_file(&package_dir, "model-00001-of-00002.safetensors", "weights"),
-            local_file(&package_dir, "model-00002-of-00002.safetensors", "weights"),
-            local_file(&package_dir, "README.md", "model_card"),
-        ],
+        required_files,
     }
+    .into()
 }
 
 fn local_file(directory: &Path, path: &str, role: &'static str) -> PackageFile {
