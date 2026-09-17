@@ -20,6 +20,12 @@ pub enum Error {
         #[source]
         source: io::Error,
     },
+    #[error("qit database {path} is not writable: {source}; set QIT_HOME to a writable directory")]
+    Database {
+        path: PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error("{0}")]

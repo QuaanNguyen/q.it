@@ -52,7 +52,10 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
         path: paths.home.clone(),
         source,
     })?;
-    let store = Store::open(&paths.db_path)?;
+    let store = Store::open(&paths.db_path).map_err(|source| Error::Database {
+        path: paths.db_path.clone(),
+        source,
+    })?;
     store.reset_sessions_on_restart()?;
     let session_rows = store.sessions()?;
     let supervisor = Arc::new(Supervisor::new(config.worker_launcher.clone()));
