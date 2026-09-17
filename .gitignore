@@ -4,3 +4,4 @@
 /qit-web/dist
 /qit-web/tsconfig.tsbuildinfo
 .scratch/
+/.qit-*/
