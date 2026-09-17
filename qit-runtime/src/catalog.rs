@@ -1,6 +1,4 @@
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -212,28 +210,14 @@ fn local_file(directory: &Path, path: &str, role: &'static str) -> PackageFile {
     let file = directory.join(path);
     let metadata = std::fs::metadata(&file).ok();
     let bytes = metadata.as_ref().map(|metadata| metadata.len());
-    let sha256 = bytes.and_then(|_| sha256_file(&file));
     let modified = metadata.and_then(|metadata| metadata.modified().ok());
     PackageFile {
         path: path.into(),
         role,
         bytes,
-        sha256,
+        sha256: None,
         source: "local_scan",
         modified,
-    }
-}
-
-fn sha256_file(path: &Path) -> Option<String> {
-    let mut file = std::fs::File::open(path).ok()?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let bytes = file.read(&mut buffer).ok()?;
-        if bytes == 0 {
-            return Some(hex::encode(hasher.finalize()));
-        }
-        hasher.update(&buffer[..bytes]);
     }
 }
 
@@ -242,5 +226,20 @@ fn text_chat_capabilities() -> PackageCapabilities {
         inputs: vec!["text".into()],
         outputs: vec!["text".into()],
         tasks: vec!["chat".into()],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::local_file;
+
+    #[test]
+    fn local_file_metadata_does_not_hash_contents_during_cataloging() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("weights.safetensors");
+        std::fs::write(&path, "weights").unwrap();
+        let file = local_file(temp.path(), "weights.safetensors", "weights");
+        assert_eq!(file.bytes, Some(7));
+        assert_eq!(file.sha256, None);
     }
 }

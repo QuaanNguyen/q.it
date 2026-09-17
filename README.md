@@ -12,7 +12,7 @@ Supported Transformers packages are discovered below the sibling `transformers` 
 With `QIT_MODELS_DIR=$HOME/models/gguf`, q.it looks below `$HOME/models/transformers` for supported local Qwen 3.5 and Gemma 4 package layouts.
 Each package must have its config, tokenizer metadata, model card, and safetensors weights.
 Other local checkpoint directories are not cataloged or offered for serving until q.it owns a tested package recipe for them.
-The catalog reports each package's file roles, sizes, SHA-256 hashes, source provenance, capabilities, fit, and one readiness reason.
+The catalog reports each package's file roles, sizes, source provenance, capabilities, fit, and one readiness reason.
 
 The verified host platform is macOS on Apple Silicon.
 Other platforms report unknown hardware capacity and are not a supported local-serving target.
