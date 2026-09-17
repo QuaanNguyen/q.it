@@ -1731,6 +1731,46 @@ async fn generate_accepts_messages_and_reports_usage_on_done() {
 }
 
 #[tokio::test]
+async fn repeated_inference_turns_preserve_text_and_usage_accounting() {
+    let h = Harness::start(probe_with_free(None), vec!["--echo-usage".into()]).await;
+    write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
+    h.post_json("/api/scan", serde_json::json!({})).await;
+
+    let prompts = ["hello", "say something", "who are you", "hello"];
+    let mut prompt_tokens = Vec::new();
+    for (index, prompt) in prompts.iter().enumerate() {
+        let body = h
+            .post_json(
+                "/api/generate",
+                serde_json::json!({
+                    "artifact_id": "org/small.gguf",
+                    "n_ctx": 4096,
+                    "max_tokens": 7,
+                    "messages": [{"role": "user", "content": prompt}]
+                }),
+            )
+            .await
+            .text()
+            .await
+            .unwrap();
+        let events = sse_events(&body);
+        let tokens: String = events
+            .iter()
+            .filter(|(event, _)| event == "token")
+            .map(|(_, data)| data.as_str())
+            .collect();
+        assert_eq!(tokens, "hello world", "turn {index}: {body}");
+        let (event, data) = events.last().expect("completed inference event");
+        assert_eq!(event, "done", "turn {index}: {body}");
+        let done: Value = serde_json::from_str(data).unwrap();
+        assert_eq!(done["completion_tokens"], 2, "turn {index}: {done}");
+        prompt_tokens.push(done["prompt_tokens"].as_u64().unwrap());
+    }
+    assert!(prompt_tokens.iter().all(|tokens| *tokens == 107));
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
 async fn generate_without_prompt_or_messages_is_rejected() {
     let h = Harness::start(probe_with_free(None), vec![]).await;
     write_artifact(&h.models, "org", "small.gguf", 100_000, llm_meta());
