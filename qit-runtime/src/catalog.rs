@@ -92,32 +92,7 @@ pub fn catalog_package(packages: &[CatalogPackage], id: &str) -> Option<CatalogP
 }
 
 pub fn catalog_packages(models_dir: &Path) -> Vec<CatalogPackage> {
-    let mut packages = vec![known_gguf_package(models_dir)];
-    packages.extend(discover_transformers_packages(models_dir));
-    packages
-}
-
-fn known_gguf_package(models_dir: &Path) -> CatalogPackage {
-    CatalogPackage {
-        id: "qit/qwen2.5-0.5b-instruct-q4_k_m".into(),
-        family: "Qwen 2.5".into(),
-        name: "Qwen2.5 0.5B Instruct Q4_K_M".into(),
-        format: PackageFormat::Gguf,
-        planner_hint: PlannerHint {
-            estimate_bytes: 850_000_000,
-            source: "qit_catalog",
-            confidence: "high",
-        },
-        capabilities: text_chat_capabilities(),
-        runtime_recipe: RuntimeRecipe::LlamaCpp,
-        package_dir: models_dir.join("Qwen"),
-        artifact_id: Some("Qwen/qwen2.5-0.5b-instruct-q4_k_m.gguf".into()),
-        required_files: vec![local_file(
-            &models_dir.join("Qwen"),
-            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-            "weights",
-        )],
-    }
+    discover_transformers_packages(models_dir)
 }
 
 fn discover_transformers_packages(models_dir: &Path) -> Vec<CatalogPackage> {
@@ -149,10 +124,6 @@ fn transformers_package(org: &str, package_dir: &Path) -> Option<CatalogPackage>
         serde_json::from_slice(&std::fs::read(package_dir.join("config.json")).ok()?).ok()?;
     let model_type = config["model_type"].as_str()?;
     let (family, name) = match model_type {
-        "qwen2" if package_dir.file_name()?.to_string_lossy() == "Qwen2.5-0.5B-Instruct" => {
-            ("Qwen 2.5", "Qwen2.5 0.5B Instruct")
-        }
-        "qwen2" => return None,
         "qwen3_5" => ("Qwen 3.5", "Qwen3.5 0.8B"),
         "gemma4" => ("Gemma 4", "Gemma 4 E2B it QAT Mobile"),
         _ => return None,

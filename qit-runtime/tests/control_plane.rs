@@ -42,14 +42,14 @@ async fn package_target_migration_removes_fabricated_artifact_identity() {
             UNIQUE(target_id, serve_profile_json)
         );
         INSERT INTO pins VALUES (
-            'pin', 'Qwen/Qwen2.5-0.5B-Instruct', 'Qwen/Qwen2.5-0.5B-Instruct',
-            'Qwen/Qwen2.5-0.5B-Instruct', 'transformers_external',
+            'pin', 'Qwen/Qwen3.5-0.8B', 'Qwen/Qwen3.5-0.8B',
+            'Qwen/Qwen3.5-0.8B', 'transformers_external',
             '{"context_length":4096,"runtime_settings":{}}'
         );
         INSERT INTO sessions VALUES (
-            'session', 'qit/qwen2.5-0.5b-instruct-q4_k_m',
-            'Qwen/qwen2.5-0.5b-instruct-q4_k_m.gguf',
-            'qit/qwen2.5-0.5b-instruct-q4_k_m', 'llama_cpp',
+            'session', 'qit/Qwen3.5-0.8B',
+            'Qwen/Qwen3.5-0.8B.gguf',
+            'qit/Qwen3.5-0.8B', 'llama_cpp',
             '{"context_length":4096,"runtime_settings":{"gpu_layers":7,"parallel":2}}',
             'not_loaded', NULL, NULL
         );
@@ -78,16 +78,13 @@ async fn package_target_migration_removes_fabricated_artifact_identity() {
         .await
         .unwrap();
     let pin = &capacity["pins"][0];
-    assert_eq!(pin["target_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert_eq!(pin["target_id"], "Qwen/Qwen3.5-0.8B");
     assert!(pin.get("artifact_id").is_none(), "{pin}");
-    assert_eq!(pin["package_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert_eq!(pin["package_id"], "Qwen/Qwen3.5-0.8B");
     let session = &capacity["sessions"][0];
-    assert_eq!(session["target_id"], "qit/qwen2.5-0.5b-instruct-q4_k_m");
-    assert_eq!(
-        session["artifact_id"],
-        "Qwen/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-    );
-    assert_eq!(session["package_id"], "qit/qwen2.5-0.5b-instruct-q4_k_m");
+    assert_eq!(session["target_id"], "qit/Qwen3.5-0.8B");
+    assert_eq!(session["artifact_id"], "Qwen/Qwen3.5-0.8B.gguf");
+    assert_eq!(session["package_id"], "qit/Qwen3.5-0.8B");
     listening.shutdown().await;
 }
 
@@ -314,10 +311,10 @@ fn write_transformers_package(models: &std::path::Path) -> PathBuf {
         .unwrap()
         .join("transformers")
         .join("Qwen")
-        .join("Qwen2.5-0.5B-Instruct");
+        .join("Qwen3.5-0.8B");
     std::fs::create_dir_all(&package).unwrap();
     for (name, contents) in [
-        ("config.json", r#"{"model_type":"qwen2"}"#),
+        ("config.json", r#"{"model_type":"qwen3_5"}"#),
         ("tokenizer.json", r#"{"version":"1.0"}"#),
         ("tokenizer_config.json", r#"{"model_max_length":32768}"#),
         (
@@ -326,7 +323,7 @@ fn write_transformers_package(models: &std::path::Path) -> PathBuf {
         ),
         ("model-00001-of-00002.safetensors", "weights-1"),
         ("model-00002-of-00002.safetensors", "weights-2"),
-        ("README.md", "# Qwen2.5 0.5B Instruct"),
+        ("README.md", "# Qwen3.5 0.8B"),
     ] {
         std::fs::write(package.join(name), contents).unwrap();
     }
@@ -477,37 +474,6 @@ async fn stable_budget_ignores_free_ram() {
 }
 
 #[tokio::test]
-async fn owned_package_is_visible_offline_with_missing_required_files() {
-    let h = Harness::start(
-        HardwareSnapshot {
-            device_class: "apple_silicon".into(),
-            chip: "test-chip".into(),
-            unified_memory_bytes: 2_000_000_000,
-            metal_recommended_working_set_bytes: Some(1_000_000_000),
-            memory_pressure: None,
-            free_ram_bytes: Some(1),
-        },
-        vec![],
-    )
-    .await;
-    let catalog = h.json("/api/catalog").await;
-    let packages = catalog["packages"].as_array().unwrap();
-    let package = packages
-        .iter()
-        .find(|package| package["id"] == "qit/qwen2.5-0.5b-instruct-q4_k_m")
-        .unwrap();
-    assert_eq!(package["id"], "qit/qwen2.5-0.5b-instruct-q4_k_m");
-    assert_eq!(package["family"], "Qwen 2.5");
-    assert_eq!(package["name"], "Qwen2.5 0.5B Instruct Q4_K_M");
-    assert_eq!(package["format"], "gguf");
-    assert_eq!(package["fits"], true);
-    assert_eq!(package["ready"], false);
-    assert_eq!(package["readiness_reason"], "missing_required_files");
-    assert!(package["estimate_bytes"].as_u64().unwrap() > 1);
-    h.listening.shutdown().await;
-}
-
-#[tokio::test]
 async fn complete_local_transformers_package_reports_runtime_missing() {
     let h = Harness::start(
         HardwareSnapshot {
@@ -533,7 +499,7 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
         .unwrap();
     assert_eq!(
         incomplete_package["readiness_reason"],
@@ -554,10 +520,10 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
         .unwrap();
-    assert_eq!(package["id"], "Qwen/Qwen2.5-0.5B-Instruct");
-    assert_eq!(package["family"], "Qwen 2.5");
+    assert_eq!(package["id"], "Qwen/Qwen3.5-0.8B");
+    assert_eq!(package["family"], "Qwen 3.5");
     assert_eq!(package["format"], "transformers");
     assert_eq!(package["estimate_bytes"], 1_200_000_000_u64);
     assert_eq!(package["estimate_source"], "qit_catalog");
@@ -569,7 +535,7 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
     let pin = h
         .post_json(
             "/api/pins",
-            serde_json::json!({"package_id": "Qwen/Qwen2.5-0.5B-Instruct"}),
+            serde_json::json!({"package_id": "Qwen/Qwen3.5-0.8B"}),
         )
         .await;
     assert_eq!(pin.status(), 200);
@@ -727,7 +693,7 @@ async fn nonexistent_transformers_worker_keeps_package_not_ready() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
         .unwrap();
     assert_eq!(package["ready"], false, "{package}");
     assert_eq!(package["readiness_reason"], "runtime_missing", "{package}");
@@ -761,49 +727,10 @@ async fn changed_transformers_package_is_not_ready_after_scan() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
         .unwrap();
     assert_eq!(package["ready"], false, "{package}");
     assert_eq!(package["readiness_reason"], "missing_required_files");
-    h.listening.shutdown().await;
-}
-
-#[tokio::test]
-async fn nonexistent_gguf_worker_keeps_package_not_ready() {
-    let h = Harness::start_with(
-        HardwareSnapshot {
-            device_class: "apple_silicon".into(),
-            chip: "test-chip".into(),
-            unified_memory_bytes: 2_000_000_000,
-            metal_recommended_working_set_bytes: Some(1_000_000_000),
-            memory_pressure: None,
-            free_ram_bytes: None,
-        },
-        stub_launcher(),
-        Some(PathBuf::from("/missing/llama-server")),
-    )
-    .await;
-    write_artifact(
-        &h.models,
-        "Qwen",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        100_000,
-        llm_meta(),
-    );
-    let catalog = h
-        .post_json("/api/scan", serde_json::json!({}))
-        .await
-        .json::<Value>()
-        .await
-        .unwrap();
-    let package = catalog["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|package| package["id"] == "qit/qwen2.5-0.5b-instruct-q4_k_m")
-        .unwrap();
-    assert_eq!(package["ready"], false, "{package}");
-    assert_eq!(package["readiness_reason"], "runtime_missing");
     h.listening.shutdown().await;
 }
 
@@ -836,7 +763,7 @@ async fn transformers_package_launches_after_health_proxies_chat_and_stops() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
         .unwrap();
     assert_eq!(package["ready"], true, "{package}");
 
@@ -851,7 +778,7 @@ async fn transformers_package_launches_after_health_proxies_chat_and_stops() {
         client
             .post(start_url)
             .json(&serde_json::json!({
-                "package_id": "Qwen/Qwen2.5-0.5B-Instruct",
+                "package_id": "Qwen/Qwen3.5-0.8B",
                 "serve_profile": start_profile
             }))
             .send()
@@ -872,9 +799,9 @@ async fn transformers_package_launches_after_health_proxies_chat_and_stops() {
     assert_eq!(started.status(), 200);
     let started: Value = started.json().await.unwrap();
     assert_eq!(started["status"], "loaded");
-    assert_eq!(started["target_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert_eq!(started["target_id"], "Qwen/Qwen3.5-0.8B");
     assert!(started.get("artifact_id").is_none(), "{started}");
-    assert_eq!(started["package_id"], "Qwen/Qwen2.5-0.5B-Instruct");
+    assert_eq!(started["package_id"], "Qwen/Qwen3.5-0.8B");
     assert_eq!(started["runtime_recipe"], "transformers_external");
     assert_eq!(started["serve_profile"], serve_profile);
     assert_eq!(h.json("/api/hardware").await["headroom_bytes"], 300_000_000);
@@ -891,7 +818,7 @@ async fn transformers_package_launches_after_health_proxies_chat_and_stops() {
     let generated = reqwest::Client::new()
         .post(h.url("/api/generate"))
         .json(&serde_json::json!({
-            "package_id": "Qwen/Qwen2.5-0.5B-Instruct",
+            "package_id": "Qwen/Qwen3.5-0.8B",
             "serve_profile": serve_profile,
             "session_id": session_id,
             "messages": [{"role": "user", "content": "hi"}],
@@ -947,7 +874,7 @@ async fn insufficient_memory_package_is_refused_before_worker_launch() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|package| package["id"] == "Qwen/Qwen2.5-0.5B-Instruct")
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
         .unwrap();
     assert_eq!(package["fits"], false);
     assert_eq!(package["readiness_reason"], "insufficient_memory");
@@ -955,7 +882,7 @@ async fn insufficient_memory_package_is_refused_before_worker_launch() {
     let start = h
         .post_json(
             "/api/sessions",
-            serde_json::json!({"package_id": "Qwen/Qwen2.5-0.5B-Instruct"}),
+            serde_json::json!({"package_id": "Qwen/Qwen3.5-0.8B"}),
         )
         .await;
     assert_eq!(start.status(), 400);
@@ -986,7 +913,7 @@ async fn transformers_worker_failure_retains_failed_session_and_log() {
     let response = h
         .post_json(
             "/api/sessions",
-            serde_json::json!({"package_id": "Qwen/Qwen2.5-0.5B-Instruct"}),
+            serde_json::json!({"package_id": "Qwen/Qwen3.5-0.8B"}),
         )
         .await;
     assert_eq!(response.status(), 400);
@@ -1027,7 +954,7 @@ async fn stopping_transformers_package_during_health_wait_cannot_reload_it() {
         reqwest::Client::new()
             .post(start_url)
             .json(&serde_json::json!({
-                "package_id": "Qwen/Qwen2.5-0.5B-Instruct"
+                "package_id": "Qwen/Qwen3.5-0.8B"
             }))
             .send()
             .await
@@ -1070,147 +997,6 @@ async fn stopping_transformers_package_during_health_wait_cannot_reload_it() {
     let sessions = h.json("/api/sessions").await;
     assert_eq!(sessions[0]["status"], "not_loaded", "{sessions}");
     assert!(!process_alive(pid), "stub worker {pid} still running");
-    h.listening.shutdown().await;
-}
-
-#[tokio::test]
-async fn gguf_package_uses_serve_profile_through_session_lifecycle() {
-    let h = Harness::start_with(
-        HardwareSnapshot {
-            device_class: "apple_silicon".into(),
-            chip: "test-chip".into(),
-            unified_memory_bytes: 2_000_000_000,
-            metal_recommended_working_set_bytes: Some(1_000_000_000),
-            memory_pressure: None,
-            free_ram_bytes: None,
-        },
-        stub_launcher(),
-        Some(PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker"))),
-    )
-    .await;
-    write_artifact(
-        &h.models,
-        "Qwen",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        100_000,
-        llm_meta(),
-    );
-    h.post_json("/api/scan", serde_json::json!({})).await;
-    let package_id = "qit/qwen2.5-0.5b-instruct-q4_k_m";
-    let serve_profile = serde_json::json!({
-        "context_length": 4096,
-        "runtime_settings": {
-            "gpu_layers": 7,
-            "parallel": 2
-        }
-    });
-    let catalog = h.json("/api/catalog").await;
-    assert_eq!(catalog["packages"][0]["ready"], true, "{catalog}");
-    assert_eq!(catalog["packages"][0]["runtime_recipe"], "llama_cpp");
-
-    let pin = h
-        .post_json(
-            "/api/pins",
-            serde_json::json!({
-                "package_id": package_id,
-                "serve_profile": serve_profile
-            }),
-        )
-        .await;
-    assert_eq!(pin.status(), 200);
-    let pin: Value = pin.json().await.unwrap();
-    assert_eq!(pin["package_id"], package_id);
-    assert_eq!(pin["serve_profile"], serve_profile);
-    assert!(pin.get("n_gpu_layers").is_none(), "{pin}");
-    assert!(pin.get("n_parallel").is_none(), "{pin}");
-    let what_if = h
-        .post_json(
-            "/api/what-ifs",
-            serde_json::json!({
-                "package_id": package_id,
-                "serve_profile": serve_profile
-            }),
-        )
-        .await;
-    assert_eq!(what_if.status(), 200);
-
-    let before_start = h.json("/api/capacity").await;
-    let started = h
-        .post_json(
-            "/api/sessions",
-            serde_json::json!({
-                "package_id": package_id,
-                "serve_profile": serve_profile
-            }),
-        )
-        .await;
-    assert_eq!(started.status(), 200);
-    let started: Value = started.json().await.unwrap();
-    assert_eq!(started["status"], "loaded");
-    assert_eq!(started["package_id"], package_id);
-    assert_eq!(started["serve_profile"], serve_profile);
-    assert!(started.get("n_gpu_layers").is_none(), "{started}");
-    assert!(started.get("n_parallel").is_none(), "{started}");
-    let while_loaded = h.json("/api/capacity").await;
-    assert_eq!(
-        while_loaded["hardware"]["headroom_bytes"],
-        before_start["hardware"]["headroom_bytes"]
-    );
-
-    let generated = h
-        .post_json(
-            "/api/generate",
-            serde_json::json!({
-                "package_id": package_id,
-                "serve_profile": serve_profile,
-                "session_id": started["id"],
-                "messages": [{"role": "user", "content": "hi"}]
-            }),
-        )
-        .await;
-    assert_eq!(generated.status(), 200);
-    let body = generated.text().await.unwrap();
-    assert!(body.contains("event: token"), "{body}");
-    assert!(body.contains("hello"), "{body}");
-    assert!(body.contains("event: done"), "{body}");
-
-    let stopped = h
-        .post_json(
-            &format!("/api/sessions/{}/stop", started["id"].as_str().unwrap()),
-            serde_json::json!({}),
-        )
-        .await;
-    assert_eq!(stopped.status(), 200);
-    let stopped: Value = stopped.json().await.unwrap();
-    assert_eq!(stopped["status"], "not_loaded");
-    let after_stop = h.json("/api/capacity").await;
-    assert_eq!(after_stop["pins"][0]["package_id"], package_id);
-    assert_eq!(after_stop["pins"][0]["serve_profile"], serve_profile);
-    assert_eq!(after_stop["what_ifs"][0]["package_id"], package_id);
-    assert_eq!(after_stop["what_ifs"][0]["serve_profile"], serve_profile);
-    assert_eq!(after_stop["sessions"][0]["package_id"], package_id);
-    assert_eq!(after_stop["sessions"][0]["serve_profile"], serve_profile);
-    let h = h.restart(Some(2_000_000)).await;
-    let after_restart = h.json("/api/capacity").await;
-    assert_eq!(after_restart["pins"][0]["package_id"], package_id);
-    assert_eq!(after_restart["pins"][0]["serve_profile"], serve_profile);
-    assert_eq!(after_restart["what_ifs"].as_array().unwrap().len(), 0);
-    assert_eq!(after_restart["sessions"][0]["package_id"], package_id);
-    assert_eq!(after_restart["sessions"][0]["serve_profile"], serve_profile);
-    assert_eq!(after_restart["sessions"][0]["status"], "not_loaded");
-    let restarted = h
-        .post_json(
-            "/api/sessions",
-            serde_json::json!({
-                "package_id": package_id,
-                "serve_profile": serve_profile
-            }),
-        )
-        .await;
-    assert_eq!(restarted.status(), 200);
-    let restarted: Value = restarted.json().await.unwrap();
-    assert_eq!(restarted["id"], started["id"]);
-    assert_eq!(h.json("/api/sessions").await.as_array().unwrap().len(), 1);
     h.listening.shutdown().await;
 }
 

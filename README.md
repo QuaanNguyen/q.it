@@ -6,7 +6,6 @@ It scans local GGUF artifacts and supported local Transformers packages, calcula
 ## Supported packages
 
 GGUF artifacts are discovered below `QIT_MODELS_DIR`.
-q.it offers its bundled low-memory Qwen GGUF package when the required local file is present.
 
 Supported Transformers packages are discovered below the sibling `transformers` directory.
 With `QIT_MODELS_DIR=$HOME/models/gguf`, q.it looks below `$HOME/models/transformers` for supported local Qwen 3.5 and Gemma 4 package layouts.
