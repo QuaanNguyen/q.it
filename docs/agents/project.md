@@ -4,7 +4,11 @@ Supplements `CONTEXT.md` and ADRs with repo-specific facts agents need repeatedl
 
 ## Product direction
 
-Local inference runtime for Apple Silicon (v1). Users browse **artifacts** and **model packages**, see **fit** against a **stable budget**, **pin** or **what-if** capacity, start and stop worker children, and Try an artifact in a multi-turn window whose transcript lives only in the browser. Model packages are grouped by family, but fit, readiness, files, capabilities, and actions stay package-specific. Not a chat product; agents and Hub install are later milestones on the same control plane.
+Local catalog, capacity planner, and serving control plane for open-weight artifacts and model packages.
+Users browse **artifacts** and **model packages**, see **fit** against a **stable budget**, **pin** or **what-if** capacity, start and stop worker children, and Try an artifact in a multi-turn window whose transcript lives only in the browser.
+Model packages are grouped by family, but fit, readiness, files, capabilities, and actions stay package-specific.
+Not a chat product; agents and Hub install are later milestones on the same control plane.
+Capacity estimates are calibrated for Apple Silicon unified memory, but the catalog and local control plane do not require an Apple Silicon-only product claim.
 
 Parent spec: GitHub issue [#1](https://github.com/QuaanNguyen/q.it/issues/1). Tracer bullets [#2–#7](https://github.com/QuaanNguyen/q.it/issues/2). Local copies: `.scratch/milestone-1-catalog-capacity/`.
 
@@ -47,9 +51,9 @@ Tracer bullets #2–#6 verified on the maintainer's Mac with Nemotron ([#23](htt
 
 ## Offline package catalog
 
-The catalog always contains bundled Qwen GGUF and Qwen Transformers package definitions.
-The Transformers package resolves below the sibling `transformers` library at `Qwen/Qwen2.5-0.5B-Instruct` and requires its declared config, tokenizer, model-card, index, and safetensor-shard files.
-The scan records local file size, modified time, and SHA-256 metadata, then exposes package capabilities, catalog planner-hint provenance, readiness, and one clear readiness reason through `/api/catalog`.
+GGUF artifacts are scanned below `QIT_MODELS_DIR`.
+Supported Transformers package recipes are discovered below the sibling `transformers` library, currently covering local Qwen 3.5 and Gemma 4 layouts.
+The scan records local file size and modification time, then exposes package capabilities, catalog planner-hint provenance, readiness, and one clear readiness reason through `/api/catalog`.
 Other local checkpoint directories are not catalogued until q.it owns a tested package recipe and external-worker contract for them.
 
 ## UI notes
