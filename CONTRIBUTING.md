@@ -31,6 +31,12 @@ Run focused tests while working and the full suite before handing work off:
 cargo test
 ```
 
+Verify the publishable artifacts and installed product shell:
+
+```bash
+scripts/test-packaged-product.sh
+```
+
 For UI work, run the runtime and Vite development server together:
 
 ```bash
