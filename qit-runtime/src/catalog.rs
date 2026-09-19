@@ -4,6 +4,81 @@ use std::time::SystemTime;
 
 use crate::serve::RuntimeRecipe;
 
+const TRANSFORMERS_PACK_ID: &str = "transformers";
+const WORKER_PROTOCOL_VERSION: u32 = 1;
+
+struct ModelPackageRecipe {
+    family: &'static str,
+    name: &'static str,
+    tokenizer_variants: &'static [&'static [&'static str]],
+    planner_hint: PlannerHint,
+    capabilities: PackageCapabilities,
+    runtime_compatibility: RuntimeCompatibility,
+}
+
+impl ModelPackageRecipe {
+    fn for_model_type(model_type: &str) -> Option<Self> {
+        match model_type {
+            "qwen3_5" => Some(Self {
+                family: "Qwen 3.5",
+                name: "Qwen3.5 0.8B",
+                tokenizer_variants: &[
+                    &["tokenizer.json", "tokenizer_config.json"],
+                    &["vocab.json", "merges.txt", "tokenizer_config.json"],
+                ],
+                planner_hint: PlannerHint {
+                    estimate_bytes: 1_200_000_000,
+                    source: "qit_catalog",
+                    confidence: "high",
+                },
+                capabilities: text_chat_capabilities(),
+                runtime_compatibility: RuntimeCompatibility {
+                    pack_id: TRANSFORMERS_PACK_ID,
+                    protocol_version: WORKER_PROTOCOL_VERSION,
+                    runtime_recipe: RuntimeRecipe::TransformersExternal,
+                },
+            }),
+            "gemma4" => Some(Self {
+                family: "Gemma 4",
+                name: "Gemma 4 E2B it QAT Mobile",
+                tokenizer_variants: &[
+                    &["tokenizer.json", "tokenizer_config.json"],
+                    &["tokenizer.model", "tokenizer_config.json"],
+                ],
+                planner_hint: PlannerHint {
+                    estimate_bytes: 3_200_000_000,
+                    source: "qit_catalog",
+                    confidence: "high",
+                },
+                capabilities: text_chat_capabilities(),
+                runtime_compatibility: RuntimeCompatibility {
+                    pack_id: TRANSFORMERS_PACK_ID,
+                    protocol_version: WORKER_PROTOCOL_VERSION,
+                    runtime_recipe: RuntimeRecipe::TransformersExternal,
+                },
+            }),
+            _ => None,
+        }
+    }
+
+    fn required_files(&self, package_dir: &Path) -> Vec<PackageFile> {
+        let mut files = vec![local_file(package_dir, "config.json", "config")];
+        let tokenizer_files = self
+            .tokenizer_variants
+            .iter()
+            .find(|variant| variant.iter().all(|path| package_dir.join(path).is_file()))
+            .copied()
+            .unwrap_or(self.tokenizer_variants[0]);
+        files.extend(
+            tokenizer_files
+                .iter()
+                .map(|path| local_file(package_dir, path, "tokenizer")),
+        );
+        files.extend(weight_files(package_dir));
+        files
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum PackageFormat {
     Gguf,
@@ -34,6 +109,13 @@ pub struct PackageCapabilities {
 }
 
 #[derive(Clone)]
+pub struct RuntimeCompatibility {
+    pub pack_id: &'static str,
+    pub protocol_version: u32,
+    pub runtime_recipe: RuntimeRecipe,
+}
+
+#[derive(Clone)]
 pub struct PackageFile {
     pub path: String,
     pub role: &'static str,
@@ -52,6 +134,7 @@ pub struct CatalogPackage {
     pub planner_hint: PlannerHint,
     pub capabilities: PackageCapabilities,
     pub runtime_recipe: RuntimeRecipe,
+    pub runtime_compatibility: RuntimeCompatibility,
     pub package_dir: PathBuf,
     pub artifact_id: Option<String>,
     pub required_files: Vec<PackageFile>,
@@ -123,58 +206,78 @@ fn transformers_package(org: &str, package_dir: &Path) -> Option<CatalogPackage>
     let config: Value =
         serde_json::from_slice(&std::fs::read(package_dir.join("config.json")).ok()?).ok()?;
     let model_type = config["model_type"].as_str()?;
-    let (family, name) = match model_type {
-        "qwen3_5" => ("Qwen 3.5", "Qwen3.5 0.8B"),
-        "gemma4" => ("Gemma 4", "Gemma 4 E2B it QAT Mobile"),
-        _ => return None,
-    };
-    if !package_dir.join("tokenizer.json").is_file()
-        || !package_dir.join("tokenizer_config.json").is_file()
-        || !package_dir.join("README.md").is_file()
-    {
-        return None;
-    }
-    let mut required_files = vec![
-        local_file(package_dir, "config.json", "config"),
-        local_file(package_dir, "tokenizer.json", "tokenizer"),
-        local_file(package_dir, "tokenizer_config.json", "tokenizer"),
-        local_file(package_dir, "README.md", "model_card"),
-    ];
-    for entry in std::fs::read_dir(package_dir).ok()?.flatten() {
-        let file = entry.file_name().to_string_lossy().to_string();
-        if file.ends_with(".safetensors") || file == "model.safetensors.index.json" {
-            required_files.push(local_file(package_dir, &file, "weights"));
-        }
-    }
-    if let Some(index) = std::fs::read(package_dir.join("model.safetensors.index.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-    {
-        if let Some(weights) = index["weight_map"].as_object() {
-            for file in weights.values().filter_map(Value::as_str) {
-                if !required_files.iter().any(|item| item.path == file) {
-                    required_files.push(local_file(package_dir, file, "weights"));
-                }
-            }
-        }
-    }
+    let recipe = ModelPackageRecipe::for_model_type(model_type)?;
+    let required_files = recipe.required_files(package_dir);
     CatalogPackage {
         id: format!("{org}/{}", package_dir.file_name()?.to_string_lossy()),
-        family: family.into(),
-        name: name.into(),
+        family: recipe.family.into(),
+        name: recipe.name.into(),
         format: PackageFormat::Transformers,
-        planner_hint: PlannerHint {
-            estimate_bytes: 1_200_000_000,
-            source: "qit_catalog",
-            confidence: "high",
-        },
-        capabilities: text_chat_capabilities(),
-        runtime_recipe: RuntimeRecipe::TransformersExternal,
+        planner_hint: recipe.planner_hint,
+        capabilities: recipe.capabilities,
+        runtime_recipe: recipe.runtime_compatibility.runtime_recipe,
+        runtime_compatibility: recipe.runtime_compatibility,
         package_dir: package_dir.to_path_buf(),
         artifact_id: None,
         required_files,
     }
     .into()
+}
+
+fn weight_files(package_dir: &Path) -> Vec<PackageFile> {
+    let index_path = "model.safetensors.index.json";
+    if package_dir.join(index_path).is_file() {
+        let mut files = vec![local_file(package_dir, index_path, "weights_index")];
+        let mut complete_index = false;
+        if let Some(index) = std::fs::read(package_dir.join(index_path))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        {
+            if let Some(weights) = index["weight_map"].as_object() {
+                let mut paths: Vec<&str> = weights.values().filter_map(Value::as_str).collect();
+                paths.sort_unstable();
+                paths.dedup();
+                complete_index =
+                    !paths.is_empty() && paths.iter().all(|path| safe_weight_path(path));
+                if complete_index {
+                    files.extend(
+                        paths
+                            .into_iter()
+                            .map(|path| local_file(package_dir, path, "weights")),
+                    );
+                }
+            }
+        }
+        if !complete_index {
+            files.push(local_file(package_dir, "model.safetensors", "weights"));
+        }
+        return files;
+    }
+    let mut paths: Vec<String> = std::fs::read_dir(package_dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.file_name().to_string_lossy().to_string();
+            path.ends_with(".safetensors").then_some(path)
+        })
+        .collect();
+    paths.sort_unstable();
+    if paths.is_empty() {
+        paths.push("model.safetensors".into());
+    }
+    paths
+        .into_iter()
+        .map(|path| local_file(package_dir, &path, "weights"))
+        .collect()
+}
+
+fn safe_weight_path(path: &str) -> bool {
+    let mut components = Path::new(path).components();
+    matches!(components.next(), Some(std::path::Component::Normal(_)))
+        && components.next().is_none()
+        && path.ends_with(".safetensors")
 }
 
 fn local_file(directory: &Path, path: &str, role: &'static str) -> PackageFile {

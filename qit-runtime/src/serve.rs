@@ -66,14 +66,15 @@ impl RuntimeRecipe {
             Self::TransformersExternal => "transformers_external",
         }
     }
-    pub fn parse(value: &str) -> Self {
+    pub fn parse(value: &str) -> Result<Self, String> {
         match value {
-            "transformers_external" => Self::TransformersExternal,
-            _ => Self::LlamaCpp,
+            "llama_cpp" => Ok(Self::LlamaCpp),
+            "transformers_external" => Ok(Self::TransformersExternal),
+            _ => Err(format!("unknown runtime recipe: {value}")),
         }
     }
 
-    pub fn profile(
+    pub(crate) fn profile(
         self,
         profile: Option<ServeProfile>,
         context_length: u32,
@@ -101,7 +102,7 @@ impl RuntimeRecipe {
         Ok(profile)
     }
 
-    pub fn launch_parameters(self, profile: &ServeProfile) -> Result<(i32, u32), String> {
+    pub(crate) fn launch_parameters(self, profile: &ServeProfile) -> Result<(i32, u32), String> {
         match self {
             Self::LlamaCpp => {
                 let settings = profile.llama_cpp_settings()?;

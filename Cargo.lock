@@ -1004,6 +1004,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "qit"
+version = "0.1.0"
+dependencies = [
+ "qit-runtime",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "qit-runtime"
 version = "0.1.0"
 dependencies = [

@@ -5,8 +5,9 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::probe::{FixedProbe, HardwareProbe, SystemProbe};
+use crate::runtime::{RuntimeAdapter, RuntimeRegistry};
 use crate::serve::{RuntimeRecipe, ServeProfile};
-use crate::supervisor::{RecipeWorkerLauncher, WorkerLauncher};
+use crate::supervisor::WorkerLauncher;
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 2471;
@@ -21,10 +22,8 @@ pub struct Config {
     pub home: PathBuf,
     pub models_dir: PathBuf,
     pub os_reserve_bytes: Option<u64>,
-    pub worker_path: Option<PathBuf>,
-    pub transformers_worker_path: Option<PathBuf>,
+    pub runtimes: RuntimeRegistry,
     pub probe: Arc<dyn HardwareProbe>,
-    pub worker_launcher: Arc<dyn WorkerLauncher>,
 }
 
 impl Config {
@@ -43,22 +42,21 @@ impl Config {
         let os_reserve_bytes = std::env::var("QIT_OS_RESERVE_BYTES")
             .ok()
             .and_then(|v| v.parse().ok());
-        let worker_path = resolve_worker_path();
-        let transformers_worker_path = resolve_transformers_worker_path();
-        let worker_launcher: Arc<dyn WorkerLauncher> = Arc::new(RecipeWorkerLauncher {
-            llama_cpp_binary: worker_path.clone(),
-            transformers_external_binary: transformers_worker_path.clone(),
-            transformers_external_extra_args: Vec::new(),
-        });
+        let llama_cpp = resolve_worker_path()
+            .map(|path| RuntimeAdapter::executable(RuntimeRecipe::LlamaCpp, path, Vec::new()))
+            .unwrap_or_else(|| RuntimeAdapter::unavailable(RuntimeRecipe::LlamaCpp));
+        let transformers_external = resolve_transformers_worker_path()
+            .map(|path| {
+                RuntimeAdapter::executable(RuntimeRecipe::TransformersExternal, path, Vec::new())
+            })
+            .unwrap_or_else(|| RuntimeAdapter::unavailable(RuntimeRecipe::TransformersExternal));
         Ok(Self {
             listen,
             home,
             models_dir,
             os_reserve_bytes,
-            worker_path,
-            transformers_worker_path,
+            runtimes: RuntimeRegistry::new(llama_cpp, transformers_external),
             probe: Arc::new(SystemProbe),
-            worker_launcher,
         })
     }
 
@@ -76,15 +74,16 @@ impl Config {
             home,
             models_dir,
             os_reserve_bytes,
-            worker_path,
-            transformers_worker_path: None,
+            runtimes: RuntimeRegistry::new(
+                RuntimeAdapter::injected(RuntimeRecipe::LlamaCpp, worker_launcher, worker_path),
+                RuntimeAdapter::unavailable(RuntimeRecipe::TransformersExternal),
+            ),
             probe: Arc::new(probe),
-            worker_launcher,
         }
     }
 
-    pub fn with_transformers_worker_path(mut self, path: PathBuf) -> Self {
-        self.transformers_worker_path = Some(path);
+    pub fn with_runtime_adapter(mut self, adapter: RuntimeAdapter) -> Self {
+        self.runtimes = self.runtimes.with_adapter(adapter);
         self
     }
 }
@@ -138,15 +137,4 @@ pub struct SessionShape {
     pub n_ctx: Option<u32>,
     pub n_gpu_layers: Option<i32>,
     pub n_parallel: Option<u32>,
-}
-
-impl SessionShape {
-    pub fn profile(&self, runtime_recipe: RuntimeRecipe) -> Result<ServeProfile, String> {
-        runtime_recipe.profile(
-            self.serve_profile.clone(),
-            self.n_ctx.unwrap_or(DEFAULT_N_CTX),
-            self.n_gpu_layers.unwrap_or(DEFAULT_N_GPU_LAYERS),
-            self.n_parallel.unwrap_or(DEFAULT_N_PARALLEL),
-        )
-    }
 }

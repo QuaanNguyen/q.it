@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::runtime::RuntimeAdapter;
 use crate::serve::{RuntimeRecipe, ServeProfile, TargetIdentity};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -82,33 +83,6 @@ pub struct LlamaServerLauncher {
     pub binary: Option<PathBuf>,
 }
 
-pub struct RecipeWorkerLauncher {
-    pub llama_cpp_binary: Option<PathBuf>,
-    pub transformers_external_binary: Option<PathBuf>,
-    pub transformers_external_extra_args: Vec<String>,
-}
-
-impl WorkerLauncher for RecipeWorkerLauncher {
-    fn launch(&self, request: LaunchRequest) -> Result<LaunchedWorker, String> {
-        match request.runtime_recipe {
-            RuntimeRecipe::LlamaCpp => LlamaServerLauncher {
-                binary: self.llama_cpp_binary.clone(),
-            }
-            .launch(request),
-            RuntimeRecipe::TransformersExternal => {
-                let binary = self.transformers_external_binary.as_ref().ok_or_else(|| {
-                    "no Transformers worker binary (set QIT_TRANSFORMERS_WORKER_PATH)".to_string()
-                })?;
-                launch_transformers_external(
-                    binary,
-                    &self.transformers_external_extra_args,
-                    request,
-                )
-            }
-        }
-    }
-}
-
 impl WorkerLauncher for LlamaServerLauncher {
     fn launch(&self, request: LaunchRequest) -> Result<LaunchedWorker, String> {
         let binary = self.binary.as_ref().ok_or_else(|| {
@@ -132,7 +106,7 @@ impl WorkerLauncher for LlamaServerLauncher {
     }
 }
 
-fn launch_transformers_external(
+pub(crate) fn launch_transformers_external(
     binary: &std::path::Path,
     extra_args: &[String],
     request: LaunchRequest,
@@ -231,14 +205,12 @@ struct LiveSession {
 }
 
 pub struct Supervisor {
-    launcher: Arc<dyn WorkerLauncher>,
     sessions: Mutex<HashMap<String, LiveSession>>,
 }
 
 impl Supervisor {
-    pub fn new(launcher: Arc<dyn WorkerLauncher>) -> Self {
+    pub fn new() -> Self {
         Self {
-            launcher,
             sessions: Mutex::new(HashMap::new()),
         }
     }
@@ -337,12 +309,13 @@ impl Supervisor {
     pub async fn start(
         &self,
         target: &ServeTarget,
-        runtime_recipe: RuntimeRecipe,
+        runtime: Arc<RuntimeAdapter>,
         serve_profile: ServeProfile,
         log_path: PathBuf,
     ) -> Result<SessionView, String> {
         self.reap().await;
-        let (n_gpu_layers, n_parallel) = runtime_recipe.launch_parameters(&serve_profile)?;
+        let runtime_recipe = runtime.recipe();
+        let (n_gpu_layers, n_parallel) = runtime.launch_parameters(&serve_profile)?;
         if let Some(existing) = self.find_loaded(&target.identity, &serve_profile).await {
             return Ok(existing);
         }
@@ -373,7 +346,7 @@ impl Supervisor {
                 },
             );
         }
-        let launched = match self.launcher.launch(LaunchRequest {
+        let launched = match runtime.launch(LaunchRequest {
             runtime_recipe,
             target_path: target.path.clone(),
             n_ctx: serve_profile.context_length,
@@ -414,7 +387,9 @@ impl Supervisor {
             }
             session.starting_pid = Some(launched.child.id());
         }
-        if let Err(e) = wait_ready(&launched.base_url, &mut launched.child).await {
+        if let Err(e) =
+            wait_ready(&runtime.health_url(&launched.base_url), &mut launched.child).await
+        {
             drop(kill_child(launched.child));
             let mut guard = self.sessions.lock().await;
             if let Some(s) = guard.get_mut(&id) {
@@ -581,15 +556,14 @@ fn resident_bytes(_pid: u32) -> Option<u64> {
     None
 }
 
-async fn wait_ready(base_url: &str, child: &mut Child) -> Result<(), String> {
+async fn wait_ready(url: &str, child: &mut Child) -> Result<(), String> {
     let client = reqwest::Client::new();
-    let url = format!("{base_url}/health");
     let started = std::time::Instant::now();
     while started.elapsed() < Duration::from_secs(60) {
         if let Ok(Some(status)) = child.try_wait() {
             return Err(format!("worker exited ({status})"));
         }
-        if let Ok(resp) = client.get(&url).send().await {
+        if let Ok(resp) = client.get(url).send().await {
             if resp.status().is_success() {
                 return Ok(());
             }
@@ -625,7 +599,7 @@ enum WorkerFrame {
 }
 
 pub async fn proxy_generate<F, Fut>(
-    base_url: &str,
+    generation_url: &str,
     messages: &[ChatMessage],
     max_tokens: u32,
     cancel: tokio::sync::watch::Receiver<bool>,
@@ -643,7 +617,7 @@ where
         "max_tokens": max_tokens
     });
     let mut resp = client
-        .post(format!("{base_url}/v1/chat/completions"))
+        .post(generation_url)
         .json(&body)
         .send()
         .await

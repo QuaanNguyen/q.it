@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod command;
 pub mod config;
 pub mod error;
 pub mod estimate;
@@ -6,6 +7,7 @@ pub mod gguf;
 pub mod http;
 pub mod paths;
 pub mod probe;
+pub mod runtime;
 pub mod scan;
 pub mod serve;
 pub mod spa;
@@ -58,7 +60,7 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
     })?;
     store.reset_sessions_on_restart()?;
     let session_rows = store.sessions()?;
-    let supervisor = Arc::new(Supervisor::new(config.worker_launcher.clone()));
+    let supervisor = Arc::new(Supervisor::new());
     supervisor.hydrate(session_rows).await;
     let state = AppState {
         packages: Arc::new(RwLock::new(Vec::new())),
@@ -66,8 +68,7 @@ pub async fn bind(config: Config) -> Result<Listening, Error> {
         store: Arc::new(Mutex::new(store)),
         probe: config.probe.clone(),
         os_reserve_override: config.os_reserve_bytes,
-        worker_path: config.worker_path.clone(),
-        transformers_worker_path: config.transformers_worker_path.clone(),
+        runtimes: config.runtimes.clone(),
         supervisor,
         what_ifs: Arc::new(Mutex::new(Vec::new())),
         generate_slot: Arc::new(Semaphore::new(1)),

@@ -3,6 +3,12 @@ name = "qit-runtime"
 version = "0.1.0"
 edition = "2021"
 default-run = "qit-runtime"
+description = "Runtime library and development daemon for q.it"
+license = "MIT"
+repository = "https://github.com/QuaanNguyen/q.it"
+homepage = "https://github.com/QuaanNguyen/q.it"
+readme = "README.md"
+include = ["src/**", "web-dist/**", "build.rs", "Cargo.toml", "README.md"]
 
 [[bin]]
 name = "qit-runtime"

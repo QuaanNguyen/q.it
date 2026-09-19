@@ -10,7 +10,20 @@ It can start a local worker, proxy generation through one local HTTP and SSE con
 
 q.it never downloads model files, Python, PyTorch, or catalog data at runtime.
 
-## Run It
+## Install and Run
+
+Install the user-facing command with Cargo:
+
+```bash
+cargo install qit
+qit
+```
+
+The installed command serves the complete browser interface without Node.js or a repository checkout.
+
+Open [http://127.0.0.1:2471](http://127.0.0.1:2471).
+
+## Development
 
 From the repository root:
 
@@ -20,8 +33,6 @@ QIT_HOME="$PWD/.qit-data" QIT_MODELS_DIR="$HOME/models/gguf" cargo run -p qit-ru
 
 `QIT_HOME` keeps q.it state in a local writable directory.
 This avoids macOS Application Support permission issues in terminals with restricted filesystem access.
-
-Open [http://127.0.0.1:2471](http://127.0.0.1:2471).
 
 ## Local Models
 
@@ -59,7 +70,7 @@ Use `/api/catalog` for artifacts and packages, `/api/capacity` for reservations 
 - `QIT_TRANSFORMERS_WORKER_PATH` - external OpenAI-compatible Transformers worker executable.
 - `QIT_WEB_DIST` - optional built web asset directory.
 
-## Development
+## Development Checks
 
 Run the full runtime suite:
 

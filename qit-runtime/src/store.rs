@@ -242,7 +242,7 @@ impl Store {
             Ok(PinRow {
                 id: r.get(0)?,
                 target: map_target(r, 1, 2, 3)?,
-                runtime_recipe: RuntimeRecipe::parse(&r.get::<_, String>(4)?),
+                runtime_recipe: map_runtime_recipe(r, 4)?,
                 serve_profile: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
             })
         })?;
@@ -343,7 +343,7 @@ impl Store {
             Ok(SessionRow {
                 id: r.get(0)?,
                 target: map_target(r, 1, 2, 3)?,
-                runtime_recipe: RuntimeRecipe::parse(&r.get::<_, String>(4)?),
+                runtime_recipe: map_runtime_recipe(r, 4)?,
                 serve_profile: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
                 status: r.get(6)?,
                 last_error: r.get(7)?,
@@ -352,6 +352,20 @@ impl Store {
         })?;
         rows.collect()
     }
+}
+
+fn map_runtime_recipe(r: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<RuntimeRecipe> {
+    let value: String = r.get(index)?;
+    RuntimeRecipe::parse(&value).map_err(|message| {
+        rusqlite::Error::FromSqlConversionFailure(
+            index,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                message,
+            )),
+        )
+    })
 }
 
 fn map_artifact(r: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactRow> {

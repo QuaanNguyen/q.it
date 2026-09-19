@@ -6,7 +6,9 @@ use qit_runtime::bind;
 use qit_runtime::config::Config;
 use qit_runtime::gguf::{write_test_gguf, GgufMeta};
 use qit_runtime::probe::{FixedProbe, HardwareSnapshot};
-use qit_runtime::supervisor::{LlamaServerLauncher, RecipeWorkerLauncher, StubBinLauncher};
+use qit_runtime::runtime::RuntimeAdapter;
+use qit_runtime::serve::RuntimeRecipe;
+use qit_runtime::supervisor::{LlamaServerLauncher, StubBinLauncher};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -130,7 +132,7 @@ impl Harness {
                 snapshot: probe.clone(),
             },
             worker_path,
-            launcher,
+            launcher.clone(),
             os_reserve_env,
         );
         let listening = bind(cfg).await.unwrap();
@@ -144,18 +146,16 @@ impl Harness {
 
     async fn start_with_transformers(probe: HardwareSnapshot, extra_args: Vec<String>) -> Self {
         let worker = PathBuf::from(env!("CARGO_BIN_EXE_qit-stub-worker"));
-        let launcher = Arc::new(RecipeWorkerLauncher {
-            llama_cpp_binary: None,
-            transformers_external_binary: Some(worker.clone()),
-            transformers_external_extra_args: extra_args,
-        });
-        Self::start_with_transformers_path(probe, worker, launcher).await
+        Self::start_with_transformers_adapter(
+            probe,
+            RuntimeAdapter::executable(RuntimeRecipe::TransformersExternal, worker, extra_args),
+        )
+        .await
     }
 
-    async fn start_with_transformers_path(
+    async fn start_with_transformers_adapter(
         probe: HardwareSnapshot,
-        worker: PathBuf,
-        launcher: Arc<dyn qit_runtime::supervisor::WorkerLauncher>,
+        adapter: RuntimeAdapter,
     ) -> Self {
         let tmp = TempDir::new().unwrap();
         let home = tmp.path().join("home");
@@ -167,10 +167,10 @@ impl Harness {
             "127.0.0.1:0".parse().unwrap(),
             FixedProbe { snapshot: probe },
             None,
-            launcher,
+            stub_launcher(),
             Some(200_000_000),
         )
-        .with_transformers_worker_path(worker);
+        .with_runtime_adapter(adapter);
         let listening = bind(cfg).await.unwrap();
         Self {
             _tmp: tmp,
@@ -323,9 +323,27 @@ fn write_transformers_package(models: &std::path::Path) -> PathBuf {
         ),
         ("model-00001-of-00002.safetensors", "weights-1"),
         ("model-00002-of-00002.safetensors", "weights-2"),
-        ("README.md", "# Qwen3.5 0.8B"),
     ] {
         std::fs::write(package.join(name), contents).unwrap();
+    }
+    package
+}
+
+fn write_gemma_package(models: &Path, name: &str, tokenizer_file: &str) -> PathBuf {
+    let package = models
+        .parent()
+        .unwrap()
+        .join("transformers")
+        .join("Google")
+        .join(name);
+    std::fs::create_dir_all(&package).unwrap();
+    for (filename, contents) in [
+        ("config.json", r#"{"model_type":"gemma4"}"#),
+        ("tokenizer_config.json", r#"{"model_max_length":32768}"#),
+        (tokenizer_file, "tokenizer"),
+        ("model.safetensors", "weights"),
+    ] {
+        std::fs::write(package.join(filename), contents).unwrap();
     }
     package
 }
@@ -529,6 +547,8 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
     assert_eq!(package["estimate_source"], "qit_catalog");
     assert_eq!(package["estimate_confidence"], "high");
     assert_eq!(package["runtime_recipe"], "transformers_external");
+    assert_eq!(package["runtime_pack"], "transformers");
+    assert_eq!(package["runtime_protocol_version"], 1);
     assert_eq!(package["fits"], true);
     assert_eq!(package["ready"], false);
     assert_eq!(package["readiness_reason"], "runtime_missing");
@@ -545,6 +565,128 @@ async fn complete_local_transformers_package_reports_runtime_missing() {
     );
     assert_eq!(h.json("/api/hardware").await["headroom_bytes"], 300_000_000);
     h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn curated_gemma_tokenizer_variants_are_cataloged_without_editorial_files() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 4_000_000_000,
+            metal_recommended_working_set_bytes: Some(3_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec![],
+    )
+    .await;
+    write_gemma_package(&h.models, "Gemma-4-json", "tokenizer.json");
+    write_gemma_package(&h.models, "Gemma-4-sentencepiece", "tokenizer.model");
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let packages = catalog["packages"].as_array().unwrap();
+    for name in ["Gemma-4-json", "Gemma-4-sentencepiece"] {
+        let package = packages
+            .iter()
+            .find(|package| package["id"] == format!("Google/{name}"))
+            .unwrap();
+        assert_eq!(package["family"], "Gemma 4");
+        assert_eq!(package["runtime_recipe"], "transformers_external");
+        assert_eq!(package["capabilities"]["tasks"][0], "chat");
+        assert!(package["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|file| file["role"] != "model_card"));
+    }
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn unsharded_curated_package_without_weights_is_not_ready() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec![],
+    )
+    .await;
+    let package = write_transformers_package(&h.models);
+    std::fs::remove_file(package.join("model.safetensors.index.json")).unwrap();
+    std::fs::remove_file(package.join("model-00001-of-00002.safetensors")).unwrap();
+    std::fs::remove_file(package.join("model-00002-of-00002.safetensors")).unwrap();
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
+        .unwrap();
+    assert_eq!(package["ready"], false);
+    assert_eq!(package["readiness_reason"], "missing_required_files");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
+async fn unknown_persisted_runtime_recipe_fails_explicitly() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let models = tmp.path().join("models");
+    std::fs::create_dir_all(&home).unwrap();
+    let store = qit_runtime::store::Store::open(&home.join("runtime.db")).unwrap();
+    store
+        .set_setting("test", Some("migration-complete"))
+        .unwrap();
+    drop(store);
+    let conn = rusqlite::Connection::open(home.join("runtime.db")).unwrap();
+    conn.execute(
+        "INSERT INTO sessions (id, target_id, artifact_id, package_id, runtime_recipe, serve_profile_json, status) VALUES (?1, ?2, NULL, ?3, ?4, ?5, 'not_loaded')",
+        rusqlite::params![
+            "pin",
+            "Acme/Unknown",
+            "Acme/Unknown",
+            "unknown_runtime",
+            r#"{"context_length":4096,"runtime_settings":{}}"#
+        ],
+    )
+    .unwrap();
+    drop(conn);
+
+    let error = bind(Config::test(
+        home,
+        models,
+        "127.0.0.1:0".parse().unwrap(),
+        FixedProbe {
+            snapshot: probe_with_free(None),
+        },
+        None,
+        stub_launcher(),
+        Some(2_000_000),
+    ))
+    .await
+    .err()
+    .unwrap();
+    assert!(
+        error.to_string().contains("unknown runtime recipe"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -668,8 +810,8 @@ async fn unknown_incomplete_causal_lm_is_not_cataloged() {
 }
 
 #[tokio::test]
-async fn nonexistent_transformers_worker_keeps_package_not_ready() {
-    let h = Harness::start_with_transformers_path(
+async fn runtime_selection_cannot_report_ready_or_launch_with_a_missing_executable() {
+    let h = Harness::start_with_transformers_adapter(
         HardwareSnapshot {
             device_class: "apple_silicon".into(),
             chip: "test-chip".into(),
@@ -678,8 +820,11 @@ async fn nonexistent_transformers_worker_keeps_package_not_ready() {
             memory_pressure: None,
             free_ram_bytes: None,
         },
-        PathBuf::from("/missing/qit-transformers-worker"),
-        stub_launcher(),
+        RuntimeAdapter::executable(
+            RuntimeRecipe::TransformersExternal,
+            PathBuf::from("/missing/qit-transformers-worker"),
+            Vec::new(),
+        ),
     )
     .await;
     write_transformers_package(&h.models);
@@ -697,6 +842,19 @@ async fn nonexistent_transformers_worker_keeps_package_not_ready() {
         .unwrap();
     assert_eq!(package["ready"], false, "{package}");
     assert_eq!(package["readiness_reason"], "runtime_missing", "{package}");
+    let start = h
+        .post_json(
+            "/api/sessions",
+            serde_json::json!({"package_id": "Qwen/Qwen3.5-0.8B"}),
+        )
+        .await;
+    assert_eq!(start.status(), 400);
+    let error = start.json::<Value>().await.unwrap();
+    assert!(error["error"]
+        .as_str()
+        .unwrap()
+        .contains("Transformers runtime"));
+    assert!(h.json("/api/sessions").await.as_array().unwrap().is_empty());
     h.listening.shutdown().await;
 }
 

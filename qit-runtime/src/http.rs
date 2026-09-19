@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use std::path::{Path as FilePath, PathBuf};
+use std::path::PathBuf;
 
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -20,9 +20,10 @@ use crate::config::{SessionShape, DEFAULT_N_CTX, DEFAULT_N_PARALLEL};
 use crate::estimate::{classify, estimate_bytes, Fit};
 use crate::paths::Paths;
 use crate::probe::{budget_bytes, resolve_os_reserve, HardwareProbe, HardwareSnapshot};
+use crate::runtime::{RuntimeAdapter, RuntimeRegistry};
 use crate::scan::scan_library;
 use crate::serve::{RuntimeRecipe, ServeProfile, TargetIdentity};
-use crate::spa::index_html;
+use crate::spa::{asset as embedded_asset, index_html};
 use crate::store::{ArtifactRow, MeasurementRow, PinRow, SessionRow, Store};
 use crate::supervisor::{
     proxy_generate, session_status_str, ChatMessage, ServeTarget, SessionStatus, SessionView,
@@ -38,8 +39,7 @@ pub struct AppState {
     pub store: Arc<Mutex<Store>>,
     pub probe: Arc<dyn HardwareProbe>,
     pub os_reserve_override: Option<u64>,
-    pub worker_path: Option<PathBuf>,
-    pub transformers_worker_path: Option<PathBuf>,
+    pub runtimes: RuntimeRegistry,
     pub supervisor: Arc<Supervisor>,
     pub what_ifs: Arc<Mutex<Vec<PinRow>>>,
     pub generate_slot: Arc<Semaphore>,
@@ -105,6 +105,8 @@ pub struct PackageBody {
     pub estimate_source: String,
     pub estimate_confidence: String,
     pub runtime_recipe: String,
+    pub runtime_pack: String,
+    pub runtime_protocol_version: u32,
     pub capabilities: PackageCapabilitiesBody,
     pub files: Vec<PackageFileBody>,
     pub fits: bool,
@@ -237,6 +239,14 @@ async fn spa_or_asset(axum::extract::OriginalUri(uri): axum::extract::OriginalUr
             return ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response();
         }
     }
+    let rel = uri.path().trim_start_matches('/');
+    let embedded_path = if rel.is_empty() { "index.html" } else { rel };
+    if let Some((mime, bytes)) = embedded_asset(embedded_path) {
+        return ([(header::CONTENT_TYPE, mime)], bytes).into_response();
+    }
+    if let Some((mime, bytes)) = embedded_asset("index.html") {
+        return ([(header::CONTENT_TYPE, mime)], bytes).into_response();
+    }
     Html(index_html()).into_response()
 }
 
@@ -247,8 +257,7 @@ fn web_dist_dir() -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let nested = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../qit-web/dist");
-    nested.join("index.html").is_file().then_some(nested)
+    None
 }
 
 fn mime_for(path: &std::path::Path) -> &'static str {
@@ -380,11 +389,15 @@ async fn start_session(
     require_package_fit(&state, &resolved).await?;
     let log = state.paths.worker_log(&Uuid::new_v4().to_string());
     let target = resolved.target.identity.clone();
-    let runtime_recipe = resolved.runtime_recipe;
     let serve_profile = resolved.serve_profile.clone();
     let result = state
         .supervisor
-        .start(&resolved.target, runtime_recipe, serve_profile.clone(), log)
+        .start(
+            &resolved.target,
+            resolved.runtime.clone(),
+            serve_profile.clone(),
+            log,
+        )
         .await
         .map_err(|e| {
             tracing::warn!(
@@ -466,7 +479,7 @@ async fn generate(
             .supervisor
             .start(
                 &resolved.target,
-                resolved.runtime_recipe,
+                resolved.runtime.clone(),
                 resolved.serve_profile.clone(),
                 log,
             )
@@ -490,6 +503,7 @@ async fn generate(
         .base_url(&session.id)
         .await
         .ok_or_else(|| ApiError::bad("worker has no endpoint"))?;
+    let generation_url = resolved.runtime.generation_url(&base_url);
 
     let (cancel_tx, cancel_rx) = watch::channel(false);
     let target_id = resolved.target.identity.id().to_string();
@@ -500,15 +514,21 @@ async fn generate(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
     tokio::spawn(async move {
         let token_tx = tx.clone();
-        let result = proxy_generate(&base_url, &messages, max_tokens, cancel_rx, move |token| {
-            let token_tx = token_tx.clone();
-            async move {
-                token_tx
-                    .send(Ok(Event::default().event("token").data(token)))
-                    .await
-                    .map_err(|_| "client closed".to_string())
-            }
-        })
+        let result = proxy_generate(
+            &generation_url,
+            &messages,
+            max_tokens,
+            cancel_rx,
+            move |token| {
+                let token_tx = token_tx.clone();
+                async move {
+                    token_tx
+                        .send(Ok(Event::default().event("token").data(token)))
+                        .await
+                        .map_err(|_| "client closed".to_string())
+                }
+            },
+        )
         .await;
         match result {
             Ok(outcome) => {
@@ -633,6 +653,7 @@ fn reservation_estimate(artifact: &ArtifactRow, row: &PinRow) -> u64 {
 struct ResolvedServe {
     target: ServeTarget,
     runtime_recipe: RuntimeRecipe,
+    runtime: Arc<RuntimeAdapter>,
     serve_profile: ServeProfile,
     estimate_bytes: u64,
     generate_error: Option<String>,
@@ -723,14 +744,19 @@ fn resolve_serve(
             ));
         }
     };
-    let serve_profile = shape.profile(runtime_recipe).map_err(ApiError::bad)?;
-    if intent == ResolveIntent::Launch
-        && runtime_recipe == RuntimeRecipe::TransformersExternal
-        && !runtime_available(state, runtime_recipe)
-    {
-        return Err(ApiError::bad(
-            "model package runtime is not available (set QIT_TRANSFORMERS_WORKER_PATH)",
-        ));
+    let runtime = state.runtimes.resolve(runtime_recipe);
+    let serve_profile = runtime
+        .profile(
+            shape.serve_profile.clone(),
+            shape.n_ctx.unwrap_or(DEFAULT_N_CTX),
+            shape
+                .n_gpu_layers
+                .unwrap_or(crate::config::DEFAULT_N_GPU_LAYERS),
+            shape.n_parallel.unwrap_or(DEFAULT_N_PARALLEL),
+        )
+        .map_err(ApiError::bad)?;
+    if intent == ResolveIntent::Launch && !runtime.is_available() {
+        return Err(ApiError::bad(runtime.unavailable_diagnostic()));
     }
     if let Some(artifact) = &artifact {
         validate_n_ctx(artifact, serve_profile.context_length)?;
@@ -762,6 +788,7 @@ fn resolve_serve(
     Ok(ResolvedServe {
         target,
         runtime_recipe,
+        runtime,
         serve_profile,
         estimate_bytes,
         generate_error,
@@ -855,6 +882,8 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
                 estimate_source: package.planner_hint.source.into(),
                 estimate_confidence: package.planner_hint.confidence.into(),
                 runtime_recipe: package.runtime_recipe.as_str().into(),
+                runtime_pack: package.runtime_compatibility.pack_id.into(),
+                runtime_protocol_version: package.runtime_compatibility.protocol_version,
                 capabilities: PackageCapabilitiesBody {
                     inputs: package.capabilities.inputs,
                     outputs: package.capabilities.outputs,
@@ -1008,36 +1037,16 @@ async fn hardware_body(state: &AppState) -> Result<HardwareBody, ApiError> {
         memory_pressure: snap.memory_pressure,
         free_ram_bytes: snap.free_ram_bytes,
         loaded_rss_bytes: state.supervisor.loaded_rss_bytes().await,
-        worker_path: state.worker_path.as_ref().map(|p| p.display().to_string()),
+        worker_path: state
+            .runtimes
+            .resolve(RuntimeRecipe::LlamaCpp)
+            .executable_path()
+            .map(|path| path.display().to_string()),
     })
 }
 
 fn runtime_available(state: &AppState, runtime_recipe: RuntimeRecipe) -> bool {
-    match runtime_recipe {
-        RuntimeRecipe::LlamaCpp => state.worker_path.as_deref().is_some_and(executable_file),
-        RuntimeRecipe::TransformersExternal => state
-            .transformers_worker_path
-            .as_deref()
-            .is_some_and(executable_file),
-    }
-}
-
-fn executable_file(path: &FilePath) -> bool {
-    let Ok(metadata) = std::fs::metadata(path) else {
-        return false;
-    };
-    if !metadata.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o111 != 0
-    }
-    #[cfg(not(unix))]
-    {
-        true
-    }
+    state.runtimes.resolve(runtime_recipe).is_available()
 }
 
 pub struct ApiError {
