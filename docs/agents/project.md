@@ -16,16 +16,22 @@ Parent spec: GitHub issue [#1](https://github.com/QuaanNguyen/q.it/issues/1). Tr
 
 | Package | Role |
 |---------|------|
+| `qit` | Publishable user shell: installs the `qit` command and starts the runtime library |
 | `qit-runtime` | Rust daemon: probe, scan, planner, supervisor, HTTP+SSE API, SQLite, embedded or proxied UI |
 | `qit-web` | React + Vite + TypeScript SPA; dev proxies `/api` to runtime |
 
-Shipped UX: one process (`qit-runtime`) on `127.0.0.1:2471`. It serves `qit-web/dist` when that build exists (`cd qit-web && npm run build`); otherwise the compiled-in Cards fallback. Dev: `cargo run -p qit-runtime` plus `cd qit-web && npm run dev`.
+Shipped UX: one `qit` process on `127.0.0.1:2471`.
+The publishable shell uses `qit-runtime` as a library and serves the embedded production browser assets.
+Development remains `cargo run -p qit-runtime` plus `cd qit-web && npm run dev`.
 
 ## Test seam (locked)
 
 **One seam:** `qit-runtime` HTTP+SSE control plane.
 
-Integration tests live in `qit-runtime/tests/control_plane.rs`. Use temp `QIT_HOME`, injectable hardware snapshot (`FixedProbe`), stub worker (`qit-stub-worker` via `StubBinLauncher`). No real Metal, no real llama.cpp, no Hub in CI.
+Control-plane integration tests live in `qit-runtime/tests/control_plane.rs`.
+Use temp `QIT_HOME`, injectable hardware snapshot (`FixedProbe`), and the stub worker (`qit-stub-worker` via `StubBinLauncher`).
+Packaged-product smoke tests may live in `qit/tests/` when they must stage the user-facing executable, but they still assert behavior through HTTP and SSE.
+No real Metal, no real llama.cpp, no Hub in CI.
 
 Do not add a second production test seam unless the control plane cannot express the behavior.
 

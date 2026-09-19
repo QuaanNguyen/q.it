@@ -645,6 +645,41 @@ async fn unsharded_curated_package_without_weights_is_not_ready() {
 }
 
 #[tokio::test]
+async fn malformed_sharded_index_is_not_ready_even_with_monolithic_weights() {
+    let h = Harness::start(
+        HardwareSnapshot {
+            device_class: "apple_silicon".into(),
+            chip: "test-chip".into(),
+            unified_memory_bytes: 2_000_000_000,
+            metal_recommended_working_set_bytes: Some(1_500_000_000),
+            memory_pressure: None,
+            free_ram_bytes: None,
+        },
+        vec![],
+    )
+    .await;
+    let package = write_transformers_package(&h.models);
+    std::fs::write(package.join("model.safetensors.index.json"), "not json").unwrap();
+    std::fs::write(package.join("model.safetensors"), "weights").unwrap();
+
+    let catalog = h
+        .post_json("/api/scan", serde_json::json!({}))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let package = catalog["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|package| package["id"] == "Qwen/Qwen3.5-0.8B")
+        .unwrap();
+    assert_eq!(package["ready"], false);
+    assert_eq!(package["readiness_reason"], "missing_required_files");
+    h.listening.shutdown().await;
+}
+
+#[tokio::test]
 async fn unknown_persisted_runtime_recipe_fails_explicitly() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");

@@ -106,31 +106,7 @@ impl WorkerLauncher for LlamaServerLauncher {
     }
 }
 
-pub(crate) fn launch_transformers_external(
-    binary: &std::path::Path,
-    extra_args: &[String],
-    request: LaunchRequest,
-) -> Result<LaunchedWorker, String> {
-    launch_worker(
-        binary,
-        request,
-        "Transformers worker",
-        |command, port, request| {
-            command
-                .args(extra_args)
-                .arg("--host")
-                .arg("127.0.0.1")
-                .arg("--port")
-                .arg(port.to_string())
-                .arg("--model")
-                .arg(&request.target_path)
-                .arg("--context-length")
-                .arg(request.n_ctx.to_string());
-        },
-    )
-}
-
-fn launch_worker<F>(
+pub(crate) fn launch_worker<F>(
     binary: &std::path::Path,
     request: LaunchRequest,
     worker_name: &str,
@@ -494,6 +470,12 @@ impl Supervisor {
     }
 }
 
+impl Default for Supervisor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct Stopped {
     pub view: SessionView,
     pub peak_rss_bytes: Option<u64>,
@@ -598,7 +580,7 @@ enum WorkerFrame {
     Other,
 }
 
-pub async fn proxy_generate<F, Fut>(
+pub(crate) async fn proxy_openai_chat_completions<F, Fut>(
     generation_url: &str,
     messages: &[ChatMessage],
     max_tokens: u32,

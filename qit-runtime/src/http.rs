@@ -26,8 +26,7 @@ use crate::serve::{RuntimeRecipe, ServeProfile, TargetIdentity};
 use crate::spa::{asset as embedded_asset, index_html};
 use crate::store::{ArtifactRow, MeasurementRow, PinRow, SessionRow, Store};
 use crate::supervisor::{
-    proxy_generate, session_status_str, ChatMessage, ServeTarget, SessionStatus, SessionView,
-    Supervisor,
+    session_status_str, ChatMessage, ServeTarget, SessionStatus, SessionView, Supervisor,
 };
 
 const DEFAULT_MAX_TOKENS: u32 = 512;
@@ -503,7 +502,7 @@ async fn generate(
         .base_url(&session.id)
         .await
         .ok_or_else(|| ApiError::bad("worker has no endpoint"))?;
-    let generation_url = resolved.runtime.generation_url(&base_url);
+    let generation_runtime = resolved.runtime.clone();
 
     let (cancel_tx, cancel_rx) = watch::channel(false);
     let target_id = resolved.target.identity.id().to_string();
@@ -514,12 +513,8 @@ async fn generate(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
     tokio::spawn(async move {
         let token_tx = tx.clone();
-        let result = proxy_generate(
-            &generation_url,
-            &messages,
-            max_tokens,
-            cancel_rx,
-            move |token| {
+        let result = generation_runtime
+            .generate(&base_url, &messages, max_tokens, cancel_rx, move |token| {
                 let token_tx = token_tx.clone();
                 async move {
                     token_tx
@@ -527,9 +522,8 @@ async fn generate(
                         .await
                         .map_err(|_| "client closed".to_string())
                 }
-            },
-        )
-        .await;
+            })
+            .await;
         match result {
             Ok(outcome) => {
                 if outcome.cancelled {
@@ -710,7 +704,8 @@ fn resolve_serve(
             if !package.required_files_match_scan() {
                 return Err(ApiError::bad("model package is missing required files"));
             }
-            let artifact = if package.runtime_recipe.requires_artifact() {
+            let runtime_recipe = package.runtime_recipe();
+            let artifact = if runtime_recipe.requires_artifact() {
                 let artifact_id = package
                     .primary_artifact_id()
                     .ok_or_else(|| ApiError::bad("model package has no servable files"))?;
@@ -720,7 +715,7 @@ fn resolve_serve(
             };
             let target = ServeTarget {
                 identity: TargetIdentity::Package {
-                    id: package.id.into(),
+                    id: package.id,
                     artifact_id: artifact.as_ref().map(|artifact| artifact.id.clone()),
                 },
                 path: artifact
@@ -728,7 +723,7 @@ fn resolve_serve(
                     .map(|artifact| artifact.path.clone())
                     .unwrap_or_else(|| package.package_dir.clone()),
             };
-            (target, package.runtime_recipe, artifact)
+            (target, runtime_recipe, artifact)
         }
         (None, Some(artifact_id)) => {
             let artifact = require_artifact(store, artifact_id)?;
@@ -863,25 +858,26 @@ async fn catalog_body(state: &AppState, n_ctx: u32) -> Result<CatalogBody, ApiEr
         .clone()
         .into_iter()
         .map(|package| {
+            let runtime_recipe = package.runtime_recipe();
             let fits = package.planner_hint.estimate_bytes <= hw.headroom_bytes;
             let readiness_reason = if !package.required_files_match_scan() {
                 Some(ReadinessReason::MissingRequiredFiles)
             } else if !fits {
                 Some(ReadinessReason::InsufficientMemory)
-            } else if !runtime_available(state, package.runtime_recipe) {
+            } else if !runtime_available(state, runtime_recipe) {
                 Some(ReadinessReason::RuntimeMissing)
             } else {
                 None
             };
             PackageBody {
-                id: package.id.into(),
-                family: package.family.into(),
-                name: package.name.into(),
+                id: package.id,
+                family: package.family,
+                name: package.name,
                 format: package.format.as_str().into(),
                 estimate_bytes: package.planner_hint.estimate_bytes,
                 estimate_source: package.planner_hint.source.into(),
                 estimate_confidence: package.planner_hint.confidence.into(),
-                runtime_recipe: package.runtime_recipe.as_str().into(),
+                runtime_recipe: runtime_recipe.as_str().into(),
                 runtime_pack: package.runtime_compatibility.pack_id.into(),
                 runtime_protocol_version: package.runtime_compatibility.protocol_version,
                 capabilities: PackageCapabilitiesBody {

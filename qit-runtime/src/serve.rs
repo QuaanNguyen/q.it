@@ -74,47 +74,6 @@ impl RuntimeRecipe {
         }
     }
 
-    pub(crate) fn profile(
-        self,
-        profile: Option<ServeProfile>,
-        context_length: u32,
-        gpu_layers: i32,
-        parallel: u32,
-    ) -> Result<ServeProfile, String> {
-        let mut profile = profile.unwrap_or_else(|| match self {
-            Self::LlamaCpp => ServeProfile::llama_cpp(context_length, gpu_layers, parallel),
-            Self::TransformersExternal => ServeProfile::transformers_external(context_length),
-        });
-        match self {
-            Self::LlamaCpp => {
-                let settings = profile.llama_cpp_settings()?;
-                if settings.parallel == 0 {
-                    return Err("parallel must be at least 1".into());
-                }
-                profile.runtime_settings =
-                    serde_json::to_value(settings).map_err(|error| error.to_string())?;
-            }
-            Self::TransformersExternal => {
-                profile.transformers_external_settings()?;
-                profile.runtime_settings = empty_runtime_settings();
-            }
-        }
-        Ok(profile)
-    }
-
-    pub(crate) fn launch_parameters(self, profile: &ServeProfile) -> Result<(i32, u32), String> {
-        match self {
-            Self::LlamaCpp => {
-                let settings = profile.llama_cpp_settings()?;
-                Ok((settings.gpu_layers, settings.parallel))
-            }
-            Self::TransformersExternal => {
-                profile.transformers_external_settings()?;
-                Ok((0, 1))
-            }
-        }
-    }
-
     pub fn requires_artifact(self) -> bool {
         self == Self::LlamaCpp
     }

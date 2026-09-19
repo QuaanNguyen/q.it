@@ -23,6 +23,7 @@ Use names, types, and structure to explain intent.
 The integration seam is `qit-runtime`'s HTTP and SSE control plane.
 Use the control-plane harness, fixed hardware probes, and stub workers instead of real model processes in automated tests.
 Do not add a second production test seam unless the control plane cannot express the behavior.
+Distribution smoke tests that stage the `qit` executable live in `qit/tests/` and still assert product behavior through the HTTP and SSE control plane.
 
 Run focused tests while working and the full suite before handing work off:
 

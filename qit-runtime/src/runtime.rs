@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use crate::serve::{RuntimeRecipe, ServeProfile};
 use crate::supervisor::{
-    launch_transformers_external, LaunchRequest, LaunchedWorker, LlamaServerLauncher,
-    WorkerLauncher,
+    launch_worker, proxy_openai_chat_completions, ChatMessage, GenerateOutcome, LaunchRequest,
+    LaunchedWorker, WorkerLauncher,
 };
 
 #[derive(Clone)]
@@ -29,18 +29,10 @@ pub struct RuntimeAdapter {
 
 impl RuntimeAdapter {
     pub fn executable(recipe: RuntimeRecipe, path: PathBuf, extra_args: Vec<String>) -> Self {
-        let diagnostic = match recipe {
-            RuntimeRecipe::LlamaCpp => {
-                "no llama.cpp runtime (set QIT_WORKER_PATH or LLAMA_SERVER_PATH)".into()
-            }
-            RuntimeRecipe::TransformersExternal => {
-                "no Transformers runtime (set QIT_TRANSFORMERS_WORKER_PATH)".into()
-            }
-        };
         Self {
             recipe,
             launch: RuntimeLaunch::Executable { path, extra_args },
-            diagnostic,
+            diagnostic: unavailable_diagnostic(recipe),
         }
     }
 
@@ -62,18 +54,10 @@ impl RuntimeAdapter {
     }
 
     pub fn unavailable(recipe: RuntimeRecipe) -> Self {
-        let diagnostic = match recipe {
-            RuntimeRecipe::LlamaCpp => {
-                "no llama.cpp runtime (set QIT_WORKER_PATH or LLAMA_SERVER_PATH)".into()
-            }
-            RuntimeRecipe::TransformersExternal => {
-                "no Transformers runtime (set QIT_TRANSFORMERS_WORKER_PATH)".into()
-            }
-        };
         Self {
             recipe,
             launch: RuntimeLaunch::Unavailable,
-            diagnostic,
+            diagnostic: unavailable_diagnostic(recipe),
         }
     }
 
@@ -108,12 +92,42 @@ impl RuntimeAdapter {
         gpu_layers: i32,
         parallel: u32,
     ) -> Result<ServeProfile, String> {
-        self.recipe
-            .profile(profile, context_length, gpu_layers, parallel)
+        let mut profile = profile.unwrap_or_else(|| match self.recipe {
+            RuntimeRecipe::LlamaCpp => {
+                ServeProfile::llama_cpp(context_length, gpu_layers, parallel)
+            }
+            RuntimeRecipe::TransformersExternal => {
+                ServeProfile::transformers_external(context_length)
+            }
+        });
+        match self.recipe {
+            RuntimeRecipe::LlamaCpp => {
+                let settings = profile.llama_cpp_settings()?;
+                if settings.parallel == 0 {
+                    return Err("parallel must be at least 1".into());
+                }
+                profile.runtime_settings =
+                    serde_json::to_value(settings).map_err(|error| error.to_string())?;
+            }
+            RuntimeRecipe::TransformersExternal => {
+                profile.transformers_external_settings()?;
+                profile.runtime_settings = serde_json::Value::Object(serde_json::Map::new());
+            }
+        }
+        Ok(profile)
     }
 
     pub fn launch_parameters(&self, profile: &ServeProfile) -> Result<(i32, u32), String> {
-        self.recipe.launch_parameters(profile)
+        match self.recipe {
+            RuntimeRecipe::LlamaCpp => {
+                let settings = profile.llama_cpp_settings()?;
+                Ok((settings.gpu_layers, settings.parallel))
+            }
+            RuntimeRecipe::TransformersExternal => {
+                profile.transformers_external_settings()?;
+                Ok((0, 1))
+            }
+        }
     }
 
     pub fn launch(&self, request: LaunchRequest) -> Result<LaunchedWorker, String> {
@@ -121,15 +135,9 @@ impl RuntimeAdapter {
             return Err(self.diagnostic.clone());
         }
         match &self.launch {
-            RuntimeLaunch::Executable { path, extra_args } => match self.recipe {
-                RuntimeRecipe::LlamaCpp => LlamaServerLauncher {
-                    binary: Some(path.clone()),
-                }
-                .launch(request),
-                RuntimeRecipe::TransformersExternal => {
-                    launch_transformers_external(path, extra_args, request)
-                }
-            },
+            RuntimeLaunch::Executable { path, extra_args } => {
+                self.launch_executable(path, extra_args, request)
+            }
             RuntimeLaunch::Injected { launcher, .. } => launcher.launch(request),
             RuntimeLaunch::Unavailable => Err(self.diagnostic.clone()),
         }
@@ -141,6 +149,75 @@ impl RuntimeAdapter {
 
     pub fn generation_url(&self, base_url: &str) -> String {
         format!("{base_url}/v1/chat/completions")
+    }
+
+    pub async fn generate<F, Fut>(
+        &self,
+        base_url: &str,
+        messages: &[ChatMessage],
+        max_tokens: u32,
+        cancel: tokio::sync::watch::Receiver<bool>,
+        on_token: F,
+    ) -> Result<GenerateOutcome, String>
+    where
+        F: FnMut(String) -> Fut,
+        Fut: std::future::Future<Output = Result<(), String>>,
+    {
+        proxy_openai_chat_completions(
+            &self.generation_url(base_url),
+            messages,
+            max_tokens,
+            cancel,
+            on_token,
+        )
+        .await
+    }
+
+    fn launch_executable(
+        &self,
+        path: &Path,
+        extra_args: &[String],
+        request: LaunchRequest,
+    ) -> Result<LaunchedWorker, String> {
+        match self.recipe {
+            RuntimeRecipe::LlamaCpp => launch_worker(
+                path,
+                request,
+                "llama.cpp worker",
+                |command, port, request| {
+                    command
+                        .arg("--host")
+                        .arg("127.0.0.1")
+                        .arg("--port")
+                        .arg(port.to_string())
+                        .arg("-m")
+                        .arg(&request.target_path)
+                        .arg("-c")
+                        .arg(request.n_ctx.to_string())
+                        .arg("-ngl")
+                        .arg(request.n_gpu_layers.to_string())
+                        .arg("--parallel")
+                        .arg(request.n_parallel.to_string());
+                },
+            ),
+            RuntimeRecipe::TransformersExternal => launch_worker(
+                path,
+                request,
+                "Transformers worker",
+                |command, port, request| {
+                    command
+                        .args(extra_args)
+                        .arg("--host")
+                        .arg("127.0.0.1")
+                        .arg("--port")
+                        .arg(port.to_string())
+                        .arg("--model")
+                        .arg(&request.target_path)
+                        .arg("--context-length")
+                        .arg(request.n_ctx.to_string());
+                },
+            ),
+        }
     }
 }
 
@@ -189,5 +266,16 @@ fn executable_file(path: &Path) -> bool {
     #[cfg(not(unix))]
     {
         true
+    }
+}
+
+fn unavailable_diagnostic(recipe: RuntimeRecipe) -> String {
+    match recipe {
+        RuntimeRecipe::LlamaCpp => {
+            "no llama.cpp runtime (set QIT_WORKER_PATH or LLAMA_SERVER_PATH)".into()
+        }
+        RuntimeRecipe::TransformersExternal => {
+            "no Transformers runtime (set QIT_TRANSFORMERS_WORKER_PATH)".into()
+        }
     }
 }
