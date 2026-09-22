@@ -34,7 +34,9 @@ _Avoid_: backend setting, engine configuration
 
 **Runtime pack**:
 Immutable, versioned executable material installed under q.it application state.
-q.it verifies its manifest, contents, signature, and host compatibility before a runtime recipe can select it.
+The runtime-pack module owns compatibility evaluation, trusted archive acquisition, archive and installed-content verification, activation, discovery, selection, and offline archive provisioning.
+q.it verifies the pack's manifest, contents, signature, and host compatibility before a runtime recipe can select it.
+Readiness and launch use the same selected pack through its runtime recipe.
 A runtime pack does not select a model package or define its readiness policy.
 _Avoid_: runtime recipe, backend, model environment
 

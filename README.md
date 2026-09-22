@@ -8,7 +8,9 @@ q.it scans local GGUF artifacts and supported Transformers packages.
 It shows what is present, what fits the configured capacity budget, and what is ready to serve.
 It can start a local worker, proxy generation through one local HTTP and SSE control plane, and keep pins, sessions, settings, and measurements in local app state.
 
-q.it never downloads model files, Python, PyTorch, or catalog data at runtime.
+q.it never downloads model weights or executes code from local model repositories.
+The current release uses configured local workers.
+Planned q.it-owned runtime packs will be installed only after explicit confirmation and verified before activation.
 
 ## Install and Run
 
@@ -38,14 +40,19 @@ This avoids macOS Application Support permission issues in terminals with restri
 
 q.it discovers GGUF artifacts below `QIT_MODELS_DIR`.
 With `QIT_MODELS_DIR=$HOME/models/gguf`, it discovers supported Transformers packages below `$HOME/models/transformers`.
-The current package recipes support local Qwen 3.5 and Gemma 4 layouts with their config, tokenizer metadata, model card, and safetensors weights.
+The current package recipes support local Qwen 3.5 and Gemma 4 layouts with their config, tokenizer metadata, and safetensors weights.
+Model cards are editorial metadata and are not required for serving.
 Other checkpoint layouts are not offered for serving until q.it has a tested package recipe and worker contract for them.
 
-GGUF Start and Try use `llama-server`.
+GGUF Start and Try currently use `llama-server`.
 Install it with `brew install llama.cpp`, or set `QIT_WORKER_PATH` or `LLAMA_SERVER_PATH` to its executable.
 
-Transformers text-chat packages need an OpenAI-compatible worker configured through `QIT_TRANSFORMERS_WORKER_PATH`.
+Transformers text-chat packages currently need an OpenAI-compatible worker configured through `QIT_TRANSFORMERS_WORKER_PATH`.
 q.it starts the worker privately on loopback, waits for `/health`, and proxies `/v1/chat/completions` as q.it SSE.
+
+The first managed runtime pack will qualify curated Qwen 3.5 on Apple Silicon before Gemma 4 joins the same pack.
+Application support, runtime-pack support, and accelerator support are separate claims.
+A successful build, catalog scan, or capacity probe is not evidence that an inference path is supported.
 
 Capacity estimates are currently calibrated for Apple Silicon unified memory.
 On other hardware, q.it may report an unknown capacity budget while still cataloging local files.

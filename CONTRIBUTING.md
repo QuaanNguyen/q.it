@@ -24,6 +24,12 @@ The integration seam is `qit-runtime`'s HTTP and SSE control plane.
 Use the control-plane harness, fixed hardware probes, and stub workers instead of real model processes in automated tests.
 Do not add a second production test seam unless the control plane cannot express the behavior.
 Distribution smoke tests that stage the `qit` executable live in `qit/tests/` and still assert product behavior through the HTTP and SSE control plane.
+Document platform support as separate application, runtime-pack, and accelerator claims.
+Do not infer an inference or accelerator support claim from a successful build, catalog scan, or capacity probe.
+
+Runtime-pack work uses generated signed local fixtures, temporary app state, and the control-plane harness in the normal suite.
+Keep network access, Python, PyTorch, Metal inference, and real model weights out of the normal suite.
+Use real-device release qualification for the exact released pack and model-package recipe that the product claims to support.
 
 Run focused tests while working and the full suite before handing work off:
 
