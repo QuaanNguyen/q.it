@@ -38,6 +38,11 @@ q.it verifies its manifest, contents, signature, and host compatibility before a
 A runtime pack does not select a model package or define its readiness policy.
 _Avoid_: runtime recipe, backend, model environment
 
+**Trust root**:
+The versioned set of offline public keys shipped with q.it that authorizes runtime-pack metadata.
+q.it accepts a replacement trust root only when it is validated by the currently trusted root.
+_Avoid_: release key, archive signature
+
 **Serve profile**:
 The context length and runtime-specific settings for one target.
 _Avoid_: session tuple, universal runtime knobs
