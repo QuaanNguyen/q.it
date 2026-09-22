@@ -32,6 +32,12 @@ _Avoid_: status message, warning
 The package-selected worker integration that validates a serve profile and launches a worker.
 _Avoid_: backend setting, engine configuration
 
+**Runtime pack**:
+Immutable, versioned executable material installed under q.it application state.
+q.it verifies its manifest, contents, signature, and host compatibility before a runtime recipe can select it.
+A runtime pack does not select a model package or define its readiness policy.
+_Avoid_: runtime recipe, backend, model environment
+
 **Serve profile**:
 The context length and runtime-specific settings for one target.
 _Avoid_: session tuple, universal runtime knobs
