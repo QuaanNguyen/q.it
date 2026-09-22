@@ -46,6 +46,11 @@ _Avoid_: session tuple, universal runtime knobs
 The artifact or model package selected for a reservation or session.
 _Avoid_: artifact id, package id
 
+**Host identity**:
+The factual operating-system, CPU architecture, ABI, and detected accelerator capabilities of the machine running q.it.
+It supports compatibility evaluation but does not imply capacity, a supported runtime, or a supported accelerator.
+_Avoid_: device profile, product name, support tier
+
 **Artifact kind**:
 A scan-time label from GGUF headers: instruct, base, embedding, rerank, vision_projector, or unknown. **Try** is offered only for instruct.
 _Avoid_: model type, chat-capable
