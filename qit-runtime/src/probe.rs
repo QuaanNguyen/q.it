@@ -65,8 +65,9 @@ fn macos_snapshot() -> HardwareSnapshot {
 
 #[cfg(target_os = "macos")]
 fn metal_working_set() -> Option<u64> {
-    let device = metal::Device::system_default()?;
-    Some(device.recommended_max_working_set_size())
+    use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice};
+
+    Some(MTLCreateSystemDefaultDevice()?.recommendedMaxWorkingSetSize())
 }
 
 #[cfg(target_os = "macos")]
