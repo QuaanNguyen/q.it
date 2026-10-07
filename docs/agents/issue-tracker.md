@@ -27,7 +27,7 @@ Run `gh issue view <number> --comments`.
 
 ## Specs and milestones
 
-- Parent specs use a milestone title (e.g. "Milestone 1: local GGUF catalog + capacity planner").
+- Parent specs use a milestone title (e.g. "Milestone 1: Raspberry Pi benchmark runner").
 - Tracer-bullet implementation tickets reference the parent issue in the body under `## Parent`.
 - Local draft copies may live under `.scratch/<feature-slug>/` until published.
 

@@ -1,0 +1,3 @@
+{"id":"weather","input":"weather forecast","documents":["Tomorrow may bring rain and cool wind.","A compiler turns source code into a program.","Bread needs flour and water."],"expected_index":0}
+{"id":"raspberry-pi","input":"small single-board computer","documents":["A violin is a bowed string instrument.","Raspberry Pi is a compact single-board computer.","Oak trees can live for centuries."],"expected_index":1}
+{"id":"memory","input":"reduce application memory consumption","documents":["Profile allocations and release unused buffers.","Increase the screen brightness.","Add more network retries."],"expected_index":0}

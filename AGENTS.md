@@ -1,6 +1,6 @@
 # q.it
 
-Local GGUF catalog and capacity planner. See [README.md](README.md) for run instructions.
+Raspberry Pi edge-model benchmark runner and analysis dashboard. See [README.md](README.md) for run instructions.
 
 ## Agent skills
 

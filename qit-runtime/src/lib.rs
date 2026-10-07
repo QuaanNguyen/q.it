@@ -1,31 +1,27 @@
-pub mod catalog;
 pub mod command;
 pub mod config;
-pub mod error;
-pub mod estimate;
-pub mod gguf;
-pub mod http;
+pub mod dashboard;
+pub mod model;
+pub mod packs;
 pub mod paths;
-pub mod probe;
-pub mod runtime;
-pub mod scan;
-pub mod serve;
+pub mod provider;
+pub mod runner;
 pub mod spa;
 pub mod store;
-pub mod supervisor;
+pub mod telemetry;
 
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
-use tokio::sync::{oneshot, Mutex, Semaphore};
+use tokio::sync::{oneshot, Mutex};
 
 use crate::config::Config;
-use crate::error::Error;
-use crate::http::{rescan, router, AppState};
+use crate::dashboard::{router, DashboardState};
+use crate::model::HostInfo;
+use crate::packs::PackCatalog;
 use crate::paths::Paths;
 use crate::store::Store;
-use crate::supervisor::Supervisor;
 
 pub struct Listening {
     pub addr: SocketAddr,
@@ -39,8 +35,8 @@ impl Listening {
     }
 
     pub async fn shutdown(mut self) {
-        if let Some(tx) = self.shutdown.take() {
-            let _ = tx.send(());
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
         }
         if let Some(join) = self.join.take() {
             let _ = join.await;
@@ -48,52 +44,34 @@ impl Listening {
     }
 }
 
-pub async fn bind(config: Config) -> Result<Listening, Error> {
-    let paths = Paths::new(config.home.clone(), config.models_dir.clone());
-    paths.ensure().map_err(|source| Error::Home {
-        path: paths.home.clone(),
-        source,
-    })?;
-    let store = Store::open(&paths.db_path).map_err(|source| Error::Database {
-        path: paths.db_path.clone(),
-        source,
-    })?;
-    store.reset_sessions_on_restart()?;
-    let session_rows = store.sessions()?;
-    let supervisor = Arc::new(Supervisor::new());
-    supervisor.hydrate(session_rows).await;
-    let state = AppState {
-        packages: Arc::new(RwLock::new(Vec::new())),
-        paths,
+pub async fn bind(config: Config) -> Result<Listening, String> {
+    let paths = Paths::new(config.home);
+    paths.ensure()?;
+    let store = Store::open(&paths.database)?;
+    let catalog = PackCatalog::new(paths.packs);
+    catalog.benchmarks()?;
+    let state = DashboardState {
         store: Arc::new(Mutex::new(store)),
-        probe: config.probe.clone(),
-        os_reserve_override: config.os_reserve_bytes,
-        runtimes: config.runtimes.clone(),
-        supervisor,
-        what_ifs: Arc::new(Mutex::new(Vec::new())),
-        generate_slot: Arc::new(Semaphore::new(1)),
+        catalog,
+        host: HostInfo::detect(),
     };
-    rescan(&state)
-        .await
-        .map_err(|e| Error::Message(format!("{e:?}")))?;
     let listener = TcpListener::bind(config.listen)
         .await
-        .map_err(|err| Error::from_bind(config.listen, err))?;
+        .map_err(|error| format!("bind dashboard to {}: {error}", config.listen))?;
     let addr = listener
         .local_addr()
-        .map_err(|err| Error::from_bind(config.listen, err))?;
-    let app = router(state);
-    let (tx, rx) = oneshot::channel::<()>();
+        .map_err(|error| format!("read dashboard address: {error}"))?;
+    let (shutdown, stopped) = oneshot::channel();
     let join = tokio::spawn(async move {
-        axum::serve(listener, app)
+        axum::serve(listener, router(state))
             .with_graceful_shutdown(async {
-                let _ = rx.await;
+                let _ = stopped.await;
             })
             .await
     });
     Ok(Listening {
         addr,
-        shutdown: Some(tx),
+        shutdown: Some(shutdown),
         join: Some(join),
     })
 }

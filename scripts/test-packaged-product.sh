@@ -37,14 +37,17 @@ test ! -e "$smoke_dir/install/bin/qit-stub-worker"
 
 cd "$smoke_dir"
 QIT_HOME="$smoke_dir/state" \
-QIT_MODELS_DIR="$smoke_dir/models" \
-QIT_PORT=0 \
-"$smoke_dir/install/bin/qit" > "$smoke_dir/stdout" 2> "$smoke_dir/stderr" &
+"$smoke_dir/install/bin/qit" benchmark list > "$smoke_dir/benchmarks"
+grep --quiet 'core/text-generation-smoke' "$smoke_dir/benchmarks"
+grep --quiet 'core/image-to-text-smoke' "$smoke_dir/benchmarks"
+
+QIT_HOME="$smoke_dir/state" \
+"$smoke_dir/install/bin/qit" dashboard --port 0 > "$smoke_dir/stdout" 2> "$smoke_dir/stderr" &
 qit_pid=$!
 
 base_url=""
 for _ in {1..100}; do
-  base_url=$(sed -n 's/^q.it listening on //p' "$smoke_dir/stdout")
+  base_url=$(sed -n 's/^q.it dashboard listening on //p' "$smoke_dir/stdout")
   if [[ -n "$base_url" ]]; then
     break
   fi
@@ -53,6 +56,7 @@ done
 test -n "$base_url"
 
 curl --fail --silent "$base_url/api/health" | grep --quiet '"ok":true'
+curl --fail --silent "$base_url/api/benchmarks" | grep --quiet 'speech_to_text'
 curl --fail --silent "$base_url/" > "$smoke_dir/index.html"
 asset_path=$(sed -n 's/.*src="\([^"]*\.js\)".*/\1/p' "$smoke_dir/index.html")
 test -n "$asset_path"

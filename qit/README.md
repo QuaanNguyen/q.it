@@ -1,15 +1,29 @@
 # q.it
 
-q.it is a local GGUF catalog, capacity planner, and serving control plane for open-weight model packages.
+q.it benchmarks edge models on Raspberry Pi 5 through Ollama, Hugging Face Transformers Serve, and Hugging Face Text Embeddings Inference.
 
-Install the user-facing command with:
+The six bundled benchmarks are small, self-made checks for confirming that the model-serving path works.
+Larger official evaluations are installed separately as benchmark packs.
+
+Install the command with:
 
 ```bash
 cargo install qit
 ```
 
-Run `qit`, then open [http://127.0.0.1:2471](http://127.0.0.1:2471).
+Discover a provider and its compatible built-in benchmarks:
 
-The installed command contains the complete browser interface and does not require Node.js or a repository checkout.
+```bash
+qit provider list
+qit benchmark list --provider ollama
+```
 
-See the [project repository](https://github.com/QuaanNguyen/q.it) for model-library configuration and development instructions.
+Run a benchmark, inspect the durable result, and start the optional dashboard:
+
+```bash
+qit run core/text-generation-smoke --provider ollama --model gemma3:1b
+qit results
+qit dashboard
+```
+
+See the [project repository](https://github.com/QuaanNguyen/q.it) for provider setup, benchmark-pack authoring, metric definitions, exports, and development instructions.

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "id": "core",
+  "name": "q.it core",
+  "version": "1.0.0",
+  "description": "Small offline smoke and retrieval benchmarks for validating edge-model serving paths.",
+  "publisher": "q.it",
+  "license": "MIT",
+  "source": "q.it",
+  "benchmarks": [
+    {
+      "id": "text-generation-smoke",
+      "name": "Text generation smoke",
+      "description": "Measures streamed text generation latency and checks simple instruction following.",
+      "task": "text_generation",
+      "cases": "text-generation-smoke.jsonl",
+      "tags": ["text", "latency", "instruction-following"],
+      "default_max_output_tokens": 64
+    },
+    {
+      "id": "embedding-retrieval",
+      "name": "Embedding retrieval",
+      "description": "Measures embedding latency and checks whether the expected document ranks first by cosine similarity.",
+      "task": "embedding",
+      "cases": "embedding-retrieval.jsonl",
+      "tags": ["text", "embedding", "retrieval"],
+      "default_max_output_tokens": 1
+    },
+    {
+      "id": "image-to-text-smoke",
+      "name": "Image to text smoke",
+      "description": "Measures vision-language latency with a generated two-color image.",
+      "task": "image_to_text",
+      "cases": "image-to-text-smoke.jsonl",
+      "tags": ["image", "vision", "multimodal"],
+      "default_max_output_tokens": 48
+    },
+    {
+      "id": "speech-to-text-smoke",
+      "name": "Speech to text transport smoke",
+      "description": "Measures the transcription path with a short generated tone and does not claim speech quality.",
+      "task": "speech_to_text",
+      "cases": "speech-to-text-smoke.jsonl",
+      "tags": ["audio", "speech", "multimodal"],
+      "default_max_output_tokens": 1
+    },
+    {
+      "id": "reranking-relevance",
+      "name": "Reranking relevance",
+      "description": "Measures reranking latency and checks whether the expected passage is ranked first.",
+      "task": "reranking",
+      "cases": "reranking-relevance.jsonl",
+      "tags": ["text", "reranking", "retrieval"],
+      "default_max_output_tokens": 1
+    },
+    {
+      "id": "text-to-image-smoke",
+      "name": "Text to image smoke",
+      "description": "Measures whether an image generation endpoint accepts a small edge-oriented request.",
+      "task": "text_to_image",
+      "cases": "text-to-image-smoke.jsonl",
+      "tags": ["image", "generation", "multimodal"],
+      "default_max_output_tokens": 1
+    }
+  ]
+}
