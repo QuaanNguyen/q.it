@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0005
+---
+
 # Runtime adapters select executable material
 
 Model-package recipes declare runtime compatibility, but they do not resolve executables or construct worker commands.

@@ -1,259 +1,133 @@
-export type Artifact = {
-  id: string;
-  org: string;
-  filename: string;
-  bytes: number;
-  architecture: string | null;
-  context_length: number | null;
-  block_count: number | null;
-  head_count: number | null;
-  confidence: string;
-  estimate_bytes: number;
-  fit: string;
-  throughput_tps: number | null;
-  peak_rss_bytes: number | null;
-  kind: string;
-  generate_supported: boolean;
-};
+export type Task =
+  | "text_generation"
+  | "embedding"
+  | "image_to_text"
+  | "speech_to_text"
+  | "reranking"
+  | "text_to_image";
 
-export type ModelPackage = {
+export type Provider = "ollama" | "transformers" | "tei";
+
+export type Benchmark = {
   id: string;
-  family: string;
+  pack_id: string;
+  pack_name: string;
+  pack_version: string;
   name: string;
-  format: string;
-  estimate_bytes: number;
-  estimate_source: string;
-  estimate_confidence: string;
-  runtime_recipe: "llama_cpp" | "transformers_external";
-  capabilities: {
-    inputs: string[];
-    outputs: string[];
-    tasks: string[];
-  };
-  files: {
-    path: string;
-    role: string;
-    bytes: number | null;
-    sha256: string | null;
-    source: string;
-  }[];
-  fits: boolean;
-  ready: boolean;
-  readiness_reason: "missing_required_files" | "insufficient_memory" | "runtime_missing" | null;
+  description: string;
+  task: Task;
+  case_count: number;
+  tags: string[];
+  default_max_output_tokens: number;
+  built_in: boolean;
+  supported_providers: Provider[];
 };
 
-export type ServeProfile = {
-  context_length: number;
-  runtime_settings: Record<string, unknown>;
+export type RunSummary = {
+  sample_count: number;
+  successful_sample_count: number;
+  success_rate: number;
+  latency_ms_p50: number | null;
+  latency_ms_p95: number | null;
+  ttft_ms_p50: number | null;
+  ttft_ms_p95: number | null;
+  tokens_per_second_p50: number | null;
+  host_cpu_percent_mean: number | null;
+  host_cpu_percent_peak: number | null;
+  host_memory_used_bytes_peak: number | null;
+  process_rss_bytes_peak: number | null;
+  quality_score_mean: number | null;
 };
 
-export type Catalog = {
-  artifacts: Artifact[];
-  packages: ModelPackage[];
-};
-
-export type Hardware = {
-  device_class: string;
-  chip: string;
-  unified_memory_bytes: number;
-  metal_recommended_working_set_bytes: number | null;
-  os_reserve_bytes: number;
-  budget_bytes: number;
-  headroom_bytes: number;
-  memory_pressure: string | null;
-  free_ram_bytes: number | null;
-  loaded_rss_bytes: number;
-  worker_path: string | null;
-};
-
-export type Reservation = {
+export type Run = {
   id: string;
-  target_id: string;
-  artifact_id?: string;
-  package_id?: string;
-  runtime_recipe: "llama_cpp" | "transformers_external";
-  serve_profile: ServeProfile;
-  estimate_bytes: number;
+  benchmark_id: string;
+  benchmark_name: string;
+  pack_version: string;
+  task: Task;
+  provider: Provider;
+  base_url: string;
+  model: string;
+  host_name: string;
+  status: "running" | "succeeded" | "failed";
+  started_at_ms: number;
+  finished_at_ms: number | null;
+  iterations: number;
+  warmups: number;
+  max_output_tokens: number;
+  target_pid: number | null;
+  error: string | null;
+  summary: RunSummary;
 };
 
-export type SessionStatus =
-  | "not_loaded"
-  | "starting"
-  | "loaded"
-  | "stopping"
-  | "failed";
-
-export type Session = {
-  id: string;
-  target_id: string;
-  artifact_id?: string;
-  package_id?: string;
-  runtime_recipe: "llama_cpp" | "transformers_external";
-  serve_profile: ServeProfile;
-  status: SessionStatus;
-  last_error?: string;
-  log_path?: string;
+export type RunsResponse = {
+  runs: Run[];
+  succeeded: number;
+  failed: number;
+  running: number;
 };
 
-export type Capacity = {
-  hardware: Hardware;
-  pins: Reservation[];
-  what_ifs: Reservation[];
-  sessions: Session[];
+export type AnalysisPoint = {
+  run_id: string;
+  benchmark_id: string;
+  pack_version: string;
+  model: string;
+  provider: Provider;
+  host_name: string;
+  latency_ms: number | null;
+  ttft_ms: number | null;
+  tokens_per_second: number | null;
+  memory_bytes: number | null;
+  cpu_percent: number | null;
+  quality_score: number | null;
+  pareto: boolean;
 };
 
-export type Settings = {
-  os_reserve_bytes: number | null;
-  os_reserve_source: "env" | "setting" | "default";
-  effective_os_reserve_bytes: number;
+export type Host = {
+  host_name: string;
+  operating_system: string;
+  architecture: string;
+  cpu: string | null;
+  logical_cpu_count: number | null;
+  total_memory_bytes: number | null;
+  raspberry_pi: boolean;
 };
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
-
-export type GenerateDone = {
-  prompt_tokens: number;
-  completion_tokens: number;
-  n_ctx: number;
-};
-
-export class ApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+async function get<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `${response.status} ${response.statusText}`);
   }
+  return response.json() as Promise<T>;
 }
-
-function errorMessage(text: string): string {
-  try {
-    const j = JSON.parse(text) as { error?: string };
-    return j.error ?? text;
-  } catch {
-    return text;
-  }
-}
-
-async function parse<T>(res: Response): Promise<T> {
-  if (res.status === 204) {
-    return undefined as T;
-  }
-  const text = await res.text();
-  if (!res.ok) {
-    throw new ApiError(res.status, errorMessage(text));
-  }
-  return text ? (JSON.parse(text) as T) : (undefined as T);
-}
-
-export function fmtBytes(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
-  return `${n} B`;
-}
-
-export function fmtTokens(n: number): string {
-  if (n < 1000) return String(n);
-  const k = n / 1024;
-  return `${Number.isInteger(k) ? k : k.toFixed(k >= 10 ? 0 : 1)}k`;
-}
-
-const json = (body: unknown): RequestInit => ({
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify(body),
-});
-
-const serveProfile = (context_length: number): ServeProfile => ({
-  context_length,
-  runtime_settings: {},
-});
 
 export const api = {
-  health: () => fetch("/api/health").then((r) => parse<{ ok: boolean }>(r)),
-  hardware: () => fetch("/api/hardware").then((r) => parse<Hardware>(r)),
-  scan: () =>
-    fetch("/api/scan", { method: "POST" }).then((r) =>
-      parse<Catalog>(r)
-    ),
-  catalog: (n_ctx: number) =>
-    fetch(`/api/catalog?n_ctx=${n_ctx}`).then((r) =>
-      parse<Catalog>(r)
-    ),
-  capacity: () => fetch("/api/capacity").then((r) => parse<Capacity>(r)),
-  sessions: () => fetch("/api/sessions").then((r) => parse<Session[]>(r)),
-  settings: () => fetch("/api/settings").then((r) => parse<Settings>(r)),
-  updateSettings: (os_reserve_bytes: number | null) =>
-    fetch("/api/settings", { ...json({ os_reserve_bytes }), method: "PUT" }).then(
-      (r) => parse<Settings>(r)
-  ),
-  pin: (artifact_id: string, n_ctx: number) =>
-    fetch(
-      "/api/pins",
-      json({ artifact_id, serve_profile: serveProfile(n_ctx) })
-    ).then((r) => parse<Reservation>(r)),
-  whatIf: (artifact_id: string, n_ctx: number) =>
-    fetch(
-      "/api/what-ifs",
-      json({ artifact_id, serve_profile: serveProfile(n_ctx) })
-    ).then((r) => parse<Reservation>(r)),
-  deletePin: (id: string) => fetch(`/api/pins/${id}`, { method: "DELETE" }),
-  deleteWhatIf: (id: string) => fetch(`/api/what-ifs/${id}`, { method: "DELETE" }),
-  clearWhatIfs: () => fetch("/api/what-ifs", { method: "DELETE" }),
-  start: (artifact_id: string, n_ctx: number) =>
-    fetch(
-      "/api/sessions",
-      json({ artifact_id, serve_profile: serveProfile(n_ctx) })
-    ).then((r) => parse<Session>(r)),
-  startPackage: (package_id: string, n_ctx: number) =>
-    fetch(
-      "/api/sessions",
-      json({ package_id, serve_profile: serveProfile(n_ctx) })
-    ).then((r) => parse<Session>(r)),
-  stop: (id: string) =>
-    fetch(`/api/sessions/${id}/stop`, { method: "POST" }).then((r) =>
-      parse<Session>(r)
-    ),
+  host: () => get<Host>("/api/host"),
+  benchmarks: () => get<Benchmark[]>("/api/benchmarks"),
+  runs: () => get<RunsResponse>("/api/runs?limit=1000"),
+  analysis: () => get<{ points: AnalysisPoint[] }>("/api/analysis"),
 };
 
-export type GenerateHandlers = {
-  onToken: (token: string) => void;
-  onDone: (done: GenerateDone) => void;
-  onError: (message: string) => void;
-};
+export function providerLabel(provider: Provider): string {
+  if (provider === "transformers") return "Transformers Serve";
+  if (provider === "tei") return "HF TEI";
+  return "Ollama";
+}
 
-export async function generate(
-  artifact_id: string,
-  n_ctx: number,
-  messages: ChatMessage[],
-  signal: AbortSignal,
-  handlers: GenerateHandlers
-): Promise<void> {
-  const res = await fetch("/api/generate", {
-    ...json({ artifact_id, serve_profile: serveProfile(n_ctx), messages }),
-    signal,
-  });
-  if (!res.ok) {
-    throw new ApiError(res.status, errorMessage(await res.text()));
-  }
-  const reader = res.body?.getReader();
-  if (!reader) return;
-  const decoder = new TextDecoder();
-  let buf = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const frames = buf.split("\n\n");
-    buf = frames.pop() ?? "";
-    for (const frame of frames) {
-      const event = frame.match(/^event: (.*)$/m)?.[1];
-      const data = frame
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).replace(/^ /, ""))
-        .join("\n");
-      if (event === "token") handlers.onToken(data);
-      else if (event === "done") handlers.onDone(JSON.parse(data) as GenerateDone);
-      else if (event === "error") handlers.onError(data);
-    }
-  }
+export function taskLabel(task: Task): string {
+  return task
+    .split("_")
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+export function bytes(value: number | null): string {
+  if (value === null) return "Not measured";
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GiB`;
+  return `${(value / 1024 ** 2).toFixed(0)} MiB`;
+}
+
+export function metric(value: number | null, suffix: string): string {
+  return value === null ? "-" : `${value.toFixed(1)}${suffix}`;
 }

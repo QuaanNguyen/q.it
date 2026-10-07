@@ -1,0 +1,2 @@
+{"id":"edge-compute","input":"Which passage describes edge computing?","documents":["Edge computing processes data near the device where it is produced.","Cloud regions contain large centralized data centers.","A keyboard sends key presses to a computer."],"expected_index":0}
+{"id":"pi-memory","input":"How can I inspect memory on Raspberry Pi OS?","documents":["Use the free command or read Linux memory information.","Change the desktop wallpaper.","Tune the guitar strings."],"expected_index":0}

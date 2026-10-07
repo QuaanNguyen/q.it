@@ -1,0 +1,3 @@
+{"id":"literal-word","prompt":"Reply with only the word raspberry.","expected_contains":["raspberry"]}
+{"id":"small-arithmetic","prompt":"What number is six multiplied by seven? Reply with the number only.","expected_contains":["42"]}
+{"id":"edge-summary","prompt":"In one short sentence, explain why low memory use matters on an edge device.","expected_contains":[]}

@@ -1,0 +1,1 @@
+{"id":"two-colors","prompt":"Name the two dominant colors in this image. Reply with just the color names.","media":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAANUlEQVR42u3OIQEAMAgAMLpcU4js169xQiAwE/OLl/knTt2REBAQEBAQEBAQEBAQEBAQ2A40pPMuiNofFjYAAAAASUVORK5CYII=","media_type":"image/png","expected_contains":["red","blue"]}
