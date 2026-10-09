@@ -17,6 +17,9 @@ The local pack installer is ready, but an online pack registry and downloadable 
 
 See [Built-in benchmarks](docs/built-in-benchmarks.md) for exactly what each bundled check does.
 
+The [CPU model validation plan](https://github.com/QuaanNguyen/q.it/issues/81) proposes 43 additional models below one billion parameters across all six tasks.
+See the [text-model research](docs/research/sub-billion-text-models.md) and [multimodal-model research](docs/research/sub-billion-multimodal-models.md) for parameter audits, canonical checkpoints, CPU serving requirements, and pending integrations.
+
 ## Quick start on Raspberry Pi OS
 
 ### 1. Install q.it
