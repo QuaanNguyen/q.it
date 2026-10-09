@@ -217,7 +217,7 @@ fn run_command(arguments: &[String]) -> Result<i32, String> {
             ProviderKind::Transformers => std::env::var("HF_TOKEN")
                 .ok()
                 .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
-            ProviderKind::Tei => std::env::var("HF_TOKEN").ok(),
+            ProviderKind::Tei | ProviderKind::HfServe => std::env::var("HF_TOKEN").ok(),
             ProviderKind::Ollama => None,
         });
     let request = RunRequest {
@@ -507,7 +507,7 @@ fn print_benchmark_help() {
 fn print_run_help() {
     println!(
         "Usage: qit run BENCHMARK --model MODEL [options]\n\n\
-Options:\n  --provider NAME      ollama, transformers, or tei (default: ollama)\n  --base-url URL       Provider root URL\n  --api-key TOKEN      Bearer token, or use QIT_API_KEY\n  --iterations N       Measured iterations (default: 3)\n  --warmups N          Warmup requests (default: 1)\n  --max-tokens N       Generation limit from the benchmark by default\n  --timeout SECONDS    Per-request timeout (default: 120)\n  --pid PID            Provider process to sample for peak RSS"
+Options:\n  --provider NAME      ollama, transformers, hf-serve, or tei (default: ollama)\n  --base-url URL       Provider root URL\n  --api-key TOKEN      Bearer token, or use QIT_API_KEY\n  --iterations N       Measured iterations (default: 3)\n  --warmups N          Warmup requests (default: 1)\n  --max-tokens N       Generation limit from the benchmark by default\n  --timeout SECONDS    Per-request timeout (default: 120)\n  --pid PID            Provider process to sample for peak RSS"
     );
 }
 
