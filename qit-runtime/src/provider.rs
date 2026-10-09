@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 
 use crate::model::{BenchmarkCase, InvocationResult, ProviderKind, Task};
 
+const HF_SERVE_MAX_BATCH_INPUTS: usize = 4;
+
 #[derive(Clone)]
 pub struct ProviderClient {
     kind: ProviderKind,
@@ -64,6 +66,7 @@ impl ProviderClient {
                 self.transformers_transcribe(case).await
             }
             (ProviderKind::Tei, Task::Embedding) => self.tei_embed(case).await,
+            (ProviderKind::HfServe, Task::Embedding) => self.hf_serve_embed(case).await,
             (ProviderKind::Tei, Task::Reranking) => self.tei_rerank(case).await,
             _ => Err(format!(
                 "{} does not support {} benchmarks",
@@ -84,6 +87,7 @@ impl ProviderClient {
         match self.kind {
             ProviderKind::Ollama => self.ollama_preflight(task).await,
             ProviderKind::Transformers => self.transformers_preflight().await,
+            ProviderKind::HfServe => self.hf_serve_preflight().await,
             ProviderKind::Tei => self.tei_preflight().await,
         }
     }
@@ -137,6 +141,60 @@ impl ProviderClient {
             .await
             .map_err(|error| format!("TEI preflight failed: {error}"))?;
         successful(response, "TEI preflight").await.map(|_| ())
+    }
+
+    async fn hf_serve_preflight(&self) -> Result<(), String> {
+        let response = self
+            .authorized(self.client.get(self.url("/v1/models")))
+            .send()
+            .await
+            .map_err(|error| format!("Hugging Face Serve preflight failed: {error}"))?;
+        let value = response_json(response, "Hugging Face Serve preflight").await?;
+        let models = value
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "Hugging Face Serve model list has no data array".to_string())?;
+        if models
+            .iter()
+            .any(|model| model.get("id").and_then(Value::as_str) == Some(self.model.as_str()))
+        {
+            Ok(())
+        } else {
+            Err(format!(
+                "Hugging Face Serve does not list the requested model '{}'",
+                self.model
+            ))
+        }
+    }
+
+    async fn hf_serve_embed(&self, case: &BenchmarkCase) -> Result<InvocationResult, String> {
+        let inputs = embedding_inputs(case)?;
+        let started = Instant::now();
+        let mut embeddings = Vec::with_capacity(inputs.len());
+        let mut input_tokens = Some(0_u64);
+        for batch in inputs.chunks(HF_SERVE_MAX_BATCH_INPUTS) {
+            let response = self
+                .authorized(self.client.post(self.url("/v1/embeddings")))
+                .json(&json!({ "model": self.model, "input": batch, "encoding_format": "float" }))
+                .send()
+                .await
+                .map_err(|error| format!("Hugging Face Serve embedding request failed: {error}"))?;
+            let value = response_json(response, "Hugging Face Serve embedding").await?;
+            embeddings.extend(parse_openai_embeddings(&value, batch.len())?);
+            input_tokens = input_tokens.and_then(|total| {
+                value
+                    .get("usage")
+                    .and_then(|usage| usage.get("prompt_tokens"))
+                    .and_then(Value::as_u64)
+                    .and_then(|tokens| total.checked_add(tokens))
+            });
+        }
+        Ok(InvocationResult {
+            embeddings,
+            latency_ms: elapsed_ms(started),
+            input_tokens,
+            ..InvocationResult::default()
+        })
     }
 
     async fn ollama_generate(
@@ -557,6 +615,43 @@ fn parse_embeddings(value: &Value) -> Result<Vec<Vec<f64>>, String> {
                 .and_then(|values| parse_vector(values))
         })
         .collect()
+}
+
+fn parse_openai_embeddings(value: &Value, expected_count: usize) -> Result<Vec<Vec<f64>>, String> {
+    let data = value
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "embedding response has no data array".to_string())?;
+    if data.len() != expected_count {
+        return Err(format!(
+            "provider returned {} embeddings for {expected_count} inputs",
+            data.len()
+        ));
+    }
+    let mut embeddings = vec![None; expected_count];
+    for item in data {
+        let index = item
+            .get("index")
+            .and_then(Value::as_u64)
+            .and_then(|index| usize::try_from(index).ok())
+            .filter(|index| *index < expected_count)
+            .ok_or_else(|| "embedding item has an invalid input index".to_string())?;
+        if embeddings[index].is_some() {
+            return Err(format!("embedding response repeats input index {index}"));
+        }
+        let values = item
+            .get("embedding")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "embedding item has no numeric vector".to_string())?;
+        if values.is_empty() {
+            return Err("provider returned an empty embedding".into());
+        }
+        embeddings[index] = Some(parse_vector(values)?);
+    }
+    embeddings
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| "embedding response is missing an input index".to_string())
 }
 
 fn parse_vector(values: &[Value]) -> Result<Vec<f64>, String> {

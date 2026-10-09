@@ -8,7 +8,7 @@ q.it is a Raspberry Pi 5-first benchmark runner for edge models served through e
 It does not catalog local model files, plan capacity, download models, or manage provider processes in the current release.
 
 The execution workflow is command-line first because users operate the Pi over SSH.
-The optional dashboard is read only and analyzes persisted results.
+The optional dashboard analyzes persisted results and can start a benchmark against an already available provider endpoint.
 
 ## Repository layout
 
@@ -20,11 +20,11 @@ The optional dashboard is read only and analyzes persisted results.
 
 ## Active seams
 
-**Execution seam**: the `qit` command.
+**Execution seam**: the `qit` command and the dashboard's JSON run-start endpoint, both using the same benchmark engine.
 
-**Analysis seam**: the read-only HTTP interface under `/api` and its embedded browser application.
+**Analysis seam**: the HTTP read interface under `/api` and its embedded browser application.
 
-**Provider seam**: built-in Ollama native, Transformers Serve, and Text Embeddings Inference adapters.
+**Provider seam**: built-in Ollama native, Transformers Serve, Hugging Face Serve, and Text Embeddings Inference adapters.
 
 **Extension seam**: declarative benchmark packs with a versioned JSON manifest and JSONL cases.
 
@@ -41,7 +41,8 @@ The directory contains:
 - `results.db` for all benchmark runs and sample results.
 - `benchmark-packs/` for installed declarative add-ons.
 
-Interrupted running rows become failed the next time the store opens.
+Interrupted running rows become failed when the store opens and their owning process is no longer alive.
+Connections used during active execution do not classify live runs as interrupted.
 Pack removal never deletes historical results.
 
 ## Run behavior
@@ -62,13 +63,24 @@ Its exact output count and evaluation duration drive token throughput.
 Transformers Serve uses its OpenAI-compatible model, chat-completion, and audio-transcription routes.
 The `hf` command is acquisition tooling and is not a provider.
 
+Hugging Face Serve is the separate `hf-serve` server.
+Its adapter uses `/v1/models` to verify the requested model and `/v1/embeddings` for text embeddings.
+Embedding rows are restored to input order using their indices, and malformed responses fail the run.
+Requests contain at most four inputs; larger cases combine sequential batches and measure the full invocation.
+Prompt-token usage is retained when supplied; generation throughput and TTFT remain absent for embeddings.
+
 Text Embeddings Inference uses its native health, embedding, and reranking routes.
 It is not treated as evidence that an arbitrary Transformers embedding model works on ARM64.
 
 ## Dashboard notes
 
 The dashboard is responsive, dependency-light, and uses inline SVG and CSS for charts.
-Pareto status compares only succeeded runs with the same benchmark, pack version, and host.
+Model rankings use the latest succeeded run per model, provider, and endpoint within the same benchmark version, machine snapshot, passes, warmups, and output limit.
+Historical trends use every succeeded run within that comparison scope.
+Missing measurements stay absent; provider RSS and whole-host memory have separate charts.
+The dashboard admits one browser-started benchmark at a time and uses a separate database connection so analysis remains available during execution.
+Browser run requests validate their origin against the dashboard host and keep API keys out of persisted history.
+Michelangelus is loaded from the viewing device's installed fonts because its license prohibits redistribution.
 Generated assets are written to `qit-runtime/web-dist` by `npm run build`.
 
 ## Coding conventions

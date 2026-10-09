@@ -6,7 +6,7 @@ export type Task =
   | "reranking"
   | "text_to_image";
 
-export type Provider = "ollama" | "transformers" | "tei";
+export type Provider = "ollama" | "transformers" | "hf_serve" | "tei";
 
 export type Benchmark = {
   id: string;
@@ -49,6 +49,7 @@ export type Run = {
   base_url: string;
   model: string;
   host_name: string;
+  host: Host;
   status: "running" | "succeeded" | "failed";
   started_at_ms: number;
   finished_at_ms: number | null;
@@ -91,27 +92,76 @@ export type Host = {
   logical_cpu_count: number | null;
   total_memory_bytes: number | null;
   raspberry_pi: boolean;
+  kernel: string | null;
+  device_model: string | null;
+  qit_version: string;
 };
 
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+export type ProviderInfo = {
+  id: Provider;
+  name: string;
+  default_base_url: string;
+  tasks: Task[];
+};
+
+export type StartRun = {
+  benchmark_id: string;
+  provider: Provider;
+  model: string;
+  base_url: string;
+  api_key: string | null;
+  iterations: number;
+  warmups: number;
+  max_output_tokens: number | null;
+  timeout_seconds: number;
+  target_pid: number | null;
+};
+
+export type Sample = {
+  id: string;
+  case_id: string;
+  iteration: number;
+  succeeded: boolean;
+  error: string | null;
+  latency_ms: number | null;
+  ttft_ms: number | null;
+  tokens_per_second: number | null;
+  quality_score: number | null;
+  output_excerpt: string | null;
+};
+
+export type RunDetail = { run: Run; samples: Sample[] };
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(path, options);
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
     throw new Error(body.error ?? `${response.status} ${response.statusText}`);
   }
   return response.json() as Promise<T>;
 }
 
 export const api = {
-  host: () => get<Host>("/api/host"),
-  benchmarks: () => get<Benchmark[]>("/api/benchmarks"),
-  runs: () => get<RunsResponse>("/api/runs?limit=1000"),
-  analysis: () => get<{ points: AnalysisPoint[] }>("/api/analysis"),
+  host: () => request<Host>("/api/host"),
+  providers: () => request<ProviderInfo[]>("/api/providers"),
+  benchmarks: () => request<Benchmark[]>("/api/benchmarks"),
+  runs: () => request<RunsResponse>("/api/runs?limit=10000"),
+  detail: (id: string) =>
+    request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
+  start: (body: StartRun) =>
+    request<Run>("/api/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
 };
 
 export function providerLabel(provider: Provider): string {
   if (provider === "transformers") return "Transformers Serve";
   if (provider === "tei") return "HF TEI";
+  if (provider === "hf_serve") return "Hugging Face Serve";
   return "Ollama";
 }
 

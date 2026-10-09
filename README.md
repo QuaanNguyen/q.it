@@ -1,7 +1,7 @@
 # q.it
 
 q.it benchmarks edge models on a Raspberry Pi 5 and stores the results for later comparison.
-It works with models already served by Ollama, Hugging Face Transformers Serve, or Hugging Face Text Embeddings Inference.
+It works with models already served by Ollama, Hugging Face Transformers Serve, Hugging Face Serve, or Hugging Face Text Embeddings Inference.
 
 q.it does not download a model or start a model server during a benchmark.
 This keeps each run predictable and avoids including model setup time by accident.
@@ -16,6 +16,9 @@ Official datasets such as MMLU-Pro, GSM8K, LibriSpeech, OCRBench, MTEB, and BEIR
 The local pack installer is ready, but an online pack registry and downloadable official packs are not included yet.
 
 See [Built-in benchmarks](docs/built-in-benchmarks.md) for exactly what each bundled check does.
+
+The [CPU model validation plan](https://github.com/QuaanNguyen/q.it/issues/81) proposes 43 additional models below one billion parameters across all six tasks.
+See the [text-model research](docs/research/sub-billion-text-models.md) and [multimodal-model research](docs/research/sub-billion-multimodal-models.md) for parameter audits, canonical checkpoints, CPU serving requirements, and pending integrations.
 
 ## Quick start on Raspberry Pi OS
 
@@ -108,12 +111,29 @@ ssh -L 2471:127.0.0.1:2471 pi@raspberrypi.local
 
 Then open [http://127.0.0.1:2471](http://127.0.0.1:2471) on your computer.
 
+The overview compares models in a grid of latency, time-to-first-token, throughput, quality, CPU, and memory charts.
+Choose a benchmark version and machine setup to compare the latest successful run for each model configuration.
+Tradeoff charts highlight quality versus latency and provider memory versus latency, while the trend chart tracks repeated runs.
+Run history retains every outcome and opens the saved cases and outputs for inspection.
+
+Use **Start benchmark** to choose an installed benchmark, model, provider, and endpoint, then click **Start benchmark**.
+The model server must already be running with the model available.
+The page shows saved sample progress and retains failures in history.
+One browser-started benchmark runs at a time to reduce measurement interference.
+CPU and host-memory charts measure the machine running q.it; supplying the model server's local process ID enables a separate process-memory chart.
+Keep the dashboard on loopback and use the SSH tunnel when working from another computer.
+
+The ASCII theme uses the q.it wordmark and locally installed [Michelangelus](https://www.microsoft.com/en-us/download/details.aspx?id=108856) for headings.
+Install the font on the device running your browser, including your laptop when viewing the Pi through SSH.
+Its license prohibits bundling the font files, so devices without it use a serif fallback.
+See [the dashboard design research](docs/research/dashboard-ranking-design.md) for the Arena-inspired ranking choices and scoring limits.
+
 ## Built-in benchmarks
 
 | Benchmark | Purpose | Supported server |
 |-----------|---------|------------------|
 | `core/text-generation-smoke` | Checks short text generation, basic instruction following, TTFT, and TPS. | Ollama or Transformers Serve |
-| `core/embedding-retrieval` | Checks whether related text is placed near a query in embedding space. | Ollama or Text Embeddings Inference |
+| `core/embedding-retrieval` | Checks whether related text is placed near a query in embedding space. | Ollama, Hugging Face Serve, or Text Embeddings Inference |
 | `core/image-to-text-smoke` | Sends a generated two-color image and asks the model to identify its colors. | Ollama or Transformers Serve |
 | `core/speech-to-text-smoke` | Confirms that an audio file can travel through the transcription endpoint. | Transformers Serve |
 | `core/reranking-relevance` | Checks whether the most relevant passage is ranked first. | Text Embeddings Inference |
@@ -152,6 +172,40 @@ qit run core/image-to-text-smoke \
 
 Model support varies on Linux ARM64.
 A successful connection check means the server responded, not that every Transformers model will fit or run correctly on a Pi.
+
+### Hugging Face Serve
+
+Use [Hugging Face Serve](https://github.com/huggingface/hf-serve) for text embeddings from compatible SentenceTransformers models, including EmbeddingGemma 2.
+Install the server with its official CPU dependency setup and a Transformers version that supports the chosen model.
+For EmbeddingGemma 2, use Transformers 5.19.0 and SentenceTransformers 6.1.0.
+The Hugging Face Serve 0.1.8 lockfile pins Transformers 5.17.0, which does not recognize this model.
+Upgrade Transformers inside the server's environment before starting it, and launch the installed server directly so a frozen sync does not restore the older dependency.
+
+Start the server in one terminal:
+
+```bash
+MODEL_ID=google/embeddinggemma-2 hf-serve \
+  --task feature-extraction --device cpu --dtype float32 \
+  --host 127.0.0.1 --port 8080
+```
+
+Run the check from another terminal:
+
+```bash
+qit run core/embedding-retrieval \
+  --provider hf-serve \
+  --model google/embeddinggemma-2 \
+  --base-url http://127.0.0.1:8080
+```
+
+q.it uses the server's OpenAI-compatible embedding endpoint and checks that the requested model appears in its model list.
+Setting the model through the server's environment also ensures Hugging Face Serve 0.1.8 reports its identity when SentenceTransformers metadata does not contain it.
+The model name must match the name reported by the server, including when serving a local model directory.
+The integration currently covers text embeddings.
+Each request contains at most four texts to limit the server's CPU memory use.
+For larger retrieval cases, q.it combines the batches in input order and measures the total time for the case.
+The [EmbeddingGemma 2 model card](https://huggingface.co/google/embeddinggemma-2) recommends float32 on most CPUs; float16 can produce invalid embeddings.
+CPU validation on another Linux machine does not establish Raspberry Pi compatibility or performance.
 
 ### Hugging Face Text Embeddings Inference
 
@@ -269,9 +323,8 @@ See [Benchmark pack guide](docs/benchmark-packs.md) for the supported layout and
 The current server integrations cover text generation, text embeddings, image-to-text, speech-to-text, and text reranking.
 Some future model families need a dedicated integration before their extra modalities can be measured honestly.
 
-EmbeddingGemma 2 is one example.
-Its text, image, audio, and video embedding modes are not all exposed by the current servers through one suitable interface.
-The planned approach is a dedicated model integration plus benchmark packs for each modality, output size, and retrieval task.
+EmbeddingGemma 2 text embeddings can run through Hugging Face Serve.
+Its image, audio, and video embedding modes still need a suitable server integration and benchmark packs for each modality, output size, and retrieval task.
 
 The current release does not claim multimodal EmbeddingGemma 2 support.
 See [the benchmark landscape](docs/research/pi5-edge-benchmark-landscape.md) for the researched expansion plan.

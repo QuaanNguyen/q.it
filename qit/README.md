@@ -1,6 +1,6 @@
 # q.it
 
-q.it benchmarks edge models on Raspberry Pi 5 through Ollama, Hugging Face Transformers Serve, and Hugging Face Text Embeddings Inference.
+q.it benchmarks edge models on Raspberry Pi 5 through Ollama, Hugging Face Transformers Serve, Hugging Face Serve, and Hugging Face Text Embeddings Inference.
 
 The six bundled benchmarks are small, self-made checks for confirming that the model-serving path works.
 Larger official evaluations are installed separately as benchmark packs.

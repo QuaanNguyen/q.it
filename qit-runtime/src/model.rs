@@ -72,16 +72,18 @@ impl Display for Task {
 pub enum ProviderKind {
     Ollama,
     Transformers,
+    HfServe,
     Tei,
 }
 
 impl ProviderKind {
-    pub const ALL: [Self; 3] = [Self::Ollama, Self::Transformers, Self::Tei];
+    pub const ALL: [Self; 4] = [Self::Ollama, Self::Transformers, Self::HfServe, Self::Tei];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ollama => "ollama",
             Self::Transformers => "transformers",
+            Self::HfServe => "hf-serve",
             Self::Tei => "tei",
         }
     }
@@ -90,6 +92,7 @@ impl ProviderKind {
         match self {
             Self::Ollama => "Ollama",
             Self::Transformers => "Transformers Serve",
+            Self::HfServe => "Hugging Face Serve",
             Self::Tei => "Hugging Face TEI",
         }
     }
@@ -98,6 +101,7 @@ impl ProviderKind {
         match self {
             Self::Ollama => "http://127.0.0.1:11434",
             Self::Transformers => "http://127.0.0.1:8000",
+            Self::HfServe => "http://127.0.0.1:8080",
             Self::Tei => "http://127.0.0.1:8080",
         }
     }
@@ -113,6 +117,7 @@ impl ProviderKind {
                 Task::TextGeneration | Task::ImageToText | Task::SpeechToText
             ),
             Self::Tei => matches!(task, Task::Embedding | Task::Reranking),
+            Self::HfServe => task == Task::Embedding,
         }
     }
 }
@@ -133,8 +138,9 @@ impl FromStr for ProviderKind {
                 Ok(Self::Transformers)
             }
             "tei" | "huggingface-tei" => Ok(Self::Tei),
+            "hf-serve" | "hf_serve" | "huggingface-serve" => Ok(Self::HfServe),
             _ => Err(format!(
-                "unknown provider '{value}', expected ollama, transformers, or tei"
+                "unknown provider '{value}', expected ollama, transformers, hf-serve, or tei"
             )),
         }
     }

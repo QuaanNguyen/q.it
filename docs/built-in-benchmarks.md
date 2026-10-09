@@ -47,7 +47,7 @@ A first-place match receives the best score.
 
 This is a small semantic sanity check, not a replacement for MTEB or BEIR.
 
-Supported servers are Ollama and Hugging Face Text Embeddings Inference.
+Supported servers are Ollama, Hugging Face Serve, and Hugging Face Text Embeddings Inference.
 
 ## Image-to-text smoke test
 
