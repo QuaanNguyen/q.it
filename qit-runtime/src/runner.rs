@@ -16,6 +16,21 @@ pub async fn run_benchmark(
     catalog: &PackCatalog,
     request: RunRequest,
 ) -> Result<RunRecord, String> {
+    execute_benchmark(store, prepare_benchmark(store, catalog, request)?).await
+}
+
+pub struct PreparedBenchmark {
+    pub run: RunRecord,
+    benchmark: BenchmarkDefinition,
+    provider: ProviderClient,
+    request: RunRequest,
+}
+
+pub fn prepare_benchmark(
+    store: &Store,
+    catalog: &PackCatalog,
+    request: RunRequest,
+) -> Result<PreparedBenchmark, String> {
     if request.iterations == 0 {
         return Err("iterations must be at least 1".into());
     }
@@ -36,7 +51,7 @@ pub async fn run_benchmark(
         return Err("max output tokens must be at least 1".into());
     }
     let host = HostInfo::detect();
-    let mut run = RunRecord {
+    let run = RunRecord {
         id: Uuid::new_v4().to_string(),
         benchmark_id: benchmark.id.clone(),
         benchmark_name: benchmark.name.clone(),
@@ -57,14 +72,33 @@ pub async fn run_benchmark(
         error: None,
         summary: RunSummary::default(),
     };
-    store.start_run(&run)?;
     let provider = ProviderClient::new(
         request.provider,
         run.base_url.clone(),
-        request.api_key,
-        request.model,
+        request.api_key.clone(),
+        request.model.clone(),
         request.timeout_seconds,
     )?;
+    store.start_run(&run)?;
+    Ok(PreparedBenchmark {
+        run,
+        benchmark,
+        provider,
+        request,
+    })
+}
+
+pub async fn execute_benchmark(
+    store: &Store,
+    prepared: PreparedBenchmark,
+) -> Result<RunRecord, String> {
+    let PreparedBenchmark {
+        mut run,
+        benchmark,
+        provider,
+        request,
+    } = prepared;
+    let max_output_tokens = run.max_output_tokens;
     if let Err(error) = provider.preflight(benchmark.task).await {
         finish_failed(store, &mut run, format!("preflight failed: {error}"))?;
         return Ok(run);

@@ -108,6 +108,23 @@ ssh -L 2471:127.0.0.1:2471 pi@raspberrypi.local
 
 Then open [http://127.0.0.1:2471](http://127.0.0.1:2471) on your computer.
 
+The overview compares models in a grid of latency, time-to-first-token, throughput, quality, CPU, and memory charts.
+Choose a benchmark version and machine setup to compare the latest successful run for each model configuration.
+Tradeoff charts highlight quality versus latency and provider memory versus latency, while the trend chart tracks repeated runs.
+Run history retains every outcome and opens the saved cases and outputs for inspection.
+
+Use **Start benchmark** to choose an installed benchmark, model, provider, and endpoint, then click **Start benchmark**.
+The model server must already be running with the model available.
+The page shows saved sample progress and retains failures in history.
+One browser-started benchmark runs at a time to reduce measurement interference.
+CPU and host-memory charts measure the machine running q.it; supplying the model server's local process ID enables a separate process-memory chart.
+Keep the dashboard on loopback and use the SSH tunnel when working from another computer.
+
+The ASCII theme uses the q.it wordmark and locally installed [Michelangelus](https://www.microsoft.com/en-us/download/details.aspx?id=108856) for headings.
+Install the font on the device running your browser, including your laptop when viewing the Pi through SSH.
+Its license prohibits bundling the font files, so devices without it use a serif fallback.
+See [the dashboard design research](docs/research/dashboard-ranking-design.md) for the Arena-inspired ranking choices and scoring limits.
+
 ## Built-in benchmarks
 
 | Benchmark | Purpose | Supported server |
