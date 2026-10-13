@@ -15,7 +15,7 @@ concurrency:
 jobs:
   rust:
     name: Rust checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -24,7 +24,7 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
       - name: Cache Cargo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: |
             ~/.cargo/registry
@@ -41,7 +41,7 @@ jobs:
 
   web:
     name: Web checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -62,7 +62,7 @@ jobs:
 
   cpu-protocol:
     name: CPU provider checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
