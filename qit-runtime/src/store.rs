@@ -2,9 +2,11 @@ use std::path::Path;
 use std::str::FromStr;
 
 use rusqlite::types::Type;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::model::{HostInfo, ProviderKind, RunRecord, RunStatus, RunSummary, SampleRecord, Task};
+use crate::model::{
+    HostInfo, ProviderKind, ProviderMetadata, RunRecord, RunStatus, RunSummary, SampleRecord, Task,
+};
 
 pub struct Store {
     connection: Connection,
@@ -12,8 +14,40 @@ pub struct Store {
 
 impl Store {
     pub fn open(path: &Path) -> Result<Self, String> {
+        let store = Self::connect(path)?;
+        let now = unix_time_ms();
+        let abandoned = {
+            let mut statement = store
+                .connection
+                .prepare("SELECT id, owner_pid FROM benchmark_runs WHERE status = 'running'")
+                .map_err(|error| format!("query running benchmarks: {error}"))?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<u32>>(1)?))
+                })
+                .map_err(|error| format!("read running benchmarks: {error}"))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|error| format!("read running benchmarks: {error}"))?
+                .into_iter()
+                .filter(|(_, pid)| !pid.is_some_and(process_alive))
+                .collect::<Vec<_>>()
+        };
+        for (id, _) in abandoned {
+            store.connection.execute(
+                "UPDATE benchmark_runs SET status = 'failed', finished_at_ms = ?1,
+                 error = COALESCE(error, 'benchmark process ended before the run completed') WHERE id = ?2",
+                params![now, id],
+            ).map_err(|error| format!("classify interrupted benchmark runs: {error}"))?;
+        }
+        Ok(store)
+    }
+
+    pub fn connect(path: &Path) -> Result<Self, String> {
         let connection = Connection::open(path)
             .map_err(|error| format!("open result database {}: {error}", path.display()))?;
+        connection
+            .busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|error| format!("configure result database timeout: {error}"))?;
         connection
             .execute_batch(
                 "
@@ -74,16 +108,14 @@ impl Store {
             "host_json",
             "TEXT NOT NULL DEFAULT '{}'",
         )?;
-        let now = unix_time_ms();
-        connection
-            .execute(
-                "UPDATE benchmark_runs
-                 SET status = 'failed', finished_at_ms = ?1,
-                     error = COALESCE(error, 'benchmark process ended before the run completed')
-                 WHERE status = 'running'",
-                [now],
-            )
-            .map_err(|error| format!("classify interrupted benchmark runs: {error}"))?;
+        ensure_column(&connection, "benchmark_runs", "owner_pid", "INTEGER")?;
+        ensure_column(
+            &connection,
+            "benchmark_runs",
+            "provider_metadata_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )?;
+        ensure_column(&connection, "benchmark_samples", "output_image", "TEXT")?;
         Ok(Self { connection })
     }
 
@@ -97,10 +129,11 @@ impl Store {
                 "INSERT INTO benchmark_runs (
                     id, benchmark_id, benchmark_name, pack_version, task, provider,
                     base_url, model, host_name, host_json, status, started_at_ms, finished_at_ms,
-                    iterations, warmups, max_output_tokens, target_pid, error, summary_json
+                    iterations, warmups, max_output_tokens, target_pid, error, summary_json, owner_pid,
+                    provider_metadata_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15, ?16, ?17, ?18, ?19
+                    ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
                  )",
                 params![
                     run.id,
@@ -121,10 +154,33 @@ impl Store {
                     run.max_output_tokens,
                     run.target_pid,
                     run.error,
-                    summary
+                    summary,
+                    std::process::id(),
+                    serde_json::to_string(&run.provider_metadata)
+                        .map_err(|error| format!("serialize provider metadata: {error}"))?
                 ],
             )
             .map_err(|error| format!("store benchmark run: {error}"))?;
+        Ok(())
+    }
+
+    pub fn set_provider_metadata(
+        &self,
+        id: &str,
+        metadata: &ProviderMetadata,
+    ) -> Result<(), String> {
+        let metadata = serde_json::to_string(metadata)
+            .map_err(|error| format!("serialize provider metadata: {error}"))?;
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE benchmark_runs SET provider_metadata_json = ?2 WHERE id = ?1",
+                params![id, metadata],
+            )
+            .map_err(|error| format!("store provider metadata: {error}"))?;
+        if changed == 0 {
+            return Err(format!("benchmark run '{id}' was not found"));
+        }
         Ok(())
     }
 
@@ -136,10 +192,10 @@ impl Store {
                     ttft_ms, input_tokens, output_tokens, tokens_per_second,
                     host_cpu_percent_mean, host_cpu_percent_peak,
                     host_memory_used_bytes_peak, process_rss_bytes_peak,
-                    quality_score, output_excerpt
+                    quality_score, output_excerpt, output_image
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15, ?16, ?17
+                    ?13, ?14, ?15, ?16, ?17, ?18
                  )",
                 params![
                     sample.id,
@@ -159,6 +215,7 @@ impl Store {
                     sample.process_rss_bytes_peak,
                     sample.quality_score,
                     sample.output_excerpt,
+                    sample.output_image,
                 ],
             )
             .map_err(|error| format!("store benchmark sample: {error}"))?;
@@ -199,7 +256,8 @@ impl Store {
         let sql = format!(
             "SELECT id, benchmark_id, benchmark_name, pack_version, task, provider,
                     base_url, model, host_name, host_json, status, started_at_ms, finished_at_ms,
-                    iterations, warmups, max_output_tokens, target_pid, error, summary_json
+                    iterations, warmups, max_output_tokens, target_pid, error, summary_json,
+                    provider_metadata_json
              FROM benchmark_runs
              {where_clause}
              ORDER BY started_at_ms DESC
@@ -216,6 +274,31 @@ impl Store {
             .map_err(|error| format!("read benchmark history: {error}"))
     }
 
+    pub fn run(&self, id: &str) -> Result<Option<RunRecord>, String> {
+        self.connection
+            .query_row(
+                "SELECT id, benchmark_id, benchmark_name, pack_version, task, provider,
+                    base_url, model, host_name, host_json, status, started_at_ms, finished_at_ms,
+                    iterations, warmups, max_output_tokens, target_pid, error, summary_json,
+                    provider_metadata_json
+             FROM benchmark_runs WHERE id = ?1",
+                [id],
+                map_run,
+            )
+            .optional()
+            .map_err(|error| format!("read benchmark run: {error}"))
+    }
+
+    pub fn has_running_run(&self) -> Result<bool, String> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status = 'running')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("check active benchmarks: {error}"))
+    }
+
     pub fn samples(&self, run_id: &str) -> Result<Vec<SampleRecord>, String> {
         let mut statement = self
             .connection
@@ -224,7 +307,7 @@ impl Store {
                         ttft_ms, input_tokens, output_tokens, tokens_per_second,
                         host_cpu_percent_mean, host_cpu_percent_peak,
                         host_memory_used_bytes_peak, process_rss_bytes_peak,
-                        quality_score, output_excerpt
+                        quality_score, output_excerpt, output_image
                  FROM benchmark_samples
                  WHERE run_id = ?1
                  ORDER BY iteration, case_id",
@@ -250,12 +333,29 @@ impl Store {
                     process_rss_bytes_peak: row.get(14)?,
                     quality_score: row.get(15)?,
                     output_excerpt: row.get(16)?,
+                    output_image: row.get(17)?,
                 })
             })
             .map_err(|error| format!("query benchmark samples: {error}"))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|error| format!("read benchmark samples: {error}"))
     }
+}
+
+#[cfg(unix)]
+fn process_alive(pid: u32) -> bool {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return false;
+    }
+    unsafe {
+        libc::kill(pid as i32, 0) == 0
+            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+}
+
+#[cfg(not(unix))]
+fn process_alive(pid: u32) -> bool {
+    pid == std::process::id()
 }
 
 fn map_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunRecord> {
@@ -272,6 +372,8 @@ fn map_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunRecord> {
         pack_version: row.get(3)?,
         task: parse_task(&task).map_err(|error| conversion_error(4, error))?,
         provider: ProviderKind::from_str(&provider).map_err(|error| conversion_error(5, error))?,
+        provider_metadata: serde_json::from_str(&row.get::<_, String>(19)?)
+            .map_err(|error| conversion_error(19, error.to_string()))?,
         base_url: row.get(6)?,
         model: row.get(7)?,
         host_name: host_name.clone(),

@@ -58,6 +58,11 @@ Completion tokens divided by provider-reported generation time when available, o
 _Avoid_: requests per second, characters per second
 
 **Analysis dashboard**:
-The optional local web interface for filtering run history and comparing successful runs with charts and a Pareto frontier.
+The optional local web interface for starting benchmark runs, inspecting run history, and comparing successful runs with charts and a Pareto frontier.
 It does not serve models or author benchmark packs.
 _Avoid_: control plane, catalog, admin UI
+
+**Model comparison**:
+A ranking of model configurations on one metric within the same benchmark version, machine snapshot, and measured run setup.
+Each configuration retains its model, provider, and endpoint identity.
+_Avoid_: overall intelligence score, Arena rating

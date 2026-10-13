@@ -17,7 +17,8 @@ The initial provider adapters should be:
 3. [Hugging Face Text Embeddings Inference](https://huggingface.co/docs/text-embeddings-inference/quick_tour) for text embeddings, reranking, and sequence classification using its [CPU ARM64 container](https://huggingface.co/docs/text-embeddings-inference/en/supported_models#supported-hardware).
 
 A later Cactus provider adapter is justified for [Cactus models](https://github.com/cactus-compute/cactus), [Needle tool calling and extraction](https://github.com/cactus-compute/needle), Whistle speech recognition, and other edge-specific behavior that is not fully represented by the first three protocols.
-A later q.it-owned local embedding provider is also necessary for models such as [EmbeddingGemma 2](https://ai.google.dev/gemma/docs/embeddinggemma) whose multimodal embedding interface is not exposed by Ollama's documented text embedding route, Transformers Serve, or today's TEI model set.
+The separate [Hugging Face Serve](https://github.com/huggingface/hf-serve) server exposes SentenceTransformers text embeddings through `/v1/embeddings`, including a native serving path for EmbeddingGemma 2.
+A later multimodal embedding adapter is still needed for EmbeddingGemma 2 image, audio, and video inputs that this text-only route does not accept.
 
 The benchmark runner should always collect timing, run outcome, host telemetry, model identity, provider identity, and environment metadata.
 Quality scoring should be added through installable benchmark packs selected by task and provider capabilities.
@@ -441,7 +442,8 @@ This model needs a purpose-built benchmark matrix rather than one aggregate scor
 
 Ollama's published embedding API accepts text, and TEI's current supported-model page lists text EmbeddingGemma 1 rather than multimodal EmbeddingGemma 2. [Ollama embedding API](https://docs.ollama.com/api/embed) [TEI supported models](https://huggingface.co/docs/text-embeddings-inference/en/supported_models)
 Transformers Serve's documented endpoint list has no embeddings route. [Transformers Serve endpoints](https://huggingface.co/docs/transformers/serve-cli/serving)
-The initial implementation path should therefore be a q.it-owned local provider built around the official Transformers or SentenceTransformers interface, not a special executable hidden inside an EmbeddingGemma benchmark pack. [Official SentenceTransformers guide](https://ai.google.dev/gemma/docs/embeddinggemma/multimodal-embeddinggemma-with-sentence-transformers)
+Hugging Face Serve is a separate server with a SentenceTransformers-backed `/v1/embeddings` route for text inputs. [Hugging Face Serve embedding implementation](https://github.com/huggingface/hf-serve/blob/1f6d2e61f42d4b25b34f4abe693e83024a0ede16/src/hf_serve/openai/tasks/embeddings.py)
+q.it can use that route for text retrieval while a future multimodal adapter uses the official Transformers or SentenceTransformers interface. [Official SentenceTransformers guide](https://ai.google.dev/gemma/docs/embeddinggemma/multimodal-embeddinggemma-with-sentence-transformers)
 
 ## Benchmark-pack contract
 
@@ -579,7 +581,7 @@ It should not average unrelated benchmark scores into a universal model-quality 
 
 - Cargo-installed q.it command.
 - Benchmark-pack list, add, remove, verify, and offline-import flows.
-- Ollama native, Transformers Serve, and TEI provider adapters.
+- Ollama native, Transformers Serve, Hugging Face Serve text embeddings, and TEI provider adapters.
 - Capability probe and one-case preflight.
 - Linux host telemetry, optional process telemetry, and cgroup v2 support when q.it owns the provider.
 - Run history with strict succeeded or failed classification.
@@ -594,7 +596,7 @@ It should not average unrelated benchmark scores into a universal model-quality 
 - AIR-Bench foundation profiles.
 - COCO caption, ChartQA, MMMU validation profiles, and Video-MME v2 smoke profile.
 - MIEB lite, MSEB, MAEB, and multimodal embedding profiles.
-- q.it-owned local Transformers or SentenceTransformers embedding provider for EmbeddingGemma 2.
+- Multimodal Transformers or SentenceTransformers embedding provider for EmbeddingGemma 2.
 - Sustained thermal profiles and concurrency sweeps.
 
 ### Later releases

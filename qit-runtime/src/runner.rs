@@ -16,6 +16,21 @@ pub async fn run_benchmark(
     catalog: &PackCatalog,
     request: RunRequest,
 ) -> Result<RunRecord, String> {
+    execute_benchmark(store, prepare_benchmark(store, catalog, request)?).await
+}
+
+pub struct PreparedBenchmark {
+    pub run: RunRecord,
+    benchmark: BenchmarkDefinition,
+    provider: ProviderClient,
+    request: RunRequest,
+}
+
+pub fn prepare_benchmark(
+    store: &Store,
+    catalog: &PackCatalog,
+    request: RunRequest,
+) -> Result<PreparedBenchmark, String> {
     if request.iterations == 0 {
         return Err("iterations must be at least 1".into());
     }
@@ -36,13 +51,14 @@ pub async fn run_benchmark(
         return Err("max output tokens must be at least 1".into());
     }
     let host = HostInfo::detect();
-    let mut run = RunRecord {
+    let run = RunRecord {
         id: Uuid::new_v4().to_string(),
         benchmark_id: benchmark.id.clone(),
         benchmark_name: benchmark.name.clone(),
         pack_version: benchmark.pack_version.clone(),
         task: benchmark.task,
         provider: request.provider,
+        provider_metadata: Default::default(),
         base_url: request.base_url.trim_end_matches('/').to_string(),
         model: request.model.clone(),
         host_name: host.host_name.clone(),
@@ -57,15 +73,47 @@ pub async fn run_benchmark(
         error: None,
         summary: RunSummary::default(),
     };
-    store.start_run(&run)?;
     let provider = ProviderClient::new(
         request.provider,
         run.base_url.clone(),
-        request.api_key,
-        request.model,
+        request.api_key.clone(),
+        request.model.clone(),
         request.timeout_seconds,
     )?;
-    if let Err(error) = provider.preflight(benchmark.task).await {
+    store.start_run(&run)?;
+    Ok(PreparedBenchmark {
+        run,
+        benchmark,
+        provider,
+        request,
+    })
+}
+
+pub async fn execute_benchmark(
+    store: &Store,
+    prepared: PreparedBenchmark,
+) -> Result<RunRecord, String> {
+    let PreparedBenchmark {
+        mut run,
+        benchmark,
+        provider,
+        request,
+    } = prepared;
+    let max_output_tokens = run.max_output_tokens;
+    match provider.metadata().await {
+        Ok(metadata) => {
+            store.set_provider_metadata(&run.id, &metadata)?;
+            run.provider_metadata = metadata;
+        }
+        Err(error) => {
+            finish_failed(store, &mut run, format!("preflight failed: {error}"))?;
+            return Ok(run);
+        }
+    }
+    if let Err(error) = provider
+        .preflight(benchmark.task, &run.provider_metadata)
+        .await
+    {
         finish_failed(store, &mut run, format!("preflight failed: {error}"))?;
         return Ok(run);
     }
@@ -99,6 +147,7 @@ pub async fn run_benchmark(
                 process_rss_bytes_peak: telemetry.process_rss_bytes_peak,
                 quality_score: None,
                 output_excerpt: None,
+                output_image: None,
             };
             match result {
                 Ok(invocation) => {
@@ -166,6 +215,7 @@ fn measured_sample(
     sample.tokens_per_second = invocation.tokens_per_second;
     sample.quality_score = quality_score(task, case, &invocation)?;
     sample.output_excerpt = output_excerpt(task, &invocation)?;
+    sample.output_image = invocation.output_image;
     Ok(())
 }
 
@@ -235,7 +285,14 @@ fn quality_score(
                 .map(|position| 1.0 / (position as f64 + 1.0))
                 .unwrap_or(0.0)
         })),
-        Task::TextToImage => Ok(None),
+        Task::TextToImage => {
+            let image = invocation
+                .output_image
+                .as_deref()
+                .ok_or_else(|| "provider returned no generated image".to_string())?;
+            crate::provider::validate_generated_image(image, case.image_settings.as_ref())?;
+            Ok(None)
+        }
     }
 }
 

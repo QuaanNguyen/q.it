@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot, Mutex, Semaphore};
 
 use crate::config::Config;
 use crate::dashboard::{router, DashboardState};
@@ -54,6 +54,8 @@ pub async fn bind(config: Config) -> Result<Listening, String> {
         store: Arc::new(Mutex::new(store)),
         catalog,
         host: HostInfo::detect(),
+        database: paths.database,
+        execution: Arc::new(Semaphore::new(1)),
     };
     let listener = TcpListener::bind(config.listen)
         .await

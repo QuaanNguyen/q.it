@@ -20,6 +20,13 @@ Record or keep constant:
 Stop unrelated heavy work when possible.
 A file copy, software update, browser session, or another model request can change CPU, storage, and memory results.
 
+q.it reads and saves the Ollama server version before running any benchmark cases.
+Ollama embedding runs require version 0.40.3 or later, including when the server runs on another machine.
+Earlier versions and unverifiable versions fail preflight and remain in run history.
+See the [Ollama 0.40.3 release notes](https://github.com/ollama/ollama/releases/tag/v0.40.3) for the embedding performance change.
+The local CPU provider also records its server version, package versions, checkpoint revisions, precision, thread count, and model-specific preparation.
+Other provider versions remain unrecorded until their integrations can report them reliably.
+
 Allow the Pi to return to a similar idle temperature before runs that will be compared closely.
 Use the same cooling and power setup because heat or undervoltage can reduce performance.
 
@@ -89,5 +96,7 @@ Do not compare image or audio results when preprocessing settings differ.
 Do not combine failed runs with successful runs.
 Do not treat the built-in smoke checks as full quality leaderboards.
 
-The dashboard marks a latency-and-memory point as Pareto-efficient only among successful runs using the same benchmark, pack version, and host name.
+The dashboard keeps model comparisons with different recorded Ollama versions in separate machine and run setups.
+Historical runs without a saved server version remain available in their own setup.
+The dashboard marks a latency-and-memory point as Pareto-efficient only among successful runs using the same benchmark, pack version, host name, and recorded provider metadata.
 You should still confirm that the remaining hardware and software conditions match.
