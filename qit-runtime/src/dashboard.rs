@@ -77,6 +77,7 @@ struct AnalysisPoint {
     model: String,
     provider: ProviderKind,
     host_name: String,
+    provider_metadata: crate::model::ProviderMetadata,
     latency_ms: Option<f64>,
     ttft_ms: Option<f64>,
     tokens_per_second: Option<f64>,
@@ -321,6 +322,7 @@ async fn analysis(State(state): State<DashboardState>) -> Result<Json<AnalysisBo
             model: run.model,
             provider: run.provider,
             host_name: run.host_name,
+            provider_metadata: run.provider_metadata,
             latency_ms: run.summary.latency_ms_p50,
             ttft_ms: run.summary.ttft_ms_p50,
             tokens_per_second: run.summary.tokens_per_second_p50,
@@ -353,6 +355,7 @@ fn is_pareto(points: &[AnalysisPoint], index: usize) -> bool {
         if other.benchmark_id != points[index].benchmark_id
             || other.pack_version != points[index].pack_version
             || other.host_name != points[index].host_name
+            || other.provider_metadata != points[index].provider_metadata
         {
             return false;
         }

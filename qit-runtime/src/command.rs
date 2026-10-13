@@ -218,7 +218,7 @@ fn run_command(arguments: &[String]) -> Result<i32, String> {
                 .ok()
                 .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
             ProviderKind::Tei | ProviderKind::HfServe => std::env::var("HF_TOKEN").ok(),
-            ProviderKind::Ollama => None,
+            ProviderKind::Ollama | ProviderKind::LocalCpu => None,
         });
     let request = RunRequest {
         benchmark_id,
@@ -407,7 +407,7 @@ fn export_jsonl(store: &Store, runs: &[RunRecord]) -> Result<String, String> {
 
 fn export_csv(runs: &[RunRecord]) -> String {
     let mut output = String::from(
-        "run_id,benchmark_id,task,provider,model,host_name,started_at_ms,latency_ms_p50,ttft_ms_p50,tokens_per_second_p50,cpu_percent_mean,memory_used_bytes_peak,process_rss_bytes_peak,quality_score_mean\n",
+        "run_id,benchmark_id,task,provider,model,host_name,started_at_ms,latency_ms_p50,ttft_ms_p50,tokens_per_second_p50,cpu_percent_mean,memory_used_bytes_peak,process_rss_bytes_peak,quality_score_mean,provider_version\n",
     );
     for run in runs {
         let fields = [
@@ -431,6 +431,7 @@ fn export_csv(runs: &[RunRecord]) -> String {
                 .map(|value| value.to_string())
                 .unwrap_or_default(),
             optional_string(run.summary.quality_score_mean),
+            run.provider_metadata.version.clone().unwrap_or_default(),
         ];
         output.push_str(
             &fields
@@ -507,7 +508,7 @@ fn print_benchmark_help() {
 fn print_run_help() {
     println!(
         "Usage: qit run BENCHMARK --model MODEL [options]\n\n\
-Options:\n  --provider NAME      ollama, transformers, hf-serve, or tei (default: ollama)\n  --base-url URL       Provider root URL\n  --api-key TOKEN      Bearer token, or use QIT_API_KEY\n  --iterations N       Measured iterations (default: 3)\n  --warmups N          Warmup requests (default: 1)\n  --max-tokens N       Generation limit from the benchmark by default\n  --timeout SECONDS    Per-request timeout (default: 120)\n  --pid PID            Provider process to sample for peak RSS"
+Options:\n  --provider NAME      ollama, transformers, hf-serve, tei, or local-cpu (default: ollama)\n  --base-url URL       Provider root URL\n  --api-key TOKEN      Bearer token, or use QIT_API_KEY\n  --iterations N       Measured iterations (default: 3)\n  --warmups N          Warmup requests (default: 1)\n  --max-tokens N       Generation limit from the benchmark by default\n  --timeout SECONDS    Per-request timeout (default: 120)\n  --pid PID            Provider process to sample for peak RSS"
     );
 }
 

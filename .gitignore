@@ -6,3 +6,10 @@
 .scratch/
 /.qit/
 /.qit-*/
+
+/providers/local-cpu/*.egg-info/
+/providers/local-cpu/**/__pycache__/
+/providers/local-cpu/build/
+/providers/local-cpu/dist/
+/.ruff_cache/
+/.venv-cpu/

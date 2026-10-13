@@ -68,6 +68,7 @@ test("rankings never combine different benchmark versions, machine snapshots, or
     { max_output_tokens: 64 },
     { host: { ...original.host, architecture: "x86_64" } },
     { host: { ...original.host, logical_cpu_count: 8 } },
+    { provider_metadata: { version: "0.40.3" } },
   ]) {
     assert.notEqual(setupKey(original), setupKey(run(update)));
   }
@@ -79,6 +80,10 @@ test("rankings never combine different benchmark versions, machine snapshots, or
   ]);
   assert.equal(groups.length, 2);
   assert.equal(groups[0].runs.length, 2);
+  assert.notEqual(
+    setupKey(run({ provider_metadata: { version: "0.40.3" } })),
+    setupKey(run({ provider_metadata: { version: "0.40.4" } })),
+  );
 });
 
 test("Pareto tradeoffs preserve ties, reject dominated models, and skip missing measurements", () => {
@@ -115,4 +120,14 @@ test("each model has a distinct color shared across all chart labels and marks",
   assert.equal(palette.size, 30);
   assert.equal(new Set(palette.values()).size, 30);
   assert.deepEqual(palette, modelPalette([...models].reverse()));
+});
+
+
+test("CPU comparisons share an environment while keeping checkpoint revisions distinct", () => {
+  const configuration = { device: "cpu", dtype: "float32", threads: 4, packages: { torch: "2.9.1" }, revision: "first" };
+  const original = run({ provider_metadata: { version: "0.1.0", configuration } });
+  const another = run({ model: "another", provider_metadata: { version: "0.1.0", configuration: { ...configuration, revision: "second", parameter_count: 123 } } });
+  assert.equal(setupKey(original), setupKey(another));
+  assert.notEqual(modelKey(original), modelKey(run({ provider_metadata: { version: "0.1.0", configuration: { ...configuration, revision: "second" } } })));
+  assert.notEqual(setupKey(original), setupKey(run({ provider_metadata: { version: "0.1.0", configuration: { ...configuration, threads: 8 } } })));
 });

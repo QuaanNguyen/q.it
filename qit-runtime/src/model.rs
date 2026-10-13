@@ -74,10 +74,17 @@ pub enum ProviderKind {
     Transformers,
     HfServe,
     Tei,
+    LocalCpu,
 }
 
 impl ProviderKind {
-    pub const ALL: [Self; 4] = [Self::Ollama, Self::Transformers, Self::HfServe, Self::Tei];
+    pub const ALL: [Self; 5] = [
+        Self::Ollama,
+        Self::Transformers,
+        Self::HfServe,
+        Self::Tei,
+        Self::LocalCpu,
+    ];
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -85,6 +92,7 @@ impl ProviderKind {
             Self::Transformers => "transformers",
             Self::HfServe => "hf-serve",
             Self::Tei => "tei",
+            Self::LocalCpu => "local-cpu",
         }
     }
 
@@ -94,6 +102,7 @@ impl ProviderKind {
             Self::Transformers => "Transformers Serve",
             Self::HfServe => "Hugging Face Serve",
             Self::Tei => "Hugging Face TEI",
+            Self::LocalCpu => "Local CPU",
         }
     }
 
@@ -103,6 +112,7 @@ impl ProviderKind {
             Self::Transformers => "http://127.0.0.1:8000",
             Self::HfServe => "http://127.0.0.1:8080",
             Self::Tei => "http://127.0.0.1:8080",
+            Self::LocalCpu => "http://127.0.0.1:8081",
         }
     }
 
@@ -118,6 +128,7 @@ impl ProviderKind {
             ),
             Self::Tei => matches!(task, Task::Embedding | Task::Reranking),
             Self::HfServe => task == Task::Embedding,
+            Self::LocalCpu => true,
         }
     }
 }
@@ -139,8 +150,9 @@ impl FromStr for ProviderKind {
             }
             "tei" | "huggingface-tei" => Ok(Self::Tei),
             "hf-serve" | "hf_serve" | "huggingface-serve" => Ok(Self::HfServe),
+            "local-cpu" | "local_cpu" => Ok(Self::LocalCpu),
             _ => Err(format!(
-                "unknown provider '{value}', expected ollama, transformers, hf-serve, or tei"
+                "unknown provider '{value}', expected ollama, transformers, hf-serve, tei, or local-cpu"
             )),
         }
     }
@@ -213,6 +225,39 @@ pub struct BenchmarkCase {
     pub expected_contains: Vec<String>,
     #[serde(default)]
     pub expected_text: Option<String>,
+    /// Prefix prepended to the query input for embedding and reranking tasks.
+    /// Models such as E5, BGE, Nomic, and Qwen3 Embedding require role-specific
+    /// prefixes (e.g. "query: ") for fair retrieval quality scoring.
+    #[serde(default)]
+    pub query_prefix: Option<String>,
+    /// Prefix prepended to each document for embedding tasks.
+    /// E5 uses "passage: ", Nomic uses "search_document: ", etc.
+    #[serde(default)]
+    pub document_prefix: Option<String>,
+    #[serde(default)]
+    pub image_settings: Option<ImageSettings>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImageSettings {
+    pub width: u32,
+    pub height: u32,
+    pub steps: u32,
+    pub guidance_scale: f64,
+    pub seed: u64,
+}
+
+impl Default for ImageSettings {
+    fn default() -> Self {
+        Self {
+            width: 512,
+            height: 512,
+            steps: 20,
+            guidance_scale: 7.5,
+            seed: 42,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -259,6 +304,13 @@ pub struct RunSummary {
     pub quality_score_mean: Option<f64>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ProviderMetadata {
+    pub version: Option<String>,
+    #[serde(default)]
+    pub configuration: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct RunRecord {
     pub id: String,
@@ -267,6 +319,7 @@ pub struct RunRecord {
     pub pack_version: String,
     pub task: Task,
     pub provider: ProviderKind,
+    pub provider_metadata: ProviderMetadata,
     pub base_url: String,
     pub model: String,
     pub host_name: String,
@@ -301,6 +354,7 @@ pub struct SampleRecord {
     pub process_rss_bytes_peak: Option<u64>,
     pub quality_score: Option<f64>,
     pub output_excerpt: Option<String>,
+    pub output_image: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -327,6 +381,7 @@ pub struct InvocationResult {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub tokens_per_second: Option<f64>,
+    pub output_image: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]

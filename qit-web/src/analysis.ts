@@ -17,11 +17,19 @@ export function setupKey(run: Run): string {
     run.iterations,
     run.warmups,
     run.max_output_tokens,
+    run.provider_metadata?.version ?? null,
+    providerSetup(run),
   ]);
 }
 
+function providerSetup(run: Run): unknown {
+  const configuration = run.provider_metadata?.configuration;
+  if (!configuration) return null;
+  return [configuration.device, configuration.dtype, configuration.threads, configuration.packages];
+}
+
 export function modelKey(run: Run): string {
-  return JSON.stringify([run.model, run.provider, run.base_url]);
+  return JSON.stringify([run.model, run.provider, run.base_url, run.provider_metadata?.configuration?.revision ?? null]);
 }
 
 export function latestModels(runs: Run[]): Run[] {

@@ -58,6 +58,7 @@ pub fn prepare_benchmark(
         pack_version: benchmark.pack_version.clone(),
         task: benchmark.task,
         provider: request.provider,
+        provider_metadata: Default::default(),
         base_url: request.base_url.trim_end_matches('/').to_string(),
         model: request.model.clone(),
         host_name: host.host_name.clone(),
@@ -99,7 +100,20 @@ pub async fn execute_benchmark(
         request,
     } = prepared;
     let max_output_tokens = run.max_output_tokens;
-    if let Err(error) = provider.preflight(benchmark.task).await {
+    match provider.metadata().await {
+        Ok(metadata) => {
+            store.set_provider_metadata(&run.id, &metadata)?;
+            run.provider_metadata = metadata;
+        }
+        Err(error) => {
+            finish_failed(store, &mut run, format!("preflight failed: {error}"))?;
+            return Ok(run);
+        }
+    }
+    if let Err(error) = provider
+        .preflight(benchmark.task, &run.provider_metadata)
+        .await
+    {
         finish_failed(store, &mut run, format!("preflight failed: {error}"))?;
         return Ok(run);
     }
@@ -133,6 +147,7 @@ pub async fn execute_benchmark(
                 process_rss_bytes_peak: telemetry.process_rss_bytes_peak,
                 quality_score: None,
                 output_excerpt: None,
+                output_image: None,
             };
             match result {
                 Ok(invocation) => {
@@ -200,6 +215,7 @@ fn measured_sample(
     sample.tokens_per_second = invocation.tokens_per_second;
     sample.quality_score = quality_score(task, case, &invocation)?;
     sample.output_excerpt = output_excerpt(task, &invocation)?;
+    sample.output_image = invocation.output_image;
     Ok(())
 }
 
@@ -269,7 +285,14 @@ fn quality_score(
                 .map(|position| 1.0 / (position as f64 + 1.0))
                 .unwrap_or(0.0)
         })),
-        Task::TextToImage => Ok(None),
+        Task::TextToImage => {
+            let image = invocation
+                .output_image
+                .as_deref()
+                .ok_or_else(|| "provider returned no generated image".to_string())?;
+            crate::provider::validate_generated_image(image, case.image_settings.as_ref())?;
+            Ok(None)
+        }
     }
 }
 

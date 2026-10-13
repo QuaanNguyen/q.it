@@ -1061,3 +1061,11 @@ progress::-webkit-progress-value {
     transition-duration: 0.01ms !important;
   }
 }
+
+.sample-image {
+  display: block;
+  width: min(100%, 256px);
+  height: auto;
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+}

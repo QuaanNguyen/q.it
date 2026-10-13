@@ -88,7 +88,7 @@ The current pack format supports:
 - Image-to-text with a prompt, image, and optional expected phrases.
 - Speech-to-text with an audio file and optional expected text.
 - Text reranking with candidate passages and an expected passage.
-- A reserved text-to-image shape for a future server integration.
+- Text-to-image with explicit dimensions, denoising steps, guidance, and seed through the local CPU provider.
 
 An image or audio case can refer to a file inside the pack or include a base64 data URL.
 Keep normal dataset media as files because large base64 lines are difficult to review.
@@ -116,3 +116,25 @@ They cannot run Python, shell commands, native libraries, or downloaded model co
 
 Installation rejects symbolic links and paths that escape the pack directory.
 The pack remains available offline after all of its local files are installed.
+
+## Role-aware retrieval and generated images
+
+Embedding and reranking cases may supply query and document prefixes while retaining their original input and candidate passages.
+The local CPU provider otherwise applies the selected model's pinned retrieval instructions.
+For example:
+
+```json
+{"id":"search","input":"memory use","documents":["Reduce allocations","Weather forecast"],"expected_index":0,"query_prefix":"query: ","document_prefix":"passage: "}
+```
+
+The existing Ollama, Hugging Face Serve, and TEI embedding integrations also apply these explicit case prefixes.
+
+Image-generation settings belong to the versioned case definition:
+
+```json
+{"id":"board","prompt":"A green circuit board on a white background","image_settings":{"width":512,"height":512,"steps":20,"guidance_scale":7.5,"seed":42}}
+```
+
+Dimensions must be multiples of eight from 64 to 1024, steps range from one to one hundred, guidance ranges from zero to thirty, and the seed must fit a nonnegative signed 64-bit integer.
+Generated PNGs are retained with their samples and exported as image data in JSONL.
+A change to retrieval instructions or image settings requires a new pack version.

@@ -1,7 +1,7 @@
 # q.it
 
 q.it benchmarks edge models on a Raspberry Pi 5 and stores the results for later comparison.
-It works with models already served by Ollama, Hugging Face Transformers Serve, Hugging Face Serve, or Hugging Face Text Embeddings Inference.
+It works with models already served by Ollama, Hugging Face Transformers Serve, Hugging Face Serve, Hugging Face Text Embeddings Inference, or the optional local CPU provider.
 
 q.it does not download a model or start a model server during a benchmark.
 This keeps each run predictable and avoids including model setup time by accident.
@@ -132,15 +132,15 @@ See [the dashboard design research](docs/research/dashboard-ranking-design.md) f
 
 | Benchmark | Purpose | Supported server |
 |-----------|---------|------------------|
-| `core/text-generation-smoke` | Checks short text generation, basic instruction following, TTFT, and TPS. | Ollama or Transformers Serve |
-| `core/embedding-retrieval` | Checks whether related text is placed near a query in embedding space. | Ollama, Hugging Face Serve, or Text Embeddings Inference |
-| `core/image-to-text-smoke` | Sends a generated two-color image and asks the model to identify its colors. | Ollama or Transformers Serve |
-| `core/speech-to-text-smoke` | Confirms that an audio file can travel through the transcription endpoint. | Transformers Serve |
-| `core/reranking-relevance` | Checks whether the most relevant passage is ranked first. | Text Embeddings Inference |
-| `core/text-to-image-smoke` | Reserves the task shape for a future image-generation server. | Not runnable yet |
+| `core/text-generation-smoke` | Checks short text generation, basic instruction following, TTFT, and TPS. | Ollama, Transformers Serve, or Local CPU |
+| `core/embedding-retrieval` | Checks whether related text is placed near a query in embedding space. | Ollama, Hugging Face Serve, Text Embeddings Inference, or Local CPU |
+| `core/image-to-text-smoke` | Sends a generated two-color image and asks the model to identify its colors. | Ollama, Transformers Serve, or Local CPU |
+| `core/speech-to-text-smoke` | Confirms that an audio file can travel through the transcription endpoint. | Transformers Serve or Local CPU |
+| `core/reranking-relevance` | Checks whether the most relevant passage is ranked first. | Text Embeddings Inference or Local CPU |
+| `core/text-to-image-smoke` | Generates and validates a PNG image through the optional CPU server. | Local CPU |
 
 The speech check uses a generated tone, so it does not measure transcription accuracy.
-The text-to-image check has no active server integration and is shown as reserved.
+The text-to-image check uses the optional local CPU provider and saves its generated image with the sample.
 
 ## Supported model servers
 
@@ -217,6 +217,13 @@ qit run core/embedding-retrieval \
   --model organization/embedding-model \
   --base-url http://127.0.0.1:8080
 ```
+
+### Local CPU provider
+
+The optional local CPU server supports the 43 canonical checkpoints in the CPU model plan, including raw text completion, role-aware embeddings, reranking, captioning, OCR, speech, and image generation.
+Start the selected model explicitly before running q.it.
+See the [local CPU provider guide](providers/local-cpu/README.md) for installation, pinned checkpoints, CPU settings, and task-specific benchmarks.
+Model loading and downloads remain outside measured runs.
 
 ## What q.it measures
 

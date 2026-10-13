@@ -24,7 +24,7 @@ The optional dashboard analyzes persisted results and can start a benchmark agai
 
 **Analysis seam**: the HTTP read interface under `/api` and its embedded browser application.
 
-**Provider seam**: built-in Ollama native, Transformers Serve, Hugging Face Serve, and Text Embeddings Inference adapters.
+**Provider seam**: built-in Ollama native, Transformers Serve, Hugging Face Serve, Text Embeddings Inference, and the optional local CPU protocol adapters.
 
 **Extension seam**: declarative benchmark packs with a versioned JSON manifest and JSONL cases.
 
@@ -58,6 +58,8 @@ JSONL exports retain samples, while CSV exports contain flat run summaries.
 ## Provider facts
 
 Ollama uses `/api/show` for capability preflight, `/api/generate` for NDJSON text or vision generation, and `/api/embed` for text embeddings.
+The `/api/version` response is persisted as provider metadata before capability preflight; embedding runs require Ollama 0.40.3 or later.
+Historical records without provider metadata retain an absent version and are compared separately in the dashboard.
 Its exact output count and evaluation duration drive token throughput.
 
 Transformers Serve uses its OpenAI-compatible model, chat-completion, and audio-transcription routes.
@@ -90,3 +92,13 @@ Generated assets are written to `qit-runtime/web-dist` by `npm run build`.
 - Keep packs inert and validate all paths before activation.
 - Persist raw sample values so summary formulas can evolve without rerunning models.
 - Keep unavailable metrics absent instead of inventing approximations.
+
+## Optional CPU serving
+
+The Python package under `providers/local-cpu` is an explicitly started loopback server, separate from measured execution and declarative packs.
+Its profile catalog pins canonical checkpoints and publisher code revisions across all six tasks.
+The Rust adapter validates loaded identity, CPU execution, the under-one-billion parameter count, streaming completion, retrieval outputs, and PNG dimensions.
+CPU metadata retains package versions, precision, threads, model revisions, and model-specific preparation.
+CPU model comparisons share package and thread settings while preserving checkpoint revisions as separate model configurations.
+Generated PNGs are saved with sample records and exposed through the existing run-detail response.
+Normal Python protocol and Rust integration tests do not download model weights.

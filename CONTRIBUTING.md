@@ -37,6 +37,8 @@ Run the Rust suite:
 cargo test
 ```
 
+GitHub Actions runs Rust formatting, clippy, and workspace tests alongside dashboard tests and builds on pull requests and pushes to main.
+
 Build the dashboard:
 
 ```bash

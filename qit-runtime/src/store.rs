@@ -4,7 +4,9 @@ use std::str::FromStr;
 use rusqlite::types::Type;
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::model::{HostInfo, ProviderKind, RunRecord, RunStatus, RunSummary, SampleRecord, Task};
+use crate::model::{
+    HostInfo, ProviderKind, ProviderMetadata, RunRecord, RunStatus, RunSummary, SampleRecord, Task,
+};
 
 pub struct Store {
     connection: Connection,
@@ -107,6 +109,13 @@ impl Store {
             "TEXT NOT NULL DEFAULT '{}'",
         )?;
         ensure_column(&connection, "benchmark_runs", "owner_pid", "INTEGER")?;
+        ensure_column(
+            &connection,
+            "benchmark_runs",
+            "provider_metadata_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )?;
+        ensure_column(&connection, "benchmark_samples", "output_image", "TEXT")?;
         Ok(Self { connection })
     }
 
@@ -120,10 +129,11 @@ impl Store {
                 "INSERT INTO benchmark_runs (
                     id, benchmark_id, benchmark_name, pack_version, task, provider,
                     base_url, model, host_name, host_json, status, started_at_ms, finished_at_ms,
-                    iterations, warmups, max_output_tokens, target_pid, error, summary_json, owner_pid
+                    iterations, warmups, max_output_tokens, target_pid, error, summary_json, owner_pid,
+                    provider_metadata_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20
+                    ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
                  )",
                 params![
                     run.id,
@@ -145,10 +155,32 @@ impl Store {
                     run.target_pid,
                     run.error,
                     summary,
-                    std::process::id()
+                    std::process::id(),
+                    serde_json::to_string(&run.provider_metadata)
+                        .map_err(|error| format!("serialize provider metadata: {error}"))?
                 ],
             )
             .map_err(|error| format!("store benchmark run: {error}"))?;
+        Ok(())
+    }
+
+    pub fn set_provider_metadata(
+        &self,
+        id: &str,
+        metadata: &ProviderMetadata,
+    ) -> Result<(), String> {
+        let metadata = serde_json::to_string(metadata)
+            .map_err(|error| format!("serialize provider metadata: {error}"))?;
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE benchmark_runs SET provider_metadata_json = ?2 WHERE id = ?1",
+                params![id, metadata],
+            )
+            .map_err(|error| format!("store provider metadata: {error}"))?;
+        if changed == 0 {
+            return Err(format!("benchmark run '{id}' was not found"));
+        }
         Ok(())
     }
 
@@ -160,10 +192,10 @@ impl Store {
                     ttft_ms, input_tokens, output_tokens, tokens_per_second,
                     host_cpu_percent_mean, host_cpu_percent_peak,
                     host_memory_used_bytes_peak, process_rss_bytes_peak,
-                    quality_score, output_excerpt
+                    quality_score, output_excerpt, output_image
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15, ?16, ?17
+                    ?13, ?14, ?15, ?16, ?17, ?18
                  )",
                 params![
                     sample.id,
@@ -183,6 +215,7 @@ impl Store {
                     sample.process_rss_bytes_peak,
                     sample.quality_score,
                     sample.output_excerpt,
+                    sample.output_image,
                 ],
             )
             .map_err(|error| format!("store benchmark sample: {error}"))?;
@@ -223,7 +256,8 @@ impl Store {
         let sql = format!(
             "SELECT id, benchmark_id, benchmark_name, pack_version, task, provider,
                     base_url, model, host_name, host_json, status, started_at_ms, finished_at_ms,
-                    iterations, warmups, max_output_tokens, target_pid, error, summary_json
+                    iterations, warmups, max_output_tokens, target_pid, error, summary_json,
+                    provider_metadata_json
              FROM benchmark_runs
              {where_clause}
              ORDER BY started_at_ms DESC
@@ -245,7 +279,8 @@ impl Store {
             .query_row(
                 "SELECT id, benchmark_id, benchmark_name, pack_version, task, provider,
                     base_url, model, host_name, host_json, status, started_at_ms, finished_at_ms,
-                    iterations, warmups, max_output_tokens, target_pid, error, summary_json
+                    iterations, warmups, max_output_tokens, target_pid, error, summary_json,
+                    provider_metadata_json
              FROM benchmark_runs WHERE id = ?1",
                 [id],
                 map_run,
@@ -272,7 +307,7 @@ impl Store {
                         ttft_ms, input_tokens, output_tokens, tokens_per_second,
                         host_cpu_percent_mean, host_cpu_percent_peak,
                         host_memory_used_bytes_peak, process_rss_bytes_peak,
-                        quality_score, output_excerpt
+                        quality_score, output_excerpt, output_image
                  FROM benchmark_samples
                  WHERE run_id = ?1
                  ORDER BY iteration, case_id",
@@ -298,6 +333,7 @@ impl Store {
                     process_rss_bytes_peak: row.get(14)?,
                     quality_score: row.get(15)?,
                     output_excerpt: row.get(16)?,
+                    output_image: row.get(17)?,
                 })
             })
             .map_err(|error| format!("query benchmark samples: {error}"))?;
@@ -336,6 +372,8 @@ fn map_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunRecord> {
         pack_version: row.get(3)?,
         task: parse_task(&task).map_err(|error| conversion_error(4, error))?,
         provider: ProviderKind::from_str(&provider).map_err(|error| conversion_error(5, error))?,
+        provider_metadata: serde_json::from_str(&row.get::<_, String>(19)?)
+            .map_err(|error| conversion_error(19, error.to_string()))?,
         base_url: row.get(6)?,
         model: row.get(7)?,
         host_name: host_name.clone(),

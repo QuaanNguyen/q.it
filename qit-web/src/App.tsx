@@ -251,6 +251,10 @@ function Overview({ data }: { data: DashboardData }) {
               >
                 {setups.map((item) => (
                   <option key={item.key} value={item.key}>
+                    {item.runs[0].provider_metadata?.version
+                      ? `${providerLabel(item.runs[0].provider)} ${item.runs[0].provider_metadata.version}`
+                      : "Server version unrecorded"}
+                    {" / "}
                     {item.runs[0].host_name} / {item.runs[0].host.architecture}{" "}
                     / {item.runs[0].iterations} passes / {item.runs[0].warmups}{" "}
                     warmups / {item.runs[0].max_output_tokens} tokens
@@ -663,7 +667,9 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
         max={100}
       />
       <div className="run-config">
-        <span>{providerLabel(run.provider)}</span>
+        <span>
+          {providerLabel(run.provider)} {run.provider_metadata?.version ?? "version unrecorded"}
+        </span>
         <span>{run.iterations} passes</span>
         <span>{run.warmups} warmups</span>
         <span>{run.max_output_tokens} token limit</span>
@@ -692,7 +698,12 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
                     {sample.latency_ms === null ? "-" : time(sample.latency_ms)}
                   </td>
                   <td className="sample-output">
-                    {sample.error ?? sample.output_excerpt ?? "-"}
+                    {sample.error ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
+                    {sample.output_image && (
+                      <a href={sample.output_image} download={`${sample.case_id}.png`}>
+                        <img className="sample-image" src={sample.output_image} alt={`Generated image for ${sample.case_id}`} />
+                      </a>
+                    )}
                   </td>
                 </tr>
               ))}

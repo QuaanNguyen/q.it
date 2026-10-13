@@ -2,7 +2,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use axum::response::IntoResponse;
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -183,6 +183,10 @@ async fn ollama_server() -> TestServer {
         axum::serve(
             listener,
             Router::new()
+                .route(
+                    "/api/version",
+                    get(|| async { Json(serde_json::json!({"version": "0.40.3"})) }),
+                )
                 .route("/api/show", post(show))
                 .route("/api/generate", post(generate)),
         )

@@ -26,7 +26,7 @@ The third case measures performance without trying to judge writing quality.
 For a streaming server, q.it records request latency, time to first token, and tokens per second when an exact token count is available.
 It also records CPU and memory measurements.
 
-Supported servers are Ollama and Transformers Serve.
+Supported servers are Ollama, Transformers Serve, and the optional local CPU provider.
 
 ## Embedding retrieval check
 
@@ -47,7 +47,7 @@ A first-place match receives the best score.
 
 This is a small semantic sanity check, not a replacement for MTEB or BEIR.
 
-Supported servers are Ollama, Hugging Face Serve, and Hugging Face Text Embeddings Inference.
+Supported servers are Ollama, Hugging Face Serve, Hugging Face Text Embeddings Inference, and the optional local CPU provider.
 
 ## Image-to-text smoke test
 
@@ -65,7 +65,7 @@ It asks the model to name those colors and checks whether both expected color na
 The image is included with q.it, so the check works without downloading a dataset.
 The benchmark measures request latency, streaming speed, CPU use, and memory use.
 
-Supported servers are Ollama and Transformers Serve.
+Supported servers are Ollama, Transformers Serve, and the optional local CPU provider.
 
 ## Speech-to-text transport check
 
@@ -83,7 +83,7 @@ Its purpose is to confirm that q.it can prepare the audio request and receive a 
 The audio does not contain spoken words.
 This benchmark does not measure speech recognition accuracy and does not produce a word-error score.
 
-Transformers Serve is the only supported server for this check.
+Transformers Serve and the optional local CPU provider support this check.
 
 ## Reranking relevance check
 
@@ -101,16 +101,16 @@ One search is about edge computing and the other is about checking memory on Ras
 q.it asks the server to rank each set of passages and checks where the expected passage appears.
 A first-place result receives the best score.
 
-Hugging Face Text Embeddings Inference is the only supported server for this check.
+Hugging Face Text Embeddings Inference and the optional local CPU provider support this check.
 
-## Text-to-image placeholder
+## Text-to-image transport check
 
 The built-in identifier is `core/text-to-image-smoke`.
 
-This entry reserves a benchmark shape for a future image-generation server integration.
-None of the current server integrations can run it, so q.it lists it as reserved.
-
-It must not be treated as a working text-to-image benchmark.
+The optional local CPU provider can run this case through the five pinned BK-SDM profiles.
+The default profile generates a 512 by 512 PNG with twenty steps, guidance 7.5, and CPU seed 42.
+q.it validates and stores the image, but does not attach an image-quality score.
+The other provider integrations do not support this task.
 
 ## How runs are classified
 

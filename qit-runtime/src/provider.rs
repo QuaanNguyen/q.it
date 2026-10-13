@@ -7,7 +7,7 @@ use futures_util::StreamExt;
 use reqwest::{RequestBuilder, Response};
 use serde_json::{json, Value};
 
-use crate::model::{BenchmarkCase, InvocationResult, ProviderKind, Task};
+use crate::model::{BenchmarkCase, InvocationResult, ProviderKind, ProviderMetadata, Task};
 
 const HF_SERVE_MAX_BATCH_INPUTS: usize = 4;
 
@@ -68,6 +68,9 @@ impl ProviderClient {
             (ProviderKind::Tei, Task::Embedding) => self.tei_embed(case).await,
             (ProviderKind::HfServe, Task::Embedding) => self.hf_serve_embed(case).await,
             (ProviderKind::Tei, Task::Reranking) => self.tei_rerank(case).await,
+            (ProviderKind::LocalCpu, task) => {
+                self.local_cpu_invoke(task, case, max_output_tokens).await
+            }
             _ => Err(format!(
                 "{} does not support {} benchmarks",
                 self.kind.label(),
@@ -76,7 +79,31 @@ impl ProviderClient {
         }
     }
 
-    pub async fn preflight(&self, task: Task) -> Result<(), String> {
+    pub async fn metadata(&self) -> Result<ProviderMetadata, String> {
+        if self.kind == ProviderKind::LocalCpu {
+            return self.local_cpu_metadata().await;
+        }
+        if self.kind != ProviderKind::Ollama {
+            return Ok(ProviderMetadata::default());
+        }
+        let response = self
+            .authorized(self.client.get(self.url("/api/version")))
+            .send()
+            .await
+            .map_err(|error| format!("Ollama version preflight failed: {error}"))?;
+        let value = response_json(response, "Ollama version preflight").await?;
+        let version = value
+            .get("version")
+            .and_then(Value::as_str)
+            .filter(|version| !version.trim().is_empty())
+            .ok_or_else(|| "Ollama version response has no non-empty version string".to_string())?;
+        Ok(ProviderMetadata {
+            version: Some(version.to_string()),
+            configuration: Value::Null,
+        })
+    }
+
+    pub async fn preflight(&self, task: Task, metadata: &ProviderMetadata) -> Result<(), String> {
         if !self.kind.supports(task) {
             return Err(format!(
                 "{} does not support {} benchmarks",
@@ -85,11 +112,144 @@ impl ProviderClient {
             ));
         }
         match self.kind {
-            ProviderKind::Ollama => self.ollama_preflight(task).await,
+            ProviderKind::Ollama => {
+                if task == Task::Embedding {
+                    let version = metadata.version.as_deref().unwrap_or("unknown");
+                    let parsed = semver::Version::parse(version).map_err(|_| {
+                        format!("embedding benchmarks require Ollama 0.40.3 or later; cannot verify server version '{version}'")
+                    })?;
+                    if parsed < semver::Version::new(0, 40, 3) {
+                        return Err(format!("embedding benchmarks require Ollama 0.40.3 or later; server reports {version}. Upgrade the Ollama server before retrying"));
+                    }
+                }
+                self.ollama_preflight(task).await
+            }
             ProviderKind::Transformers => self.transformers_preflight().await,
             ProviderKind::HfServe => self.hf_serve_preflight().await,
             ProviderKind::Tei => self.tei_preflight().await,
+            ProviderKind::LocalCpu => {
+                if metadata.configuration.get("task").and_then(Value::as_str) != Some(task.as_str())
+                {
+                    return Err(format!(
+                        "the loaded Local CPU model does not support {}",
+                        task.label()
+                    ));
+                }
+                Ok(())
+            }
         }
+    }
+
+    async fn local_cpu_metadata(&self) -> Result<ProviderMetadata, String> {
+        let response = self
+            .authorized(self.client.get(self.url("/v1/qit/model")))
+            .send()
+            .await
+            .map_err(|error| format!("Local CPU preflight failed: {error}"))?;
+        let value = response_json(response, "Local CPU preflight").await?;
+        if value.get("schema_version").and_then(Value::as_u64) != Some(1)
+            || value.get("model").and_then(Value::as_str) != Some(self.model.as_str())
+        {
+            return Err(
+                "Local CPU endpoint does not report the requested model and protocol version"
+                    .into(),
+            );
+        }
+        let configuration = value
+            .get("configuration")
+            .filter(|configuration| configuration.is_object())
+            .ok_or_else(|| "Local CPU endpoint has no model configuration".to_string())?;
+        if configuration.get("device").and_then(Value::as_str) != Some("cpu") {
+            return Err("Local CPU endpoint must report CPU-only execution".into());
+        }
+        if !configuration
+            .get("parameter_count")
+            .and_then(Value::as_u64)
+            .is_some_and(|count| count > 0 && count < 1_000_000_000)
+        {
+            return Err(
+                "Local CPU model must report fewer than one billion loaded parameters".into(),
+            );
+        }
+        let version = value
+            .get("version")
+            .and_then(Value::as_str)
+            .filter(|version| !version.is_empty())
+            .ok_or_else(|| "Local CPU endpoint has no server version".to_string())?;
+        Ok(ProviderMetadata {
+            version: Some(version.to_string()),
+            configuration: configuration.clone(),
+        })
+    }
+
+    async fn local_cpu_invoke(
+        &self,
+        task: Task,
+        case: &BenchmarkCase,
+        max_output_tokens: u32,
+    ) -> Result<InvocationResult, String> {
+        let mut body = json!({"model": self.model, "task": task.as_str(), "case": case, "max_output_tokens": max_output_tokens});
+        if let Some(media) = &case.media {
+            let (mime, bytes) = media_bytes(media, case.media_type.as_deref())?;
+            body["case"]["media"] = json!(format!("data:{mime};base64,{}", STANDARD.encode(bytes)));
+        }
+        let started = Instant::now();
+        let response = self
+            .authorized(self.client.post(self.url("/v1/qit/invoke")))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|error| format!("Local CPU request failed: {error}"))?;
+        let response = successful(response, "Local CPU invocation").await?;
+        let mut stream = response.bytes_stream();
+        let mut buffer = Vec::new();
+        let mut output = InvocationResult::default();
+        let mut terminal = false;
+        while let Some(chunk) = stream.next().await {
+            buffer.extend_from_slice(
+                &chunk.map_err(|error| format!("read Local CPU stream: {error}"))?,
+            );
+            if buffer.len() > 16 * 1024 * 1024 {
+                return Err("Local CPU response exceeded the maximum event size".into());
+            }
+            while let Some(newline) = buffer.iter().position(|byte| *byte == b'\n') {
+                let line = buffer.drain(..=newline).collect::<Vec<_>>();
+                parse_local_cpu_event(&line, task, started, &mut output, &mut terminal)?;
+            }
+        }
+        if !buffer.is_empty() {
+            parse_local_cpu_event(&buffer, task, started, &mut output, &mut terminal)?;
+        }
+        if !terminal {
+            return Err("Local CPU stream ended without a terminal result".into());
+        }
+        output.latency_ms = elapsed_ms(started);
+        if matches!(task, Task::TextGeneration | Task::ImageToText) && output.output_text.is_none()
+        {
+            return Err("Local CPU provider returned no text".into());
+        }
+        if task == Task::SpeechToText && output.output_text.is_none() {
+            return Err("Local CPU provider returned no transcript".into());
+        }
+        if task == Task::TextToImage {
+            validate_generated_image(
+                output
+                    .output_image
+                    .as_deref()
+                    .ok_or_else(|| "Local CPU provider returned no generated image".to_string())?,
+                case.image_settings.as_ref(),
+            )?;
+        }
+        if task == Task::Reranking {
+            let mut ranking = output.ranking.clone();
+            ranking.sort_unstable();
+            if ranking != (0..case.documents.len()).collect::<Vec<_>>() {
+                return Err(
+                    "Local CPU ranking must contain every candidate index exactly once".into(),
+                );
+            }
+        }
+        Ok(output)
     }
 
     async fn ollama_preflight(&self, task: Task) -> Result<(), String> {
@@ -590,9 +750,20 @@ fn parse_transformers_event(
 }
 
 fn embedding_inputs(case: &BenchmarkCase) -> Result<Vec<String>, String> {
+    let query = required(&case.input, "input")?;
     let mut inputs = Vec::with_capacity(case.documents.len() + 1);
-    inputs.push(required(&case.input, "input")?.to_string());
-    inputs.extend(case.documents.iter().cloned());
+    let prepared_query = match &case.query_prefix {
+        Some(prefix) => format!("{prefix}{query}"),
+        None => query.to_string(),
+    };
+    inputs.push(prepared_query);
+    for document in &case.documents {
+        let prepared = match &case.document_prefix {
+            Some(prefix) => format!("{prefix}{document}"),
+            None => document.clone(),
+        };
+        inputs.push(prepared);
+    }
     Ok(inputs)
 }
 
@@ -790,4 +961,139 @@ fn timed_throughput(
 
 fn excerpt(value: &str) -> String {
     value.chars().take(500).collect()
+}
+
+fn parse_local_cpu_event(
+    line: &[u8],
+    task: Task,
+    started: Instant,
+    output: &mut InvocationResult,
+    terminal: &mut bool,
+) -> Result<(), String> {
+    if line.iter().all(u8::is_ascii_whitespace) {
+        return Ok(());
+    }
+    if *terminal {
+        return Err("Local CPU stream contains data after its terminal result".into());
+    }
+    let value: Value =
+        serde_json::from_slice(line).map_err(|error| format!("parse Local CPU stream: {error}"))?;
+    match value.get("type").and_then(Value::as_str) {
+        Some("error") => Err(format!(
+            "Local CPU inference failed: {}",
+            value
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown error")
+        )),
+        Some("delta") if matches!(task, Task::TextGeneration | Task::ImageToText) => {
+            let text = value
+                .get("text")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "Local CPU text event has no text".to_string())?;
+            if !text.is_empty() {
+                output.ttft_ms.get_or_insert_with(|| elapsed_ms(started));
+            }
+            output
+                .output_text
+                .get_or_insert_with(String::new)
+                .push_str(text);
+            Ok(())
+        }
+        Some("result") => {
+            match task {
+                Task::TextGeneration | Task::ImageToText | Task::SpeechToText => {
+                    if let Some(text) = value.get("output_text").and_then(Value::as_str) {
+                        output.output_text = Some(text.to_string());
+                    }
+                    if task != Task::SpeechToText {
+                        output.input_tokens = value.get("input_tokens").and_then(Value::as_u64);
+                        output.output_tokens = value.get("output_tokens").and_then(Value::as_u64);
+                        output.ttft_ms = value
+                            .get("first_token_latency_ns")
+                            .and_then(Value::as_u64)
+                            .map(|duration| duration as f64 / 1_000_000.0);
+                        if let (Some(tokens), Some(duration)) = (
+                            output.output_tokens,
+                            value.get("decode_duration_ns").and_then(Value::as_u64),
+                        ) {
+                            if tokens >= 2 && duration > 0 {
+                                output.tokens_per_second =
+                                    Some((tokens - 1) as f64 / (duration as f64 / 1_000_000_000.0));
+                            }
+                        }
+                    }
+                }
+                Task::Embedding => {
+                    output.embeddings = parse_embeddings(
+                        value
+                            .get("embeddings")
+                            .ok_or_else(|| "Local CPU result has no embeddings".to_string())?,
+                    )?;
+                }
+                Task::Reranking => {
+                    output.ranking = value
+                        .get("ranking")
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| "Local CPU result has no ranking".to_string())?
+                        .iter()
+                        .map(|index| {
+                            index
+                                .as_u64()
+                                .and_then(|index| usize::try_from(index).ok())
+                                .ok_or_else(|| "Local CPU ranking has an invalid index".to_string())
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                }
+                Task::TextToImage => {
+                    output.output_image = Some(
+                        value
+                            .get("output_image")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| "Local CPU result has no generated image".to_string())?
+                            .to_string(),
+                    );
+                }
+            }
+            *terminal = true;
+            Ok(())
+        }
+        _ => Err("Local CPU stream contains an unsupported event".into()),
+    }
+}
+
+pub fn validate_generated_image(
+    value: &str,
+    settings: Option<&crate::model::ImageSettings>,
+) -> Result<(), String> {
+    let encoded = value
+        .strip_prefix("data:image/png;base64,")
+        .ok_or_else(|| "generated image must be a base64 PNG".to_string())?;
+    if encoded.len() > 16 * 1024 * 1024 {
+        return Err("generated image exceeds the maximum size".into());
+    }
+    let bytes = STANDARD
+        .decode(encoded)
+        .map_err(|error| format!("decode generated PNG: {error}"))?;
+    let mut reader =
+        image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Png);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(1024);
+    limits.max_image_height = Some(1024);
+    limits.max_alloc = Some(32 * 1024 * 1024);
+    reader.limits(limits);
+    let image = reader
+        .decode()
+        .map_err(|error| format!("invalid generated PNG: {error}"))?;
+    let expected = settings.cloned().unwrap_or_default();
+    if image.width() != expected.width || image.height() != expected.height {
+        return Err(format!(
+            "generated image is {}x{}, expected {}x{}",
+            image.width(),
+            image.height(),
+            expected.width,
+            expected.height
+        ));
+    }
+    Ok(())
 }

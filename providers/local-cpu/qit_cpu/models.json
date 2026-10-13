@@ -1,0 +1,394 @@
+[
+  {
+    "model": "Qwen/Qwen3-0.6B",
+    "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+    "task": "text_generation",
+    "implementation": "chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Qwen/Qwen3-0.6B"
+  },
+  {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "task": "text_generation",
+    "implementation": "chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct"
+  },
+  {
+    "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "task": "text_generation",
+    "implementation": "chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct"
+  },
+  {
+    "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+    "revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+    "task": "text_generation",
+    "implementation": "chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct"
+  },
+  {
+    "model": "ibm-granite/granite-4.0-350m",
+    "revision": "bd8a1497065c0d6ba1ef19af6b0d2b14bacf71c2",
+    "task": "text_generation",
+    "implementation": "chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/ibm-granite/granite-4.0-350m"
+  },
+  {
+    "model": "EleutherAI/pythia-410m",
+    "revision": "9879c9b5f8bea9051dcb0e68dff21493d67e9d4f",
+    "task": "text_generation",
+    "implementation": "completion",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/EleutherAI/pythia-410m"
+  },
+  {
+    "model": "Qwen/Qwen3-Embedding-0.6B",
+    "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B",
+    "query_prefix": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: ",
+    "document_prefix": "",
+    "dimensions": 1024,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "google/embeddinggemma-300m",
+    "revision": "57c266a740f537b4dc058e1b0cda161fd15afa75",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/google/embeddinggemma-300m",
+    "query_prefix": "task: search result | query: ",
+    "document_prefix": "title: none | text: ",
+    "dimensions": 768,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "BAAI/bge-small-en-v1.5",
+    "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/BAAI/bge-small-en-v1.5",
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "document_prefix": "",
+    "dimensions": 384,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "BAAI/bge-base-en-v1.5",
+    "revision": "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/BAAI/bge-base-en-v1.5",
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "document_prefix": "",
+    "dimensions": 768,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "intfloat/e5-small-v2",
+    "revision": "ffb93f3bd4047442299a41ebb6fa998a38507c52",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/intfloat/e5-small-v2",
+    "query_prefix": "query: ",
+    "document_prefix": "passage: ",
+    "dimensions": 384,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "intfloat/e5-base-v2",
+    "revision": "f52bf8ec8c7124536f0efb74aca902b2995e5bcd",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/intfloat/e5-base-v2",
+    "query_prefix": "query: ",
+    "document_prefix": "passage: ",
+    "dimensions": 768,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "jinaai/jina-embeddings-v2-base-en",
+    "revision": "322d4d7e2f35e84137961a65af894fda0385eb7a",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": true,
+    "source": "https://huggingface.co/jinaai/jina-embeddings-v2-base-en",
+    "query_prefix": "",
+    "document_prefix": "",
+    "dimensions": 768,
+    "normalize_embeddings": true,
+    "code_repository": "jinaai/jina-bert-implementation",
+    "code_revision": "f3ec4cf7de7e561007f27c9efc7148b0bd713f81"
+  },
+  {
+    "model": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": true,
+    "source": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5",
+    "query_prefix": "search_query: ",
+    "document_prefix": "search_document: ",
+    "dimensions": 768,
+    "normalize_embeddings": true,
+    "code_repository": "nomic-ai/nomic-bert-2048",
+    "code_revision": "7710840340a098cfb869c4f65e87cf2b1b70caca"
+  },
+  {
+    "model": "Alibaba-NLP/gte-modernbert-base",
+    "revision": "e7f32e3c00f91d699e8c43b53106206bcc72bb22",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Alibaba-NLP/gte-modernbert-base",
+    "query_prefix": "",
+    "document_prefix": "",
+    "dimensions": 768,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "Snowflake/snowflake-arctic-embed-m-v1.5",
+    "revision": "e58a8f756156a1293d763f17e3aae643474e9b8a",
+    "task": "embedding",
+    "implementation": "embedding",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Snowflake/snowflake-arctic-embed-m-v1.5",
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "document_prefix": "",
+    "dimensions": 768,
+    "normalize_embeddings": true
+  },
+  {
+    "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+    "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a",
+    "task": "reranking",
+    "implementation": "reranking",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2"
+  },
+  {
+    "model": "cross-encoder/ms-marco-MiniLM-L12-v2",
+    "revision": "7b0235231ca2674cb8ca8f022859a6eba2b1c968",
+    "task": "reranking",
+    "implementation": "reranking",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L12-v2"
+  },
+  {
+    "model": "BAAI/bge-reranker-base",
+    "revision": "2cfc18c9415c912f9d8155881c133215df768a70",
+    "task": "reranking",
+    "implementation": "reranking",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/BAAI/bge-reranker-base"
+  },
+  {
+    "model": "BAAI/bge-reranker-large",
+    "revision": "55611d7bca2a7133960a6d3b71e083071bbfc312",
+    "task": "reranking",
+    "implementation": "reranking",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/BAAI/bge-reranker-large"
+  },
+  {
+    "model": "BAAI/bge-reranker-v2-m3",
+    "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+    "task": "reranking",
+    "implementation": "reranking",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/BAAI/bge-reranker-v2-m3"
+  },
+  {
+    "model": "Alibaba-NLP/gte-reranker-modernbert-base",
+    "revision": "f7481e6055501a30fb19d090657df9ec1f79ab2c",
+    "task": "reranking",
+    "implementation": "reranking",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Alibaba-NLP/gte-reranker-modernbert-base"
+  },
+  {
+    "model": "HuggingFaceTB/SmolVLM-256M-Instruct",
+    "revision": "7e3e67edbbed1bf9888184d9df282b700a323964",
+    "task": "image_to_text",
+    "implementation": "image_chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/HuggingFaceTB/SmolVLM-256M-Instruct"
+  },
+  {
+    "model": "HuggingFaceTB/SmolVLM-500M-Instruct",
+    "revision": "a7da5b986cb59b408707209984f360a5f4ad7e47",
+    "task": "image_to_text",
+    "implementation": "image_chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct"
+  },
+  {
+    "model": "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
+    "revision": "067788b187b95ebe7b2e040b3e4299e342e5b8fd",
+    "task": "image_to_text",
+    "implementation": "image_chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+  },
+  {
+    "model": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+    "revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+    "task": "image_to_text",
+    "implementation": "image_chat",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+  },
+  {
+    "model": "microsoft/Florence-2-base",
+    "revision": "5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac",
+    "task": "image_to_text",
+    "implementation": "florence",
+    "trust_publisher_code": true,
+    "source": "https://huggingface.co/microsoft/Florence-2-base",
+    "code_repository": "microsoft/Florence-2-base",
+    "code_revision": "5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac"
+  },
+  {
+    "model": "microsoft/Florence-2-large",
+    "revision": "21a599d414c4d928c9032694c424fb94458e3594",
+    "task": "image_to_text",
+    "implementation": "florence",
+    "trust_publisher_code": true,
+    "source": "https://huggingface.co/microsoft/Florence-2-large",
+    "code_repository": "microsoft/Florence-2-large",
+    "code_revision": "21a599d414c4d928c9032694c424fb94458e3594"
+  },
+  {
+    "model": "microsoft/git-base",
+    "revision": "1f7fe8444292beb4a259e3a5b6eba440cd5999d4",
+    "task": "image_to_text",
+    "implementation": "git",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/microsoft/git-base"
+  },
+  {
+    "model": "Salesforce/blip-image-captioning-large",
+    "revision": "353689b859fcf0523410b1806dace5fb46ecdf41",
+    "task": "image_to_text",
+    "implementation": "blip",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/Salesforce/blip-image-captioning-large"
+  },
+  {
+    "model": "openai/whisper-tiny",
+    "revision": "169d4a4341b33bc18d8881c4b69c2e104e1cc0af",
+    "task": "speech_to_text",
+    "implementation": "speech",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/openai/whisper-tiny"
+  },
+  {
+    "model": "openai/whisper-base",
+    "revision": "e37978b90ca9030d5170a5c07aadb050351a65bb",
+    "task": "speech_to_text",
+    "implementation": "speech",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/openai/whisper-base"
+  },
+  {
+    "model": "openai/whisper-small",
+    "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
+    "task": "speech_to_text",
+    "implementation": "speech",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/openai/whisper-small"
+  },
+  {
+    "model": "openai/whisper-medium",
+    "revision": "abdf7c39ab9d0397620ccaea8974cc764cd0953e",
+    "task": "speech_to_text",
+    "implementation": "speech",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/openai/whisper-medium"
+  },
+  {
+    "model": "distil-whisper/distil-small.en",
+    "revision": "9e4a67ca4569c30be43a3fe7fba1621e504f0093",
+    "task": "speech_to_text",
+    "implementation": "speech",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/distil-whisper/distil-small.en"
+  },
+  {
+    "model": "distil-whisper/distil-medium.en",
+    "revision": "6e61418885eaf4d5cc9f64e508e80ac5b4c052b7",
+    "task": "speech_to_text",
+    "implementation": "speech",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/distil-whisper/distil-medium.en"
+  },
+  {
+    "model": "moonshine-ai/moonshine-tiny",
+    "revision": "390624ed33d594443aa4aa221f5b9f283b545b5a",
+    "task": "speech_to_text",
+    "implementation": "moonshine",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/moonshine-ai/moonshine-tiny"
+  },
+  {
+    "model": "moonshine-ai/moonshine-base",
+    "revision": "7a73d8d55ac0ba2ef3ae761593f6784b51f96dcf",
+    "task": "speech_to_text",
+    "implementation": "moonshine",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/moonshine-ai/moonshine-base"
+  },
+  {
+    "model": "nota-ai/bk-sdm-base",
+    "revision": "0c03b7a0369b49f97d1acf7256d4ee55ced9b2e0",
+    "task": "text_to_image",
+    "implementation": "diffusion",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/nota-ai/bk-sdm-base"
+  },
+  {
+    "model": "nota-ai/bk-sdm-small",
+    "revision": "572238db7ed3a10858900803f3fc8cca53e893e0",
+    "task": "text_to_image",
+    "implementation": "diffusion",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/nota-ai/bk-sdm-small"
+  },
+  {
+    "model": "nota-ai/bk-sdm-tiny",
+    "revision": "0364108e53b7f7f4d2585e817a0b7a83dc261cfa",
+    "task": "text_to_image",
+    "implementation": "diffusion",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/nota-ai/bk-sdm-tiny"
+  },
+  {
+    "model": "nota-ai/bk-sdm-v2-small",
+    "revision": "ad82c51a3b568e855a7f79c5b893ea2f9ebb197f",
+    "task": "text_to_image",
+    "implementation": "diffusion",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/nota-ai/bk-sdm-v2-small"
+  },
+  {
+    "model": "nota-ai/bk-sdm-v2-tiny",
+    "revision": "68277af553777858cd47e133f92e4db47321bc74",
+    "task": "text_to_image",
+    "implementation": "diffusion",
+    "trust_publisher_code": false,
+    "source": "https://huggingface.co/nota-ai/bk-sdm-v2-tiny"
+  }
+]

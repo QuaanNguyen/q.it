@@ -320,7 +320,23 @@ fn parse_cases(
 
 fn validate_case(task: Task, case: &BenchmarkCase) -> Result<(), String> {
     match task {
-        Task::TextGeneration | Task::TextToImage => require_text(&case.prompt, "prompt"),
+        Task::TextGeneration => require_text(&case.prompt, "prompt"),
+        Task::TextToImage => {
+            require_text(&case.prompt, "prompt")?;
+            let settings = case.image_settings.clone().unwrap_or_default();
+            if !(64..=1024).contains(&settings.width)
+                || !(64..=1024).contains(&settings.height)
+                || !settings.width.is_multiple_of(8)
+                || !settings.height.is_multiple_of(8)
+                || !(1..=100).contains(&settings.steps)
+                || !settings.guidance_scale.is_finite()
+                || !(0.0..=30.0).contains(&settings.guidance_scale)
+                || settings.seed > i64::MAX as u64
+            {
+                return Err("image settings require dimensions 64-1024 divisible by 8, 1-100 steps, guidance 0-30, and a signed 64-bit seed".into());
+            }
+            Ok(())
+        }
         Task::ImageToText => {
             require_text(&case.prompt, "prompt")?;
             require_text(&case.media, "media")

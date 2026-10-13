@@ -6,7 +6,7 @@ export type Task =
   | "reranking"
   | "text_to_image";
 
-export type Provider = "ollama" | "transformers" | "hf_serve" | "tei";
+export type Provider = "ollama" | "transformers" | "hf_serve" | "tei" | "local_cpu";
 
 export type Benchmark = {
   id: string;
@@ -46,6 +46,7 @@ export type Run = {
   pack_version: string;
   task: Task;
   provider: Provider;
+  provider_metadata: { version: string | null; configuration?: Record<string, unknown> | null };
   base_url: string;
   model: string;
   host_name: string;
@@ -75,6 +76,7 @@ export type AnalysisPoint = {
   model: string;
   provider: Provider;
   host_name: string;
+  provider_metadata: { version: string | null };
   latency_ms: number | null;
   ttft_ms: number | null;
   tokens_per_second: number | null;
@@ -128,6 +130,7 @@ export type Sample = {
   tokens_per_second: number | null;
   quality_score: number | null;
   output_excerpt: string | null;
+  output_image: string | null;
 };
 
 export type RunDetail = { run: Run; samples: Sample[] };
@@ -162,6 +165,7 @@ export function providerLabel(provider: Provider): string {
   if (provider === "transformers") return "Transformers Serve";
   if (provider === "tei") return "HF TEI";
   if (provider === "hf_serve") return "Hugging Face Serve";
+  if (provider === "local_cpu") return "Local CPU";
   return "Ollama";
 }
 

@@ -2,7 +2,7 @@ use std::future::IntoFuture;
 
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::Json;
 use axum::Router;
 use qit_runtime::config::Config;
@@ -99,6 +99,7 @@ async fn ollama_benchmark_persists_successful_samples_and_metrics() {
     .unwrap();
 
     assert_eq!(run.status, RunStatus::Succeeded);
+    assert_eq!(run.provider_metadata.version.as_deref(), Some("0.40.3"));
     assert_eq!(run.summary.sample_count, 6);
     assert_eq!(run.summary.successful_sample_count, 6);
     assert_eq!(run.summary.tokens_per_second_p50, Some(20.0));
@@ -106,6 +107,49 @@ async fn ollama_benchmark_persists_successful_samples_and_metrics() {
     assert_eq!(store.runs(10, true).unwrap().len(), 1);
     assert_eq!(store.samples(&run.id).unwrap().len(), 6);
 
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn historical_runs_without_provider_metadata_remain_readable() {
+    let server = ollama_server(false).await;
+    let temporary = TempDir::new().unwrap();
+    let (store, catalog) = workspace(&temporary);
+    let run = run_benchmark(
+        &store,
+        &catalog,
+        RunRequest {
+            benchmark_id: "core/text-generation-smoke".into(),
+            provider: ProviderKind::Ollama,
+            base_url: server.base_url.clone(),
+            api_key: None,
+            model: "historical-model".into(),
+            iterations: 1,
+            warmups: 0,
+            max_output_tokens: None,
+            timeout_seconds: 5,
+            target_pid: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(run.status, RunStatus::Succeeded);
+    let database = temporary.path().join("state/results.db");
+    drop(store);
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection
+        .execute(
+            "ALTER TABLE benchmark_runs DROP COLUMN provider_metadata_json",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+    let upgraded = Store::open(&database).unwrap();
+    let historical = upgraded.run(&run.id).unwrap().unwrap();
+    assert!(historical.provider_metadata.version.is_none());
+    assert_eq!(historical.summary.sample_count, 3);
+    assert_eq!(upgraded.runs(10, true).unwrap().len(), 1);
+    assert_eq!(upgraded.samples(&run.id).unwrap().len(), 3);
     server.stop().await;
 }
 
@@ -225,10 +269,18 @@ async fn ollama_server(fail: bool) -> TestServer {
     }
     let app = if fail {
         Router::new()
+            .route(
+                "/api/version",
+                get(|| async { Json(serde_json::json!({"version": "0.40.3"})) }),
+            )
             .route("/api/show", post(show))
             .route("/api/generate", post(failure))
     } else {
         Router::new()
+            .route(
+                "/api/version",
+                get(|| async { Json(serde_json::json!({"version": "0.40.3"})) }),
+            )
             .route("/api/show", post(show))
             .route("/api/generate", post(success))
     };
@@ -283,6 +335,10 @@ async fn dashboard_starts_runs_without_blocking_history_and_retains_failures() {
         axum::serve(
             listener,
             Router::new()
+                .route(
+                    "/api/version",
+                    get(|| async { Json(serde_json::json!({"version": "0.40.3"})) }),
+                )
                 .route("/api/show", post(show))
                 .route("/api/generate", post(generate))
                 .with_state(gate.clone()),
