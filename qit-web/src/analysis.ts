@@ -29,7 +29,9 @@ function providerSetup(run: Run): unknown {
 }
 
 export function modelKey(run: Run): string {
-  return JSON.stringify([run.model, run.provider, run.base_url, run.provider_metadata?.configuration?.revision ?? null]);
+  const identity: unknown[] = [run.model, run.provider, run.base_url, run.provider_metadata?.configuration?.revision ?? null];
+  if (run.provider_metadata?.configuration?.configuration_digest) identity.push(run.provider_metadata.configuration.configuration_digest);
+  return JSON.stringify(identity);
 }
 
 export function latestModels(runs: Run[]): Run[] {

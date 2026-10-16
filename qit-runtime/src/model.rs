@@ -335,6 +335,13 @@ pub struct RunRecord {
     pub summary: RunSummary,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SpeechObservation {
+    pub transcript: String,
+    pub audio_duration_seconds: Option<f64>,
+    pub routing: Option<serde_json::Value>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SampleRecord {
     pub id: String,
@@ -355,6 +362,7 @@ pub struct SampleRecord {
     pub quality_score: Option<f64>,
     pub output_excerpt: Option<String>,
     pub output_image: Option<String>,
+    pub speech: Option<SpeechObservation>,
 }
 
 #[derive(Clone, Debug)]
@@ -382,6 +390,8 @@ pub struct InvocationResult {
     pub output_tokens: Option<u64>,
     pub tokens_per_second: Option<f64>,
     pub output_image: Option<String>,
+    pub audio_duration_seconds: Option<f64>,
+    pub speech_routing: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default)]

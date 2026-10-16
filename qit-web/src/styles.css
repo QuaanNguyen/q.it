@@ -1069,3 +1069,13 @@ progress::-webkit-progress-value {
   margin-top: 0.75rem;
   border: 1px solid var(--line);
 }
+
+.speech-output {
+  margin-top: 10px;
+  white-space: normal;
+}
+.speech-output p,
+.speech-output pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
