@@ -38,6 +38,10 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --locked --workspace
+      - name: Verify clean packaged installation
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/qit-package-target
+        run: scripts/test-packaged-product.sh
 
   web:
     name: Web checks

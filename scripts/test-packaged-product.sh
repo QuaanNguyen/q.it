@@ -15,11 +15,11 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_dir"
-cargo package -p qit-runtime --allow-dirty --no-verify
+cargo package -p qit-runtime --allow-dirty --no-verify --target-dir "$smoke_dir/package-target"
 cargo package -p qit --allow-dirty --no-verify --list > "$smoke_dir/qit-package-files"
 
 mkdir -p "$smoke_dir/source/runtime" "$smoke_dir/source/qit"
-tar -xzf "$repo_dir/target/package/qit-runtime-0.1.0.crate" -C "$smoke_dir/source/runtime"
+tar -xzf "$smoke_dir/package-target/package/qit-runtime-0.1.0.crate" -C "$smoke_dir/source/runtime"
 cp -R "$repo_dir/qit" "$smoke_dir/source/qit/qit-0.1.0"
 cp "$repo_dir/Cargo.lock" "$smoke_dir/source/qit/qit-0.1.0/Cargo.lock"
 
