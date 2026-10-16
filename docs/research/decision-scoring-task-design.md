@@ -4,7 +4,7 @@ Research date: 2026-10-16.
 Answers [Design a task-correct decision scoring route](https://github.com/QuaanNguyen/q.it/issues/106).
 The owner approved planning decision benchmarking and selected shared single-choice text/image cases for the first rollout in [Choose the initial decision benchmark scope](https://github.com/QuaanNguyen/q.it/issues/107).
 Multi-field decisions and Liquid-only audio are deferred.
-The main ranking and probability-quality presentation remain under live discussion.
+The owner selected correct-choice accuracy as the main ranking, with probability-quality scores alongside it.
 This is a proposed contract, not implemented support or approval to execute a restricted-license model.
 It builds on the pinned source and environment audits in [Vision and embedding candidate serving routes](vision-embedding-candidate-routes.md).
 
@@ -67,9 +67,11 @@ Reject cases from a shared full-input benchmark if either adapter detects loss o
 The first implementation needs observable preprocessing evidence or a conservative validated bound before it can claim full-input comparability.
 Sources: [Intern input validation](https://huggingface.co/internlm/Intern-Decision-0.8B/blob/85a0cc5a99d67ea8d56dfe98115689212867171d/inference.py), [Liquid truncation](https://huggingface.co/LiquidAI/d1-omni-600M/blob/02b55d7076f15129e59ab3f94783f32c4b088674/prompt.py), and [Liquid media budgets](https://huggingface.co/LiquidAI/d1-omni-600M/blob/02b55d7076f15129e59ab3f94783f32c4b088674/modeling_d1.py).
 
-## Proposed quality semantics
+## Selected quality presentation and metric semantics
 
-For the smallest single-choice benchmark, use one gold candidate per case and top-choice accuracy as the primary quality score: one for a selected gold candidate, zero otherwise.
+For the selected single-choice benchmark, use one gold candidate per case and top-choice accuracy as the primary quality score: one for a selected gold candidate, zero otherwise.
+Rank by accuracy with higher values better, and show multiclass Brier score and negative log likelihood separately with lower values better.
+Do not combine accuracy and probability-quality metrics into a composite ranking.
 Report the arithmetic mean over all measured case repetitions, with benchmark passes and case sets fixed for comparisons.
 Missing labels produce absent quality metrics rather than an assumed correct answer.
 
@@ -115,7 +117,7 @@ Two to ten explicitly ordered candidates and one gold answer remain the proposed
 Multi-field decisions and Liquid-only audio are deferred by the owner's scope choice.
 Native boolean and ordered-score answer shapes remain outside this first implementation; a two-option case can still use the common single-choice shape.
 
-1. Complete the primary metric and calibration-evidence discussion while preserving the selected single-choice text/image scope.
+1. Apply the selected single-choice text/image scope and accuracy-first ranking, retaining native calibration and reporting probability-quality evidence alongside accuracy.
 2. Extend pack verification and provider result validation with data-only decision cases, expected-answer isolation, ordered identities, typed distributions, and explicit metric semantics.
 3. Use fake provider tests to cover order preservation, exact ties, missing or duplicated candidates, malformed distributions, zero-probability gold labels, truncation, persistence/export round trips, and absent generated-token metrics.
 4. Validate each adapter's common result against its pinned publisher-native result on the same approved cases, without adding another forward pass to the measured invocation.
@@ -123,6 +125,7 @@ Native boolean and ordered-score answer shapes remain outside this first impleme
 6. Run a versioned, licensed, fixed dataset benchmark and retain every failure as well as successful quality evidence before advertising model support.
 7. Require a separate clean ARM64 install and real-device execution gate before claiming Raspberry Pi support.
 
-The unresolved human choices are the primary probability-quality presentation and any requested changes to native calibration or qualification rollout.
+The initial answer/media scope and primary quality presentation are settled by the owner's live answers.
+Preserve each publisher's native calibration and provenance; any later change needs a distinct comparison configuration rather than fitting temperatures on benchmark labels.
 The map's standing independent-work preference permits each model's readiness to be evaluated separately while keeping comparisons within genuinely compatible configurations.
 License eligibility, approved model acquisition, dataset rights, actual implementation, and model qualification remain independent gates.
