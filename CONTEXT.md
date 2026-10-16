@@ -22,6 +22,10 @@ _Avoid_: plugin, suite, extension
 The model capability exercised by a benchmark, such as text to text, image to text, speech to text, embedding, reranking, or text to image.
 _Avoid_: modality, capability
 
+**Decision scoring**:
+Assessing a fixed set of candidate answers to a named question about a supplied state, with a probability for each candidate and a selected or probability-weighted answer.
+_Avoid_: generated answer, token generation, free-form prediction
+
 **Provider**:
 The serving protocol used to invoke a model, such as Ollama, an OpenAI-compatible Transformers server, or Hugging Face Text Embeddings Inference.
 _Avoid_: runtime, backend, host
