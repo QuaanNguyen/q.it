@@ -9,7 +9,9 @@ import {
   modelPalette,
   qualityLabel,
   setupKey,
+  decisionRankings,
 } from "../src/analysis.ts";
+import { logLoss } from "../src/api.ts";
 
 function run(overrides = {}) {
   return {
@@ -38,6 +40,34 @@ function run(overrides = {}) {
     ...overrides,
   };
 }
+
+test("decision comparisons retain calibration and preprocessing identity and label accuracy", () => {
+  const decision = (configuration) => run({
+    task: "decision_scoring",
+    provider: "local_cpu",
+    provider_metadata: { version: "1", configuration },
+  });
+  const first = decision({ revision: "one", decision: { calibration: "native", preprocessing: "v1", selection_rule: "candidate_order" } });
+  const changed = decision({ revision: "one", decision: { calibration: "uncalibrated", preprocessing: "v1", selection_rule: "candidate_order" } });
+  const reordered = decision({ decision: { selection_rule: "candidate_order", preprocessing: "v1", calibration: "native" }, revision: "one" });
+  assert.notEqual(modelKey(first), modelKey(changed));
+  assert.equal(modelKey(first), modelKey(reordered));
+  assert.equal(modelKey(decision({ ...first.provider_metadata.configuration, pid: 123 })), modelKey(decision({ ...first.provider_metadata.configuration, pid: 456 })));
+  assert.equal(qualityLabel("decision_scoring"), "Choice accuracy");
+});
+
+test("decision ranking uses accuracy alone and preserves explicit infinite log loss", () => {
+  const models = [
+    run({ id: "confident-wrong", model: "A", summary: { quality_score_mean: 0.0, decision_metrics: { brier_score_mean: 2, negative_log_likelihood: { status: "infinite" } } } }),
+    run({ id: "correct", model: "B", summary: { quality_score_mean: 1.0, decision_metrics: { brier_score_mean: 0.5, negative_log_likelihood: { status: "finite", value: 0.6931471805599453 } } } }),
+    run({ id: "tie", model: "C", summary: { quality_score_mean: 1.0, decision_metrics: { brier_score_mean: 0.1 } } }),
+    run({ id: "unlabelled", model: "D", summary: { quality_score_mean: null } }),
+  ];
+  assert.deepEqual(decisionRankings(models).map(({ run, rank }) => [run.id, rank]), [["correct", 1], ["tie", 1], ["confident-wrong", 3], ["unlabelled", null]]);
+  assert.equal(logLoss({ status: "infinite" }), "∞");
+  assert.equal(logLoss({ status: "finite", value: 0 }), "0.000");
+  assert.equal(logLoss(null), "-");
+});
 
 test("model comparisons select the latest successful run, retaining separate serving configurations", () => {
   const original = run();

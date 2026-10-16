@@ -371,11 +371,30 @@ fn print_run_summary(run: &RunRecord) {
         "Latency p50: {}",
         format_metric(run.summary.latency_ms_p50, "ms")
     );
-    println!("TTFT p50: {}", format_metric(run.summary.ttft_ms_p50, "ms"));
-    println!(
-        "Tokens/s p50: {}",
-        format_metric(run.summary.tokens_per_second_p50, "")
-    );
+    if run.task == crate::model::Task::DecisionScoring {
+        println!(
+            "Choice accuracy: {}",
+            format_metric(
+                run.summary.quality_score_mean.map(|value| value * 100.0),
+                "%"
+            )
+        );
+        if let Some(metrics) = &run.summary.decision_metrics {
+            println!("Brier score: {:.6}", metrics.brier_score_mean);
+            match metrics.negative_log_likelihood {
+                crate::decision::LogLoss::Finite(value) => {
+                    println!("Negative log likelihood: {value:.6}")
+                }
+                crate::decision::LogLoss::Infinite => println!("Negative log likelihood: infinite"),
+            }
+        }
+    } else {
+        println!("TTFT p50: {}", format_metric(run.summary.ttft_ms_p50, "ms"));
+        println!(
+            "Tokens/s p50: {}",
+            format_metric(run.summary.tokens_per_second_p50, "")
+        );
+    }
     println!(
         "CPU mean: {}",
         format_metric(run.summary.host_cpu_percent_mean, "%")
@@ -407,7 +426,7 @@ fn export_jsonl(store: &Store, runs: &[RunRecord]) -> Result<String, String> {
 
 fn export_csv(runs: &[RunRecord]) -> String {
     let mut output = String::from(
-        "run_id,benchmark_id,task,provider,model,host_name,started_at_ms,latency_ms_p50,ttft_ms_p50,tokens_per_second_p50,cpu_percent_mean,memory_used_bytes_peak,process_rss_bytes_peak,quality_score_mean,provider_version\n",
+        "run_id,benchmark_id,task,provider,model,host_name,started_at_ms,latency_ms_p50,ttft_ms_p50,tokens_per_second_p50,cpu_percent_mean,memory_used_bytes_peak,process_rss_bytes_peak,quality_score_mean,provider_version,brier_score_mean,negative_log_likelihood_mean,zero_gold_probability_count\n",
     );
     for run in runs {
         let fields = [
@@ -432,6 +451,24 @@ fn export_csv(runs: &[RunRecord]) -> String {
                 .unwrap_or_default(),
             optional_string(run.summary.quality_score_mean),
             run.provider_metadata.version.clone().unwrap_or_default(),
+            run.summary
+                .decision_metrics
+                .as_ref()
+                .map(|metrics| metrics.brier_score_mean.to_string())
+                .unwrap_or_default(),
+            run.summary
+                .decision_metrics
+                .as_ref()
+                .map(|metrics| match metrics.negative_log_likelihood {
+                    crate::decision::LogLoss::Finite(value) => value.to_string(),
+                    crate::decision::LogLoss::Infinite => "infinite".into(),
+                })
+                .unwrap_or_default(),
+            run.summary
+                .decision_metrics
+                .as_ref()
+                .map(|metrics| metrics.zero_gold_probability_count.to_string())
+                .unwrap_or_default(),
         ];
         output.push_str(
             &fields

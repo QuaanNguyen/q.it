@@ -325,6 +325,11 @@ A pack must already exist as a local directory before it can be installed.
 
 See [Benchmark pack guide](docs/benchmark-packs.md) for the supported layout and a small example.
 
+Decision packs compare single-choice answers to text or images and rank correct-choice accuracy.
+Brier score and negative log likelihood are shown alongside accuracy.
+They require a compatible decision endpoint; the model-specific Liquid and Intern integrations are separate qualification work.
+See the [decision-scoring guide](docs/decision-scoring.md) for the pack and endpoint contract.
+
 ## Multimodal model scope
 
 The current server integrations cover text generation, text embeddings, image-to-text, speech-to-text, and text reranking.
