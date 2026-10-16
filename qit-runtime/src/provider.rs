@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use base64::engine::general_purpose::STANDARD;
@@ -7,6 +8,7 @@ use futures_util::StreamExt;
 use reqwest::{RequestBuilder, Response};
 use serde_json::{json, Value};
 
+use crate::decision::{DecisionConfiguration, DecisionInput, DecisionResult};
 use crate::model::{BenchmarkCase, InvocationResult, ProviderKind, ProviderMetadata, Task};
 
 const HF_SERVE_MAX_BATCH_INPUTS: usize = 4;
@@ -18,6 +20,7 @@ pub struct ProviderClient {
     api_key: Option<String>,
     model: String,
     client: reqwest::Client,
+    decision_configuration: Arc<OnceLock<DecisionConfiguration>>,
 }
 
 impl ProviderClient {
@@ -38,6 +41,7 @@ impl ProviderClient {
             api_key,
             model,
             client,
+            decision_configuration: Arc::new(OnceLock::new()),
         })
     }
 
@@ -135,6 +139,40 @@ impl ProviderClient {
                         task.label()
                     ));
                 }
+                if task == Task::DecisionScoring {
+                    if !metadata
+                        .configuration
+                        .get("revision")
+                        .and_then(Value::as_str)
+                        .is_some_and(|revision| !revision.trim().is_empty())
+                    {
+                        return Err(
+                            "decision scoring requires a recorded checkpoint revision".into()
+                        );
+                    }
+                    if metadata.configuration.get("dtype").and_then(Value::as_str)
+                        != Some("float32")
+                    {
+                        return Err("decision scoring requires CPU float32 execution".into());
+                    }
+                    let configuration: DecisionConfiguration = serde_json::from_value(
+                        metadata
+                            .configuration
+                            .get("decision")
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    )
+                    .map_err(|error| format!("invalid decision configuration: {error}"))?;
+                    configuration.validate()?;
+                    if self
+                        .decision_configuration
+                        .get()
+                        .is_some_and(|existing| *existing != configuration)
+                    {
+                        return Err("decision configuration changed during this run".into());
+                    }
+                    let _ = self.decision_configuration.set(configuration);
+                }
                 Ok(())
             }
         }
@@ -188,12 +226,37 @@ impl ProviderClient {
         case: &BenchmarkCase,
         max_output_tokens: u32,
     ) -> Result<InvocationResult, String> {
-        let mut body = json!({"model": self.model, "task": task.as_str(), "case": case, "max_output_tokens": max_output_tokens});
+        let started = Instant::now();
+        let mut body = if task == Task::DecisionScoring {
+            let decision = case
+                .decision
+                .as_ref()
+                .ok_or_else(|| "decision input is required".to_string())?;
+            let configuration = self
+                .decision_configuration
+                .get()
+                .ok_or_else(|| "decision preflight is required".to_string())?;
+            let input = if case.media.is_some() {
+                DecisionInput::Image
+            } else {
+                DecisionInput::Text
+            };
+            if !configuration.inputs.contains(&input) {
+                return Err(
+                    "loaded decision model does not support this benchmark input type".into(),
+                );
+            }
+            json!({"model":self.model,"task":task.as_str(),"case":{"id":case.id,"decision":{"state":decision.state,"question":decision.question,"candidates":decision.candidates}}})
+        } else {
+            json!({"model": self.model, "task": task.as_str(), "case": case, "max_output_tokens": max_output_tokens})
+        };
         if let Some(media) = &case.media {
+            if task == Task::DecisionScoring {
+                validate_decision_media(media, case.media_type.as_deref())?;
+            }
             let (mime, bytes) = media_bytes(media, case.media_type.as_deref())?;
             body["case"]["media"] = json!(format!("data:{mime};base64,{}", STANDARD.encode(bytes)));
         }
-        let started = Instant::now();
         let response = self
             .authorized(self.client.post(self.url("/v1/qit/invoke")))
             .json(&body)
@@ -223,7 +286,24 @@ impl ProviderClient {
         if !terminal {
             return Err("Local CPU stream ended without a terminal result".into());
         }
-        output.latency_ms = elapsed_ms(started);
+        if task == Task::DecisionScoring {
+            output.decision_media = body["case"]
+                .get("media")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            output
+                .decision
+                .as_ref()
+                .ok_or_else(|| "provider returned no decision".to_string())?
+                .validate(
+                    case.decision
+                        .as_ref()
+                        .ok_or_else(|| "decision input is required".to_string())?,
+                    self.decision_configuration
+                        .get()
+                        .ok_or_else(|| "decision preflight is required".to_string())?,
+                )?;
+        }
         if matches!(task, Task::TextGeneration | Task::ImageToText) && output.output_text.is_none()
         {
             return Err("Local CPU provider returned no text".into());
@@ -249,6 +329,7 @@ impl ProviderClient {
                 );
             }
         }
+        output.latency_ms = elapsed_ms(started);
         Ok(output)
     }
 
@@ -879,6 +960,45 @@ fn media_bytes(media: &str, declared_type: Option<&str>) -> Result<(String, Vec<
     Ok((mime, bytes))
 }
 
+pub(crate) fn validate_decision_media(
+    media: &str,
+    declared_type: Option<&str>,
+) -> Result<(), String> {
+    if media.len() > 24 * 1024 * 1024 {
+        return Err("decision image data URL exceeds the size limit".into());
+    }
+    if !media.starts_with("data:")
+        && std::fs::metadata(media).is_ok_and(|metadata| metadata.len() > 16 * 1024 * 1024)
+    {
+        return Err("decision image file exceeds the size limit".into());
+    }
+    let (mime, bytes) =
+        media_bytes(media, declared_type).map_err(|error| format!("decision image: {error}"))?;
+    if declared_type.is_some_and(|declared| declared != mime) {
+        return Err("decision image media type conflicts with its data URL".into());
+    }
+    let expected = match mime.as_str() {
+        "image/png" => image::ImageFormat::Png,
+        "image/jpeg" => image::ImageFormat::Jpeg,
+        _ => {
+            return Err("decision image must be a PNG or JPEG with its matching media type".into())
+        }
+    };
+    if bytes.len() > 16 * 1024 * 1024 || image::guess_format(&bytes).ok() != Some(expected) {
+        return Err("decision image is too large or does not match its media type".into());
+    }
+    let mut reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), expected);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(8192);
+    limits.max_image_height = Some(8192);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    reader
+        .decode()
+        .map_err(|error| format!("invalid decision image: {error}"))?;
+    Ok(())
+}
+
 fn split_data_url(value: &str) -> Result<Option<(&str, &str)>, String> {
     let Some(rest) = value.strip_prefix("data:") else {
         return Ok(None);
@@ -1002,6 +1122,14 @@ fn parse_local_cpu_event(
         }
         Some("result") => {
             match task {
+                Task::DecisionScoring => {
+                    output.decision = Some(
+                        serde_json::from_value::<DecisionResult>(
+                            value.get("decision").cloned().unwrap_or(Value::Null),
+                        )
+                        .map_err(|error| format!("invalid decision result: {error}"))?,
+                    );
+                }
                 Task::TextGeneration | Task::ImageToText | Task::SpeechToText => {
                     if let Some(text) = value.get("output_text").and_then(Value::as_str) {
                         output.output_text = Some(text.to_string());

@@ -4,7 +4,8 @@ export type Task =
   | "image_to_text"
   | "speech_to_text"
   | "reranking"
-  | "text_to_image";
+  | "text_to_image"
+  | "decision_scoring";
 
 export type Provider = "ollama" | "transformers" | "hf_serve" | "tei" | "local_cpu";
 
@@ -16,6 +17,7 @@ export type Benchmark = {
   name: string;
   description: string;
   task: Task;
+  decision_input: "text" | "image" | null;
   case_count: number;
   tags: string[];
   default_max_output_tokens: number;
@@ -37,6 +39,7 @@ export type RunSummary = {
   host_memory_used_bytes_peak: number | null;
   process_rss_bytes_peak: number | null;
   quality_score_mean: number | null;
+  decision_metrics?: DecisionSummary | null;
 };
 
 export type Run = {
@@ -131,6 +134,7 @@ export type Sample = {
   quality_score: number | null;
   output_excerpt: string | null;
   output_image: string | null;
+  decision?: DecisionObservation | null;
 };
 
 export type RunDetail = { run: Run; samples: Sample[] };
@@ -184,4 +188,42 @@ export function bytes(value: number | null): string {
 
 export function metric(value: number | null, suffix: string): string {
   return value === null ? "-" : `${value.toFixed(1)}${suffix}`;
+}
+
+export type LogLoss = { status: "finite"; value: number } | { status: "infinite" };
+
+export type DecisionMetrics = {
+  brier_score: number;
+  negative_log_likelihood: LogLoss;
+};
+
+export type DecisionSummary = {
+  scored_sample_count: number;
+  brier_score_mean: number;
+  negative_log_likelihood: LogLoss;
+  zero_gold_probability_count: number;
+};
+
+export type DecisionObservation = {
+  case: { state: string; question: string; candidates: { id: string; text: string }[]; expected: string | null };
+  media: string | null;
+  result: {
+    schema_version: number;
+    candidates: { id: string; probability: number; logit: number | null }[];
+    selected_id: string;
+    provenance: {
+      calibration: string;
+      selection_rule: string;
+      preprocessing: string;
+      input_digest: string;
+      input_truncated: boolean;
+      native: Record<string, unknown>;
+    };
+  };
+  metrics: DecisionMetrics | null;
+};
+
+export function logLoss(value: LogLoss | null | undefined): string {
+  if (!value) return "-";
+  return value.status === "infinite" ? "∞" : value.value.toFixed(3);
 }

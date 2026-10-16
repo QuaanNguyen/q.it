@@ -116,6 +116,7 @@ impl Store {
             "TEXT NOT NULL DEFAULT '{}'",
         )?;
         ensure_column(&connection, "benchmark_samples", "output_image", "TEXT")?;
+        ensure_column(&connection, "benchmark_samples", "decision_json", "TEXT")?;
         Ok(Self { connection })
     }
 
@@ -192,10 +193,10 @@ impl Store {
                     ttft_ms, input_tokens, output_tokens, tokens_per_second,
                     host_cpu_percent_mean, host_cpu_percent_peak,
                     host_memory_used_bytes_peak, process_rss_bytes_peak,
-                    quality_score, output_excerpt, output_image
+                    quality_score, output_excerpt, output_image, decision_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15, ?16, ?17, ?18
+                    ?13, ?14, ?15, ?16, ?17, ?18, ?19
                  )",
                 params![
                     sample.id,
@@ -216,6 +217,12 @@ impl Store {
                     sample.quality_score,
                     sample.output_excerpt,
                     sample.output_image,
+                    sample
+                        .decision
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()
+                        .map_err(|error| format!("serialize decision sample: {error}"))?,
                 ],
             )
             .map_err(|error| format!("store benchmark sample: {error}"))?;
@@ -307,7 +314,7 @@ impl Store {
                         ttft_ms, input_tokens, output_tokens, tokens_per_second,
                         host_cpu_percent_mean, host_cpu_percent_peak,
                         host_memory_used_bytes_peak, process_rss_bytes_peak,
-                        quality_score, output_excerpt, output_image
+                        quality_score, output_excerpt, output_image, decision_json
                  FROM benchmark_samples
                  WHERE run_id = ?1
                  ORDER BY iteration, case_id",
@@ -334,6 +341,11 @@ impl Store {
                     quality_score: row.get(15)?,
                     output_excerpt: row.get(16)?,
                     output_image: row.get(17)?,
+                    decision: row
+                        .get::<_, Option<String>>(18)?
+                        .map(|value| serde_json::from_str(&value))
+                        .transpose()
+                        .map_err(|error| conversion_error(18, error.to_string()))?,
                 })
             })
             .map_err(|error| format!("query benchmark samples: {error}"))?;
