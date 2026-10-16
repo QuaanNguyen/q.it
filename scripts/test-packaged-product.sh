@@ -35,6 +35,10 @@ CARGO_TARGET_DIR="$smoke_dir/target" cargo install \
 test -x "$smoke_dir/install/bin/qit"
 test ! -e "$smoke_dir/install/bin/qit-stub-worker"
 
+QIT_TEST_BINARY="$smoke_dir/install/bin/qit" cargo test \
+  --manifest-path "$repo_dir/Cargo.toml" \
+  --locked --offline -p qit --test speech
+
 cd "$smoke_dir"
 QIT_HOME="$smoke_dir/state" \
 "$smoke_dir/install/bin/qit" benchmark list > "$smoke_dir/benchmarks"

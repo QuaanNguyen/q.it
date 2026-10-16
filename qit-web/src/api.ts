@@ -131,6 +131,11 @@ export type Sample = {
   quality_score: number | null;
   output_excerpt: string | null;
   output_image: string | null;
+  speech?: {
+    transcript: string;
+    audio_duration_seconds: number | null;
+    routing: Record<string, unknown> | null;
+  } | null;
 };
 
 export type RunDetail = { run: Run; samples: Sample[] };
@@ -184,4 +189,9 @@ export function bytes(value: number | null): string {
 
 export function metric(value: number | null, suffix: string): string {
   return value === null ? "-" : `${value.toFixed(1)}${suffix}`;
+}
+
+export function modelLabel(run: Run): string {
+  const route = run.provider_metadata?.configuration?.route;
+  return typeof route === "string" ? `${run.model} (${route})` : run.model;
 }

@@ -131,3 +131,12 @@ test("CPU comparisons share an environment while keeping checkpoint revisions di
   assert.notEqual(modelKey(original), modelKey(run({ provider_metadata: { version: "0.1.0", configuration: { ...configuration, revision: "second" } } })));
   assert.notEqual(setupKey(original), setupKey(run({ provider_metadata: { version: "0.1.0", configuration: { ...configuration, threads: 8 } } })));
 });
+
+test("QVAC language routes remain separate model configurations in the same serving environment", () => {
+  const configuration = { device: "cpu", dtype: "float32", threads: 4, packages: { torch: "2.9.1+cpu", "nemo-toolkit": "3.0.0" }, revision: "pinned", configuration_digest: "english" };
+  const english = run({ provider: "local_cpu", provider_metadata: { version: "0.1.0", configuration } });
+  const multilingual = run({ provider: "local_cpu", provider_metadata: { version: "0.1.0", configuration: { ...configuration, configuration_digest: "multilingual" } } });
+  assert.equal(setupKey(english), setupKey(multilingual));
+  assert.notEqual(modelKey(english), modelKey(multilingual));
+  assert.equal(latestModels([english, { ...multilingual, id: "multilingual", started_at_ms: 2000 }]).length, 2);
+});
