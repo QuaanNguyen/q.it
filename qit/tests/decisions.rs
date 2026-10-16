@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 use tokio::process::Command;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn text_decision_preserves_candidate_scores_and_accuracy_through_the_staged_command() {
+async fn text_decision_preserves_candidate_scores_and_accuracy_through_the_command() {
     let temporary = TempDir::new().unwrap();
     let state = temporary.path().join("state");
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -414,14 +414,8 @@ async fn unlabelled_decisions_keep_outputs_without_inventing_quality_and_token_l
 
 fn command(state: &Path) -> Command {
     let directory = state.parent().unwrap();
-    let binary = directory.join("qit");
-    if !binary.is_file() {
-        std::fs::copy(
-            std::env::var_os("QIT_TEST_BINARY").unwrap_or_else(|| env!("CARGO_BIN_EXE_qit").into()),
-            &binary,
-        )
-        .unwrap();
-    }
+    let binary =
+        std::env::var_os("QIT_TEST_BINARY").unwrap_or_else(|| env!("CARGO_BIN_EXE_qit").into());
     let mut command = Command::new(binary);
     command
         .current_dir(directory)
