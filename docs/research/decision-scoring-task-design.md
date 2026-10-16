@@ -2,7 +2,9 @@
 
 Research date: 2026-10-16.
 Answers [Design a task-correct decision scoring route](https://github.com/QuaanNguyen/q.it/issues/106).
-The owner approved planning decision benchmarking; the first rollout remains pending live discussion in [Choose the initial decision benchmark scope](https://github.com/QuaanNguyen/q.it/issues/107).
+The owner approved planning decision benchmarking and selected shared single-choice text/image cases for the first rollout in [Choose the initial decision benchmark scope](https://github.com/QuaanNguyen/q.it/issues/107).
+Multi-field decisions and Liquid-only audio are deferred.
+The main ranking and probability-quality presentation remain under live discussion.
 This is a proposed contract, not implemented support or approval to execute a restricted-license model.
 It builds on the pinned source and environment audits in [Vision and embedding candidate serving routes](vision-embedding-candidate-routes.md).
 
@@ -104,13 +106,16 @@ Use isolated, locked environments: Liquid requires Transformers at least 5.15, w
 The [prior audit](vision-embedding-candidate-routes.md) records exact revisions, static counts, ARM64 limitations, and the unresolved Liquid license gate.
 Successful Sol CPU execution would establish that host's qualification only; Raspberry Pi support still requires separate ARM64 installation and execution evidence.
 
-## Smallest proposed implementation and acceptance gates
+## Selected first scope and proposed acceptance gates
 
-Propose a text-only, single-question, single-choice first benchmark with two to ten explicitly ordered candidates and one gold answer.
-This is a shared representable subset, not a decision already made for the owner.
-Keep boolean, ordered-score, multiple simultaneous questions, images, and Liquid-only audio for explicit rollout choices in the human scope ticket.
+The selected first benchmark scope is shared single-choice text/image cases for both models.
+Include text-only cases and image-backed cases with one named question and one selected candidate answer per case.
+Keep text-only and image-backed measurements in separate versioned benchmarks so their quality and latency are not silently averaged together.
+Two to ten explicitly ordered candidates and one gold answer remain the proposed bounded case contract.
+Multi-field decisions and Liquid-only audio are deferred by the owner's scope choice.
+Native boolean and ordered-score answer shapes remain outside this first implementation; a two-option case can still use the common single-choice shape.
 
-1. Resolve the first input and answer shapes, primary metric, tie rule, and calibration evidence in the live scope discussion.
+1. Complete the primary metric and calibration-evidence discussion while preserving the selected single-choice text/image scope.
 2. Extend pack verification and provider result validation with data-only decision cases, expected-answer isolation, ordered identities, typed distributions, and explicit metric semantics.
 3. Use fake provider tests to cover order preservation, exact ties, missing or duplicated candidates, malformed distributions, zero-probability gold labels, truncation, persistence/export round trips, and absent generated-token metrics.
 4. Validate each adapter's common result against its pinned publisher-native result on the same approved cases, without adding another forward pass to the measured invocation.
@@ -118,5 +123,6 @@ Keep boolean, ordered-score, multiple simultaneous questions, images, and Liquid
 6. Run a versioned, licensed, fixed dataset benchmark and retain every failure as well as successful quality evidence before advertising model support.
 7. Require a separate clean ARM64 install and real-device execution gate before claiming Raspberry Pi support.
 
-The unresolved human choices are the initial answer and media shapes, whether both models must qualify together, the primary probability-quality presentation, and whether native or explicitly uncalibrated comparison cohorts are desired.
+The unresolved human choices are the primary probability-quality presentation and any requested changes to native calibration or qualification rollout.
+The map's standing independent-work preference permits each model's readiness to be evaluated separately while keeping comparisons within genuinely compatible configurations.
 License eligibility, approved model acquisition, dataset rights, actual implementation, and model qualification remain independent gates.
