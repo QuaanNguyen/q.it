@@ -89,6 +89,9 @@ The current pack format supports:
 - Speech-to-text with an audio file and optional expected text.
 - Text reranking with candidate passages and an expected passage.
 - Text-to-image with explicit dimensions, denoising steps, guidance, and seed through the local CPU provider.
+- Single-choice decision scoring over text-only or image-backed cases through an explicit compatible local CPU endpoint.
+
+See the [decision-scoring guide](decision-scoring.md) for its pack and provider contract.
 
 An image or audio case can refer to a file inside the pack or include a base64 data URL.
 Keep normal dataset media as files because large base64 lines are difficult to review.

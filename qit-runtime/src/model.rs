@@ -26,16 +26,18 @@ pub enum Task {
     SpeechToText,
     Reranking,
     TextToImage,
+    DecisionScoring,
 }
 
 impl Task {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::TextGeneration,
         Self::Embedding,
         Self::ImageToText,
         Self::SpeechToText,
         Self::Reranking,
         Self::TextToImage,
+        Self::DecisionScoring,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -46,6 +48,7 @@ impl Task {
             Self::SpeechToText => "speech_to_text",
             Self::Reranking => "reranking",
             Self::TextToImage => "text_to_image",
+            Self::DecisionScoring => "decision_scoring",
         }
     }
 
@@ -57,6 +60,7 @@ impl Task {
             Self::SpeechToText => "Speech to text",
             Self::Reranking => "Reranking",
             Self::TextToImage => "Text to image",
+            Self::DecisionScoring => "Decision scoring",
         }
     }
 }
@@ -177,6 +181,8 @@ pub struct BenchmarkManifest {
     pub name: String,
     pub description: String,
     pub task: Task,
+    #[serde(default)]
+    pub decision_input: Option<crate::decision::DecisionInput>,
     pub cases: String,
     #[serde(default)]
     pub tags: Vec<String>,
@@ -197,6 +203,7 @@ pub struct BenchmarkDefinition {
     pub name: String,
     pub description: String,
     pub task: Task,
+    pub decision_input: Option<crate::decision::DecisionInput>,
     pub case_count: usize,
     pub tags: Vec<String>,
     pub default_max_output_tokens: u32,
@@ -209,6 +216,8 @@ pub struct BenchmarkDefinition {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BenchmarkCase {
     pub id: String,
+    #[serde(default)]
+    pub decision: Option<crate::decision::DecisionCase>,
     #[serde(default)]
     pub prompt: Option<String>,
     #[serde(default)]
@@ -302,6 +311,8 @@ pub struct RunSummary {
     pub host_memory_used_bytes_peak: Option<u64>,
     pub process_rss_bytes_peak: Option<u64>,
     pub quality_score_mean: Option<f64>,
+    #[serde(default)]
+    pub decision_metrics: Option<crate::decision::DecisionSummary>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -355,6 +366,7 @@ pub struct SampleRecord {
     pub quality_score: Option<f64>,
     pub output_excerpt: Option<String>,
     pub output_image: Option<String>,
+    pub decision: Option<crate::decision::DecisionObservation>,
 }
 
 #[derive(Clone, Debug)]
@@ -382,6 +394,8 @@ pub struct InvocationResult {
     pub output_tokens: Option<u64>,
     pub tokens_per_second: Option<f64>,
     pub output_image: Option<String>,
+    pub decision: Option<crate::decision::DecisionResult>,
+    pub decision_media: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]

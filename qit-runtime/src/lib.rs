@@ -1,6 +1,7 @@
 pub mod command;
 pub mod config;
 pub mod dashboard;
+pub mod decision;
 pub mod model;
 pub mod packs;
 pub mod paths;
