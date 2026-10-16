@@ -76,7 +76,8 @@ It remains retained rather than being deleted from history.
 
 The executed source archive SHA-256 is `533cdfea9ba04fe0a783ab03453e6cd94e020d92bf1faba78d8ceedfa3786319`.
 It contains the runtime, provider, generated dashboard assets, and tests based on fresh-install commit `10b674b576e8140b508e31346fba5be5413ea99c` plus this implementation.
-Documentation additions after the snapshot do not change the executed implementation.
+Documentation additions and a subsequent dashboard table-alignment correction do not change the executed provider or Rust runtime implementation.
+The alignment correction and rebuilt assets are verified separately through the local browser and hosted checks.
 The installed provider wheel SHA-256 is `ff1f8414d642c4bb985a3938241ac9c82cd7ad365dd53033c390aefc64d2ce29`.
 Weights and source audio remain on Sol; only result and audit evidence was copied for local dashboard review.
 
