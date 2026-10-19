@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import hashlib
 from pathlib import PurePosixPath
 import tarfile
@@ -94,9 +95,7 @@ class NemotronRuntime:
             raise ValueError(
                 "restored Nemotron encoder does not expose its streaming configuration"
             )
-        streaming = OmegaConf.to_container(
-            OmegaConf.structured(streaming), resolve=True, enum_to_str=True
-        )
+        streaming = asdict(streaming)
         if "chunk_size" not in streaming:
             raise ValueError(
                 "restored Nemotron streaming configuration lacks chunk size"
