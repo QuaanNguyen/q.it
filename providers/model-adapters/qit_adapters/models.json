@@ -205,6 +205,10 @@
       "vocab.json": {
         "bytes": 5234494,
         "git_blob": "b94df23d650b0c60a2264d9de779cb3b7fb8570c"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
       }
     },
     "qualification": "unverified"
@@ -220,7 +224,8 @@
     "requirements": {
       "torch": "2.9.1",
       "transformers": "5.17.0",
-      "torchvision": "0.24.1"
+      "torchvision": "0.24.1",
+      "accelerate": "1.15.0"
     },
     "files": {
       "MODEL_MANIFEST.json": {
@@ -314,6 +319,10 @@
       "vocab.json": {
         "bytes": 6722759,
         "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
       }
     },
     "qualification": "unverified"
@@ -329,7 +338,8 @@
     "requirements": {
       "torch": "2.9.1",
       "transformers": "5.17.0",
-      "torchvision": "0.24.1"
+      "torchvision": "0.24.1",
+      "accelerate": "1.15.0"
     },
     "files": {
       "MODEL_MANIFEST.json": {
@@ -423,6 +433,10 @@
       "vocab.json": {
         "bytes": 6722759,
         "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
       }
     },
     "qualification": "unverified"
@@ -465,6 +479,10 @@
       "tokenizer_config.json": {
         "bytes": 1677,
         "git_blob": "01cddfaf1b1af0eec276d2ccacac034ae511c0de"
+      },
+      "chat_template.jinja": {
+        "bytes": 1016,
+        "git_blob": "8df4ab8961aa08b66b470c5adbdc51374aabb63b"
       }
     },
     "qualification": "unverified"
@@ -562,6 +580,10 @@
       "vocab.json": {
         "bytes": 6722759,
         "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
       }
     },
     "qualification": "unverified"

@@ -61,6 +61,13 @@ class FixtureRuntime:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_publisher_chat_templates_and_d3_loader_dependency_are_retained(self):
+        for profile in profiles():
+            if profile["adapter"] in {"d3", "intern", "typed-gemma", "lighton"}:
+                self.assertIn("chat_template.jinja", profile["files"])
+            if profile["adapter"] == "d3":
+                self.assertEqual(profile["requirements"]["accelerate"], "1.15.0")
+
     def test_offline_startup_blocks_external_network_before_any_connection(self):
         command = subprocess.run(
             [
