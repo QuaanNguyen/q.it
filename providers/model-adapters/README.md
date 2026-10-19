@@ -7,7 +7,7 @@ Installing q.it, opening its interfaces, and starting an adapter never downloads
 ```bash
 python3.12 -m venv .venv-adapter
 .venv-adapter/bin/pip install uv==0.9.5
-.venv-adapter/bin/uv pip sync --python .venv-adapter/bin/python --torch-backend cpu --require-hashes -r providers/model-adapters/qit_adapters/locks/gliclass-linux-aarch64-py312.txt
+.venv-adapter/bin/uv pip sync --python .venv-adapter/bin/python --torch-backend cpu --require-hashes providers/model-adapters/qit_adapters/locks/gliclass-linux-aarch64-py312.txt
 .venv-adapter/bin/uv pip install --python .venv-adapter/bin/python --no-deps ./providers/model-adapters
 .venv-adapter/bin/qit-adapter list
 .venv-adapter/bin/qit-adapter verify --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model
