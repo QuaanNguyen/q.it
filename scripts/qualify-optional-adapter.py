@@ -144,8 +144,14 @@ def main():
                     break
                 time.sleep(0.2)
             if endpoint is None:
+                if server.poll() is None:
+                    report["startup_timeout_seconds"] = 600
+                    raise ValueError(
+                        "adapter startup timed out after 600 seconds; retain server.stderr and startup tracebacks"
+                    )
+                report["startup_exit_code"] = server.returncode
                 raise ValueError(
-                    "adapter startup failed or timed out; retain server.stderr for the precise native diagnostic"
+                    f"adapter startup exited with code {server.returncode}; retain server.stderr for the native diagnostic"
                 )
             request = urllib.request.Request(endpoint + "/v1/qit/model")
             if environment.get("QIT_API_KEY"):
