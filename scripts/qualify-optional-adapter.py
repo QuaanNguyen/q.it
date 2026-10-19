@@ -1,12 +1,80 @@
 import argparse
+import base64
 import json
 import os
+import mimetypes
 from pathlib import Path
 import signal
 import sqlite3
 import subprocess
 import time
 import urllib.request
+
+
+def raw_probes(endpoint, model, task, cases_path, max_tokens, environment, destination):
+    with Path(cases_path).open() as source, destination.open("w") as output:
+        for line in source:
+            case = json.loads(line)
+            value = {
+                key: case[key]
+                for key in (
+                    "id",
+                    "prompt",
+                    "input",
+                    "documents",
+                    "media",
+                    "media_type",
+                    "image_settings",
+                    "query_prefix",
+                    "document_prefix",
+                )
+                if key in case
+            }
+            if "decision" in case:
+                value["decision"] = {
+                    key: case["decision"][key]
+                    for key in ("state", "question", "candidates")
+                }
+            media = value.get("media")
+            if media and not media.startswith("data:"):
+                directory = Path(cases_path).resolve().parent
+                path = (directory / media).resolve()
+                if not path.is_relative_to(directory):
+                    raise ValueError("probe media escapes the case directory")
+                kind = value.get("media_type") or mimetypes.guess_type(path)[0]
+                value["media"] = (
+                    "data:"
+                    + kind
+                    + ";base64,"
+                    + base64.b64encode(path.read_bytes()).decode()
+                )
+            payload = {"model": model, "task": task, "case": value}
+            if task != "decision_scoring":
+                payload["max_output_tokens"] = max_tokens
+            request = urllib.request.Request(
+                endpoint + "/v1/qit/invoke",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            if environment.get("QIT_API_KEY"):
+                request.add_header(
+                    "Authorization", "Bearer " + environment["QIT_API_KEY"]
+                )
+            with urllib.request.urlopen(request, timeout=600) as response:
+                events = [
+                    json.loads(line)
+                    for line in response.read().decode().splitlines()
+                    if line
+                ]
+            output.write(
+                json.dumps({"request": payload, "events": events}, allow_nan=False)
+                + "\n"
+            )
+            output.flush()
+            if len(
+                [event for event in events if event.get("type") == "result"]
+            ) != 1 or any(event.get("type") == "error" for event in events):
+                raise ValueError("post-run raw probe did not return one native result")
 
 
 def main():
@@ -21,6 +89,7 @@ def main():
     parser.add_argument("--allow-reviewed-code", action="store_true")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--native-reference")
+    parser.add_argument("--cases")
     args = parser.parse_args()
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -128,6 +197,25 @@ def main():
                     "benchmark failed; retain the state database and run.stderr"
                 )
             report["status"] = "cpu-smoke-passed"
+            if args.cases:
+                rows = [
+                    json.loads(line)
+                    for line in (output / "successful.jsonl").read_text().splitlines()
+                ]
+                if len(rows) != 1:
+                    raise ValueError("raw probes require exactly one retained run")
+                raw_probes(
+                    endpoint,
+                    args.model,
+                    rows[0]["run"]["task"],
+                    args.cases,
+                    rows[0]["run"]["max_output_tokens"],
+                    environment,
+                    output / "raw-probes.jsonl",
+                )
+                report["raw_probes"] = (
+                    "post-run audit calls; excluded from benchmark timing and scores"
+                )
             report["publisher_parity"] = (
                 "not checked; requires a separately produced publisher-native reference"
             )

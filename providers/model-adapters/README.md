@@ -106,7 +106,20 @@ python3 scripts/qualify-optional-adapter.py --adapter /absolute/path/to/qit-adap
 
 The helper starts the already installed adapter, records metadata, runs the installed q.it command with the provider PID, and retains logs, the complete state database, every run and sample row, and successful JSONL exports.
 Startup, import, model-audit, and inference failures remain in its evidence directory.
-A separately produced publisher-native reference can be supplied with `--native-reference`; no parity is claimed when it is absent.
+Adding `--cases` with the same case file retains complete protocol responses in post-run audit probes.
+Those calls happen after the measured benchmark and are excluded from its timing and scores.
+The independent publisher check imports the original runtime directly and does not invoke q.it adapter implementations:
+
+```bash
+.venv-adapter/bin/python scripts/check-publisher-parity.py --adapter gliclass --model-path /absolute/path/to/pinned-model --evidence /absolute/path/to/new-evidence-directory
+```
+
+It verifies retained artifact digests, uses local-only CPU loading, blocks network access, and compares native outputs without renormalizing them.
+GLiNER2 compares its public label/confidence object; the adapter separately retains its complete unmodified internal probabilities.
+Models with publisher Python source also require `--allow-reviewed-code` for the independent check.
+Results are retained in separate native-output and parity reports.
+A separately produced retained-observation reference can instead be supplied with `--native-reference`.
+No parity is claimed unless a comparison report passes.
 Full transcripts, audio duration, native speech routing, and all accepted retrieval token vectors survive history and exports.
 Oversized retrieval observations fail rather than being truncated or collapsed to one vector.
 Generation throughput and first-token metrics remain absent for these non-generation tasks.
