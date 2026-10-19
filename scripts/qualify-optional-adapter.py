@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import time
 import urllib.request
+import urllib.parse
 
 
 def raw_probes(endpoint, model, task, cases_path, max_tokens, environment, destination):
@@ -137,8 +138,25 @@ def main():
             while time.monotonic() < deadline:
                 stdout.seek(0)
                 for line in stdout:
-                    if line.startswith("q.it optional adapter listening on "):
-                        endpoint = line.strip().split(" on ", 1)[1]
+                    candidate = line.partition("q.it optional adapter listening on ")[
+                        2
+                    ].strip()
+                    if candidate:
+                        address = urllib.parse.urlsplit(candidate)
+                        if (
+                            address.scheme != "http"
+                            or address.hostname != "127.0.0.1"
+                            or not address.port
+                            or address.path
+                            or address.query
+                            or address.fragment
+                            or address.username
+                            or address.password
+                        ):
+                            raise ValueError(
+                                "adapter announced an invalid loopback endpoint"
+                            )
+                        endpoint = candidate
                         break
                 if endpoint or server.poll() is not None:
                     break

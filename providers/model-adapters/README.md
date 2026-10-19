@@ -101,7 +101,7 @@ Model weights and native engine binaries are never included in this package.
 ## Retained qualification evidence
 
 ```bash
-python3 scripts/qualify-optional-adapter.py --adapter /absolute/path/to/qit-adapter --qit /absolute/path/to/qit --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model --pack providers/model-adapters/packs/english-choice --benchmark english-choice-smoke/choice --output /absolute/path/to/new-evidence-directory
+python3 scripts/qualify-optional-adapter.py --adapter /absolute/path/to/qit-adapter --qit /absolute/path/to/qit --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model --pack providers/model-adapters/packs/english-choice --benchmark english-choice-smoke/choice --cases providers/model-adapters/packs/english-choice/cases.jsonl --output /absolute/path/to/new-evidence-directory
 ```
 
 The helper starts the already installed adapter, records metadata, runs the installed q.it command with the provider PID, and retains logs, the complete state database, every run and sample row, and successful JSONL exports.
