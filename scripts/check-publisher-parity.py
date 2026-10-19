@@ -389,6 +389,12 @@ def main():
     parser.add_argument("--allow-reviewed-code", action="store_true")
     args = parser.parse_args()
     evidence = Path(args.evidence)
+    if (evidence / "publisher-parity.json").exists() or (
+        evidence / "publisher-native.jsonl"
+    ).exists():
+        parser.error(
+            "native parity evidence already exists; use a fresh evidence directory"
+        )
     directory = Path(args.model_path).resolve()
     report = {"status": "failed", "adapter": args.adapter, "comparisons": []}
     try:
