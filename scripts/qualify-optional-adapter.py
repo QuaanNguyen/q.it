@@ -43,6 +43,16 @@ def raw_probes(endpoint, model, task, cases_path, max_tokens, environment, desti
                 if not path.is_relative_to(directory):
                     raise ValueError("probe media escapes the case directory")
                 kind = value.get("media_type") or mimetypes.guess_type(path)[0]
+                if kind is None:
+                    kind = {
+                        ".flac": "audio/flac",
+                        ".wav": "audio/wav",
+                        ".png": "image/png",
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                    }.get(path.suffix.lower())
+                if kind is None:
+                    raise ValueError("probe media needs an explicit media_type")
                 value["media"] = (
                     "data:"
                     + kind
@@ -223,7 +233,7 @@ def main():
                 raise ValueError(
                     "benchmark failed; retain the state database and run.stderr"
                 )
-            report["status"] = "cpu-smoke-passed"
+            report["cpu_run_status"] = "passed"
             if args.cases:
                 rows = [
                     json.loads(line)
@@ -268,7 +278,8 @@ def main():
                         "publisher-native reference differs from retained observations"
                     )
                 report["publisher_parity"] = "exact retained-observation match"
-    except (OSError, ValueError, subprocess.SubprocessError) as error:
+            report["status"] = "cpu-smoke-passed"
+    except Exception as error:
         report["status"] = "failed"
         report["error"] = str(error)
     finally:
