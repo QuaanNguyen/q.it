@@ -1,6 +1,8 @@
 import argparse
+import faulthandler
 import json
 import os
+import traceback
 
 from .artifacts import profile_for, profiles, verify
 
@@ -17,6 +19,7 @@ def main():
             command.add_argument("--port", type=int, default=8766)
             command.add_argument("--threads", type=int, default=4)
             command.add_argument("--allow-reviewed-code", action="store_true")
+            command.add_argument("--startup-traceback-after", type=int, default=0)
     args = parser.parse_args()
     try:
         if args.command == "list":
@@ -43,9 +46,19 @@ def main():
         from .backend import Backend
         from .server import CpuServer
 
-        backend = Backend(
-            profile, args.model_path, args.threads, args.allow_reviewed_code
-        )
+        if not 0 <= args.startup_traceback_after <= 600:
+            raise ValueError(
+                "startup traceback interval must be between zero and 600 seconds"
+            )
+        if args.startup_traceback_after:
+            faulthandler.dump_traceback_later(args.startup_traceback_after, repeat=True)
+        try:
+            backend = Backend(
+                profile, args.model_path, args.threads, args.allow_reviewed_code
+            )
+        finally:
+            if args.startup_traceback_after:
+                faulthandler.cancel_dump_traceback_later()
         with CpuServer(
             ("127.0.0.1", args.port), backend, os.environ.get("QIT_API_KEY")
         ) as server:
@@ -58,6 +71,8 @@ def main():
             except KeyboardInterrupt:
                 pass
     except (ValueError, ImportError, OSError) as error:
+        if getattr(args, "startup_traceback_after", 0):
+            traceback.print_exc()
         parser.exit(1, f"error: {error}\n")
 
 

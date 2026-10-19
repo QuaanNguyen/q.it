@@ -124,6 +124,31 @@ def fingerprint(value):
     ).hexdigest()
 
 
+def verify_runtime_source(profile, distribution):
+    expected = profile["runtime_source"]
+    root = Path(distribution.locate_file("frida_decisions")).resolve()
+    installed = {path.relative_to(root).as_posix(): path for path in root.rglob("*.py")}
+    if installed.keys() != expected["python_files"].keys():
+        raise ValueError(
+            "FRIDA installed Python inventory differs from the pinned publisher source"
+        )
+    observed = {}
+    for name, digest in expected["python_files"].items():
+        path = installed[name]
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            raise ValueError("FRIDA source path escapes its installed package")
+        observed[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if observed[name] != digest:
+            raise ValueError(
+                f"FRIDA installed source differs from the reviewed commit: {name}"
+            )
+    return {
+        "reviewed_archive_sha256": expected["archive_sha256"],
+        "commit": expected["commit"],
+        "installed_python_sha256": observed,
+    }
+
+
 def locked_environment(profile):
     import platform
     import sys
@@ -171,17 +196,21 @@ def locked_environment(profile):
     if family == "frida":
         source = sources.get("frida-decisions", {})
         if (
-            source.get("archive_info", {}).get("hashes", {}).get("sha256")
-            != "9a927dbd9958b18772ec0b35f6240f0a865e3f4fbb6df3f5dabfbe0a74608e8b"
-            or source.get("url")
+            source.get("url")
             != "https://github.com/ai-forever/FRIDA-Decisions/archive/00c8b5f0a88312e969d65b01a076bd9e447de2db.tar.gz"
         ):
             raise ValueError(
                 "FRIDA runtime must retain the exact publisher Git source identity"
             )
+        source_verification = verify_runtime_source(
+            profile, importlib.metadata.distribution("frida-decisions")
+        )
+    else:
+        source_verification = None
     return {
         "packages": installed,
         "lock_sha256": hashlib.sha256(content.encode()).hexdigest(),
         "installed_records": records,
         "installed_sources": sources,
+        "source_verification": source_verification,
     }

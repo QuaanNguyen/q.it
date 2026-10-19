@@ -530,7 +530,34 @@
         "git_blob": "ecc9062c282961b2d0ee447c90dab773a5e6772a"
       }
     },
-    "qualification": "unverified"
+    "qualification": "unverified",
+    "runtime_source": {
+      "commit": "00c8b5f0a88312e969d65b01a076bd9e447de2db",
+      "archive_sha256": "9a927dbd9958b18772ec0b35f6240f0a865e3f4fbb6df3f5dabfbe0a74608e8b",
+      "python_files": {
+        "__init__.py": "7620c4c2acd0931bb9e519dcc2a0eb658c3ac51b8a936a1547db7cc1a1c82bf5",
+        "async_judge.py": "24933b76383e0082572bceb66b00068ff3724d8883bc671ca2558d0ff3f8c0f9",
+        "base.py": "51caac870fc7978fa5f1a4e30510157bf884ecb04fd382048b9df5a307992131",
+        "config.py": "73b1835b61fad78983bdea7363e14c9f53bd61b7de356126a9ee44ba431a9c56",
+        "constants.py": "40ab961e9903c16f388dfb973259ffb1e408f827f852baf4479882b1bdee259c",
+        "mlx_backend.py": "5bf0ae3a4b76938a9b4caa165d0b458d2fe82571d79d6bf0ac16b0d8b53ca7e1",
+        "mlx_modeling.py": "bf1e40f927c49af1dbc421b6402249ab89c33b36532c1c7b6b1894aaf4fba9d8",
+        "modeling.py": "cfe5dc92ee28e4e3b211b830469f0ea460856b1b5a71c765db519b88b949aaa9",
+        "onnx_backend.py": "02c226a08086d9c832baf01d2910513908e454ea44d86c8bd4f48cb53abff394",
+        "packing.py": "c5412f72ab5c0db5de8a6cb47163cd15fb2767e72393097e562ff44cc1e31328",
+        "protocol.py": "22fd1a90d929a1056e8266a8d309509cc544a3e21150db4241e86ab80e308f7b",
+        "torch_backend.py": "bbc1e66b3925c7a100c53d5eed7cf1ffd09888de1beceeb16b71241dc6c0e086",
+        "vllm_backend/__init__.py": "e4929f6b3e7be0918c8b0d9e1512ad0b05b8018ca828695b87fb7369472256be",
+        "vllm_backend/attention.py": "d93a2b82439e3008e434a7946d9c6030884836271ba7d2b96d3c7da50cf9f7fd",
+        "vllm_backend/engine.py": "4c98bc04cee7fa654f3732bf667800d7d0d1c8c1baaacfe39753fb119680ced4",
+        "vllm_backend/kernel.py": "4729b435e793100949eb610a16125ec73cbe5f93ed0d1b2ce4c84ed21d4dbba1",
+        "vllm_backend/model.py": "06426f87e67667170b153d70ad8621a914877c856f091bb194c5df95bd21f7c8",
+        "vllm_backend/pooler.py": "0dd37e7c265c61cd970f7c35846e08c2e0faf4a3b82ba5d66e718c2a0b55c8ae",
+        "vllm_backend/prepare.py": "b76bee5fc79ce7e1295331f4121e9d6fbdc4247ac74569b77122d4b6b4d6c076",
+        "vllm_backend/rows.py": "222d0c959240369f966565ea42783824689969b0e289e1decfa1b615fec6ecf6",
+        "vllm_backend/server.py": "0ce6ea8eb5cc93c563baf4c3acdf454748e79f433bfc5b05cb60da2708d5c75b"
+      }
+    }
   },
   {
     "model": "lightonai/LightOnOCR-3-0.8B",

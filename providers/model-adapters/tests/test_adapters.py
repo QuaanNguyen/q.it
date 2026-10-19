@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from qit_adapters.artifacts import profile_for, profiles, verify
+from qit_adapters.artifacts import profile_for, profiles, verify, verify_runtime_source
 from qit_adapters.backend import Backend, audit_modules
 from qit_adapters.decisions import DecisionRuntime, distribution
 from qit_adapters.server import CpuServer
@@ -61,6 +61,35 @@ class FixtureRuntime:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_runtime_source_verification_requires_the_exact_complete_installed_code(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "frida_decisions"
+            package.mkdir()
+            module = package / "__init__.py"
+            module.write_text("value = 1\n")
+            profile = {
+                "runtime_source": {
+                    "commit": "a" * 40,
+                    "archive_sha256": "b" * 64,
+                    "python_files": {
+                        "__init__.py": hashlib.sha256(module.read_bytes()).hexdigest()
+                    },
+                }
+            }
+            distribution = SimpleNamespace(locate_file=lambda name: root / name)
+            observed = verify_runtime_source(profile, distribution)
+            self.assertEqual(observed["commit"], "a" * 40)
+            module.write_text("value = 2\n")
+            with self.assertRaisesRegex(ValueError, "differs"):
+                verify_runtime_source(profile, distribution)
+            module.write_text("value = 1\n")
+            (package / "unexpected.py").write_text("value = 3\n")
+            with self.assertRaisesRegex(ValueError, "inventory"):
+                verify_runtime_source(profile, distribution)
+
     def test_publisher_chat_templates_and_d3_loader_dependency_are_retained(self):
         for profile in profiles():
             if profile["adapter"] in {"d3", "intern", "typed-gemma", "lighton"}:

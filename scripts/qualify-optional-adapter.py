@@ -90,6 +90,7 @@ def main():
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--native-reference")
     parser.add_argument("--cases")
+    parser.add_argument("--startup-traceback-after", type=int, default=0)
     args = parser.parse_args()
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -114,6 +115,8 @@ def main():
     ]
     if args.allow_reviewed_code:
         command.append("--allow-reviewed-code")
+    if args.startup_traceback_after:
+        command.extend(["--startup-traceback-after", str(args.startup_traceback_after)])
     server = None
     try:
         if args.pack:
