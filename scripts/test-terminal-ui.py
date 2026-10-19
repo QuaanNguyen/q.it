@@ -185,8 +185,11 @@ def main():
         ).split()
 
         def seconds(value):
-            minutes, seconds = value.split(":")
-            return 60 * int(minutes) + float(seconds)
+            days, separator, clock = value.rpartition("-")
+            return (int(days) * 86400 if separator else 0) + sum(
+                float(part) * 60**position
+                for position, part in enumerate(reversed(clock.split(":")))
+            )
 
         report["waiting_cpu_percent"] = round(
             100 * (seconds(after[0]) - seconds(before)) / (time.monotonic() - began), 2
