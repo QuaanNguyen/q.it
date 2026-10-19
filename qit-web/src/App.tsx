@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, bytes, metric, providerLabel, taskLabel } from "./api";
+import { DecisionOutput, DecisionRankings } from "./decisions";
 import type {
   Benchmark,
   Host,
@@ -257,7 +258,7 @@ function Overview({ data }: { data: DashboardData }) {
                     {" / "}
                     {item.runs[0].host_name} / {item.runs[0].host.architecture}{" "}
                     / {item.runs[0].iterations} passes / {item.runs[0].warmups}{" "}
-                    warmups / {item.runs[0].max_output_tokens} tokens
+                    warmups{item.runs[0].task === "decision_scoring" ? "" : ` / ${item.runs[0].max_output_tokens} tokens`}
                   </option>
                 ))}
               </select>
@@ -283,6 +284,7 @@ function Overview({ data }: { data: DashboardData }) {
               Latest successful run per model configuration
             </span>
           </div>
+          {reference?.task === "decision_scoring" && <DecisionRankings runs={models} />}
           <ModelChartColors runs={data.history.runs}>
             <section
               className="chart-grid"
@@ -298,7 +300,7 @@ function Overview({ data }: { data: DashboardData }) {
                 format={time}
                 unit="ms"
               />
-              <RankingChart
+              {reference?.task !== "decision_scoring" && <RankingChart
                 title="Time to first token"
                 number="02"
                 detail="First streamed output · lower is better"
@@ -308,8 +310,8 @@ function Overview({ data }: { data: DashboardData }) {
                 format={time}
                 unit="ms"
                 empty="TTFT is measured for streamed generation, when available."
-              />
-              <RankingChart
+              />}
+              {reference?.task !== "decision_scoring" && <RankingChart
                 title="Token throughput"
                 number="03"
                 detail="Median decode rate · higher is better"
@@ -319,7 +321,7 @@ function Overview({ data }: { data: DashboardData }) {
                 unit="tok/s"
                 higher
                 empty="This task has no exact completion-token throughput."
-              />
+              />}
               <RankingChart
                 title="Benchmark quality"
                 number="04"
@@ -672,7 +674,7 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
         </span>
         <span>{run.iterations} passes</span>
         <span>{run.warmups} warmups</span>
-        <span>{run.max_output_tokens} token limit</span>
+        {run.task !== "decision_scoring" && <span>{run.max_output_tokens} token limit</span>}
         <span>{bytes(run.summary.process_rss_bytes_peak)} process RSS</span>
       </div>
       <details>
@@ -699,6 +701,7 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
                   </td>
                   <td className="sample-output">
                     {sample.error ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
+                    {sample.decision && <DecisionOutput observation={sample.decision} />}
                     {sample.output_image && (
                       <a href={sample.output_image} download={`${sample.case_id}.png`}>
                         <img className="sample-image" src={sample.output_image} alt={`Generated image for ${sample.case_id}`} />
@@ -875,7 +878,7 @@ function StartBenchmark({
         api_key: apiKey || null,
         iterations,
         warmups,
-        max_output_tokens: outputLimit ? Number(outputLimit) : null,
+        max_output_tokens: benchmark.task !== "decision_scoring" && outputLimit ? Number(outputLimit) : null,
         timeout_seconds: timeout,
         target_pid: pid ? Number(pid) : null,
       });
@@ -998,7 +1001,7 @@ function StartBenchmark({
           <details className="advanced-settings">
             <summary>[ advanced settings ]</summary>
             <div className="form-row">
-              <Field
+              {benchmark?.task !== "decision_scoring" && <Field
                 label="Output token limit"
                 hint={`Benchmark default: ${benchmark?.default_max_output_tokens ?? "-"}`}
               >
@@ -1010,7 +1013,7 @@ function StartBenchmark({
                   onChange={(event) => setOutputLimit(event.target.value)}
                   placeholder="Use benchmark default"
                 />
-              </Field>
+              </Field>}
               <Field label="Request timeout (seconds)">
                 <input
                   type="number"
