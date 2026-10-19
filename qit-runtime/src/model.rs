@@ -346,6 +346,13 @@ pub struct RunRecord {
     pub summary: RunSummary,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SpeechObservation {
+    pub transcript: String,
+    pub audio_duration_seconds: Option<f64>,
+    pub routing: Option<serde_json::Value>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SampleRecord {
     pub id: String,
@@ -367,6 +374,8 @@ pub struct SampleRecord {
     pub output_excerpt: Option<String>,
     pub output_image: Option<String>,
     pub decision: Option<crate::decision::DecisionObservation>,
+    pub retrieval: Option<crate::retrieval::RetrievalObservation>,
+    pub speech: Option<SpeechObservation>,
 }
 
 #[derive(Clone, Debug)]
@@ -386,6 +395,8 @@ pub struct RunRequest {
 #[derive(Clone, Debug, Default)]
 pub struct InvocationResult {
     pub output_text: Option<String>,
+    pub audio_duration_seconds: Option<f64>,
+    pub speech_routing: Option<serde_json::Value>,
     pub embeddings: Vec<Vec<f64>>,
     pub ranking: Vec<usize>,
     pub latency_ms: f64,
@@ -396,6 +407,7 @@ pub struct InvocationResult {
     pub output_image: Option<String>,
     pub decision: Option<crate::decision::DecisionResult>,
     pub decision_media: Option<String>,
+    pub retrieval: Option<crate::retrieval::RetrievalObservation>,
 }
 
 #[derive(Clone, Debug, Default)]

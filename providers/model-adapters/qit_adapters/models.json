@@ -1,0 +1,959 @@
+[
+  {
+    "model": "knowledgator/gliclass-v4-edge",
+    "revision": "90be5550327b138635db1f63531f9dfa15e624da",
+    "adapter": "gliclass",
+    "task": "decision_scoring",
+    "issue": 115,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "gliclass": "0.1.21"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 4406,
+        "git_blob": "830220555b415fcac72231a0bc406b88ada64538"
+      },
+      "model.safetensors": {
+        "bytes": 881878644,
+        "sha256": "672cabebce49caa011ce4b5c62eaa19857e45b27644e20b242abc30a02bb2702"
+      },
+      "tokenizer.json": {
+        "bytes": 8340434,
+        "git_blob": "1eb53a8fb2386315be6810da2158a802d9377f39"
+      },
+      "tokenizer_config.json": {
+        "bytes": 537,
+        "git_blob": "dea6754cb345e3bfea5aa18311b49d2b7613b9c6"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "fastino/GLiNER2.5-Decide",
+    "revision": "9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90",
+    "adapter": "gliner2",
+    "task": "decision_scoring",
+    "issue": 116,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "gliner2": "2.1.0"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 1612,
+        "git_blob": "68c038426487c85f7fc37ee4885062b799ed6d22"
+      },
+      "encoder_config/config.json": {
+        "bytes": 920,
+        "git_blob": "63faecad180aed6a59dc33f9bf256e1ad5a8b8ec"
+      },
+      "model.safetensors": {
+        "bytes": 1945828140,
+        "sha256": "40a5a23ff860dc3dff426cecd1048cacdd29c648c96db209dad818e9686dc997"
+      },
+      "special_tokens_map.json": {
+        "bytes": 2414,
+        "git_blob": "4f5d30b2c191a6fe27a92901a543cfad1f9832ab"
+      },
+      "tokenizer.json": {
+        "bytes": 8333952,
+        "git_blob": "846fee96bd81469a49d54a6e37909cf2070a8833"
+      },
+      "tokenizer_config.json": {
+        "bytes": 3356,
+        "git_blob": "eaa0e9bae635e8571f2501ade39b3be479d3fa0f"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "LiquidAI/d1-omni-600M",
+    "revision": "02b55d7076f15129e59ab3f94783f32c4b088674",
+    "adapter": "liquid",
+    "task": "decision_scoring",
+    "issue": 110,
+    "license": "other",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.16.1",
+      "torchvision": "0.24.1"
+    },
+    "files": {
+      "audio.py": {
+        "bytes": 11829,
+        "git_blob": "c85d77b72701c4e5e2e4d43cc6c6332ac1c2f1a6",
+        "sha256": "c5ff09d52d6a079e79d0505c89dbd0582ba2bc9abf2b26595d8d5b1d0c347bdf"
+      },
+      "config.json": {
+        "bytes": 1993,
+        "git_blob": "94ebfad78a9e7fdbbd80549b99a0480bef2e2e02"
+      },
+      "encoder.py": {
+        "bytes": 7732,
+        "git_blob": "49711c6e2436dcbb09aea2d6206050eac38b3f74",
+        "sha256": "5f2e20319ee42a7367febf06c7653d7b3f9b28ef99a64cb9ec7739563dcfcffe"
+      },
+      "model.safetensors": {
+        "bytes": 2348774500,
+        "sha256": "0713bb05270c2685ad106522f4092bceeeb3a93cf79b401f399a712296c911e1"
+      },
+      "modeling_d1.py": {
+        "bytes": 8655,
+        "git_blob": "3c51b6d4d75480be1de79aaf8d306031ab5fda41",
+        "sha256": "2b71a5c909ec5d3aa6307378a41a0fd24af1e17d5c1c1f8d510582147051a686"
+      },
+      "prompt.py": {
+        "bytes": 6309,
+        "git_blob": "e81db3661bf454a0579147070f0d7075538b6a38",
+        "sha256": "a6b29a55ec8345f1fc1fdbfcc4b64d80d473dc4316f095a62c51cb6cce1194cf"
+      },
+      "tokenizer.json": {
+        "bytes": 4733371,
+        "git_blob": "53d5df363b01234edae97ee6e05139d2c067b31a"
+      },
+      "tokenizer_config.json": {
+        "bytes": 259,
+        "git_blob": "35217dbb96b3356b37ab820ec7feef483c8c12dc"
+      },
+      "vision.py": {
+        "bytes": 5233,
+        "git_blob": "bc9c35ba8450c02b364e9c26b909b4541c8f139a",
+        "sha256": "43ad71029f82e20fd26b97574627773d47639d7a3742c8b04fe5bf55f41c4c28"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "internlm/Intern-Decision-0.8B",
+    "revision": "85a0cc5a99d67ea8d56dfe98115689212867171d",
+    "adapter": "intern",
+    "task": "decision_scoring",
+    "issue": 109,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.14.1",
+      "torchvision": "0.24.1"
+    },
+    "files": {
+      "added_tokens.json": {
+        "bytes": 928,
+        "git_blob": "ba128ef8a099bf93a90870440818b6b467bb5f22"
+      },
+      "config.json": {
+        "bytes": 2907,
+        "git_blob": "715f0448b9d38103211f0ad88bbb4d6e4f4be8c9"
+      },
+      "inference.py": {
+        "bytes": 16262,
+        "git_blob": "59ead69e8e7266761c6e3f6d75033400230cb423",
+        "sha256": "62664f5bebb593e825370f82b2733edd13b16118b436d09db2f0c36405b9b4ea"
+      },
+      "merges.txt": {
+        "bytes": 3353273,
+        "git_blob": "f08945b961d2ec392da209998b51d931f1194f4c"
+      },
+      "model-language-0001-save_rank0.safetensors": {
+        "bytes": 1504832320,
+        "sha256": "4acc4bd67febb2466ef7c282099fd05ee0ba47b853b6c49b9e763fb642957820"
+      },
+      "model-projector-0001-save_rank0.safetensors": {
+        "bytes": 25177720,
+        "sha256": "7f81b4ab1b4434c4d0322c849525337c1746f0ca4b9beac107a94e23b2952fee"
+      },
+      "model-vision-0001-save_rank0.safetensors": {
+        "bytes": 176024696,
+        "sha256": "bf8e03e3be40018e51037b46bb8ebe0471e2aceb394ad988632cce2c87d2e177"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 50211,
+        "git_blob": "4ccc72734afa679235f35c042fda6b3f91a6fabc"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "requirements.txt": {
+        "bytes": 69,
+        "git_blob": "5139e110eba8bc04676268fb6f3c6eb5464cecf3"
+      },
+      "special_tokens_map.json": {
+        "bytes": 735,
+        "git_blob": "0195db277ac22bceeef8fe850d5496087a159eac"
+      },
+      "tokenizer.json": {
+        "bytes": 19989530,
+        "sha256": "94a639c4b33b192cc5a22cd3d7f0aaf6d97efa9577957a0382b55292ca4f0f00"
+      },
+      "tokenizer_config.json": {
+        "bytes": 7291,
+        "git_blob": "6fb6abc18754fa46ca33a8bb43aac3b3294850ad"
+      },
+      "video_preprocessor_config.json": {
+        "bytes": 385,
+        "git_blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"
+      },
+      "vocab.json": {
+        "bytes": 5234494,
+        "git_blob": "b94df23d650b0c60a2264d9de779cb3b7fb8570c"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "vllm-sr/d3-edge",
+    "revision": "c454ee39b862248d70abd7f84195d2f54ffe6d43",
+    "adapter": "d3",
+    "task": "decision_scoring",
+    "issue": 118,
+    "license": "apache-2.0",
+    "precision": "bfloat16",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "torchvision": "0.24.1"
+    },
+    "files": {
+      "MODEL_MANIFEST.json": {
+        "bytes": 11428,
+        "git_blob": "58ac87024392525de2c8532e0edbbd3f720331e3"
+      },
+      "config.json": {
+        "bytes": 2572,
+        "git_blob": "b0d720318d668d113913b65b4e942c6deaa84065"
+      },
+      "d3_engine.py": {
+        "bytes": 4413,
+        "git_blob": "24a3ebb4152f3dcde5e9403baff2323c7380b214",
+        "sha256": "086238942762df45047a32cd9a8e2bedd9b63167eb40be260c776de567979f53"
+      },
+      "d3_fast.py": {
+        "bytes": 22331,
+        "git_blob": "02b5e7811c901ebe1f8d33f44b4a4a67dde4ed2a",
+        "sha256": "68a1fb9a2c3bde9ac2763bf504decae592ca12722698fbde1b39a31262955535"
+      },
+      "d3_format.py": {
+        "bytes": 7008,
+        "git_blob": "18a97be8b097d3bf9eda82be649666175a9e4f59",
+        "sha256": "3badfbc70561bb3f5b8ec16a11d2c455b96ddb32caace0a8a54ca102eae1f3fa"
+      },
+      "d3_kernels.py": {
+        "bytes": 16129,
+        "git_blob": "31cb79b7d5dee117c8fec5a820db5a2cc7c8f229",
+        "sha256": "8f7534ca1e1846ebf7c4c73058002f3be4dbf0d5d426f0815150ae0cbe7677bd"
+      },
+      "d3_runtime.py": {
+        "bytes": 95505,
+        "git_blob": "18cfc31416a6df520fba4d4881ef1b878f7ab472",
+        "sha256": "adf7f7aa085674b5682e492d8b2e3cc4f11c67b0d153515c742e907e9b550917"
+      },
+      "d3_server.py": {
+        "bytes": 17705,
+        "git_blob": "36657b7fb605dfacfd88bf5a027574a0ab2f6b35",
+        "sha256": "766a20a69101e36ab0535a1ec683379db422380a83091f0eccd7e82edb6a02de"
+      },
+      "decision_config.json": {
+        "bytes": 5504,
+        "git_blob": "5bf6f72adb66002996fcf44a04947687eb2c2034"
+      },
+      "merges.txt": {
+        "bytes": 3353259,
+        "git_blob": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      "model-00001-of-00001.safetensors": {
+        "bytes": 1188677968,
+        "sha256": "91bb8618450a7f628f1432bbced76bc19ee7346c93d191a228fdd33c25a57a9d"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 25448,
+        "git_blob": "436b722d945d5bcb49f6b44b0e96c35c964e3326"
+      },
+      "modeling_d3.py": {
+        "bytes": 12079,
+        "git_blob": "b327030a25153668a0a34914a517c857946798f7",
+        "sha256": "f8f8db23ff58f1a990ffa24977d744a50e1b4446d02a64c22070967705b6dbef"
+      },
+      "pipeline_d3.py": {
+        "bytes": 2936,
+        "git_blob": "21fd672f2ef50e9db0646c7ab6a1bceb44df2974",
+        "sha256": "4f9297c7c74e596e9b67df91a1e6823cfada48bf781336f141974ff6a2f1038e"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "readout.safetensors": {
+        "bytes": 1044560,
+        "sha256": "de33d5dc795bbd77168e40bfadc340cca9b9f163b88744c10e1a788f4e166d3d"
+      },
+      "requirements.txt": {
+        "bytes": 723,
+        "git_blob": "06295a2ec746f4f9a3f8d166e36f1a7e740eb860"
+      },
+      "tokenizer.json": {
+        "bytes": 12807982,
+        "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+      },
+      "tokenizer_config.json": {
+        "bytes": 16709,
+        "git_blob": "fae3ce993e07c092ad024dde45e592379fde91bb"
+      },
+      "video_preprocessor_config.json": {
+        "bytes": 385,
+        "git_blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"
+      },
+      "vocab.json": {
+        "bytes": 6722759,
+        "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "vllm-sr/d3-lite",
+    "revision": "03560c26f5199c3c04129a2ccb38960c913635e0",
+    "adapter": "d3",
+    "task": "decision_scoring",
+    "issue": 118,
+    "license": "apache-2.0",
+    "precision": "bfloat16",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "torchvision": "0.24.1"
+    },
+    "files": {
+      "MODEL_MANIFEST.json": {
+        "bytes": 11428,
+        "git_blob": "4914d0597f46a4d3d6cf8ebd00703ec8e6aef3b8"
+      },
+      "config.json": {
+        "bytes": 2884,
+        "git_blob": "fdc4f45ab464793cdf8121af141f782c8db44482"
+      },
+      "d3_engine.py": {
+        "bytes": 4413,
+        "git_blob": "24a3ebb4152f3dcde5e9403baff2323c7380b214",
+        "sha256": "086238942762df45047a32cd9a8e2bedd9b63167eb40be260c776de567979f53"
+      },
+      "d3_fast.py": {
+        "bytes": 22331,
+        "git_blob": "02b5e7811c901ebe1f8d33f44b4a4a67dde4ed2a",
+        "sha256": "68a1fb9a2c3bde9ac2763bf504decae592ca12722698fbde1b39a31262955535"
+      },
+      "d3_format.py": {
+        "bytes": 7008,
+        "git_blob": "18a97be8b097d3bf9eda82be649666175a9e4f59",
+        "sha256": "3badfbc70561bb3f5b8ec16a11d2c455b96ddb32caace0a8a54ca102eae1f3fa"
+      },
+      "d3_kernels.py": {
+        "bytes": 16129,
+        "git_blob": "31cb79b7d5dee117c8fec5a820db5a2cc7c8f229",
+        "sha256": "8f7534ca1e1846ebf7c4c73058002f3be4dbf0d5d426f0815150ae0cbe7677bd"
+      },
+      "d3_runtime.py": {
+        "bytes": 95505,
+        "git_blob": "18cfc31416a6df520fba4d4881ef1b878f7ab472",
+        "sha256": "adf7f7aa085674b5682e492d8b2e3cc4f11c67b0d153515c742e907e9b550917"
+      },
+      "d3_server.py": {
+        "bytes": 17705,
+        "git_blob": "36657b7fb605dfacfd88bf5a027574a0ab2f6b35",
+        "sha256": "766a20a69101e36ab0535a1ec683379db422380a83091f0eccd7e82edb6a02de"
+      },
+      "decision_config.json": {
+        "bytes": 5504,
+        "git_blob": "5bf6f72adb66002996fcf44a04947687eb2c2034"
+      },
+      "merges.txt": {
+        "bytes": 3353259,
+        "git_blob": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      "model-00001-of-00001.safetensors": {
+        "bytes": 1706027688,
+        "sha256": "ca6222dbf2b72899ae45580ed84d26d1f0e69a8de212edda295072000e34a4c2"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 41066,
+        "git_blob": "e69d803dea3ab777681fc08e1e26bca18596bf6c"
+      },
+      "modeling_d3.py": {
+        "bytes": 12079,
+        "git_blob": "b327030a25153668a0a34914a517c857946798f7",
+        "sha256": "f8f8db23ff58f1a990ffa24977d744a50e1b4446d02a64c22070967705b6dbef"
+      },
+      "pipeline_d3.py": {
+        "bytes": 2936,
+        "git_blob": "21fd672f2ef50e9db0646c7ab6a1bceb44df2974",
+        "sha256": "4f9297c7c74e596e9b67df91a1e6823cfada48bf781336f141974ff6a2f1038e"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "readout.safetensors": {
+        "bytes": 1044560,
+        "sha256": "fe11cfac5c79b6a83e35b707581b1260214279bb22b003c215c62719186ef629"
+      },
+      "requirements.txt": {
+        "bytes": 723,
+        "git_blob": "06295a2ec746f4f9a3f8d166e36f1a7e740eb860"
+      },
+      "tokenizer.json": {
+        "bytes": 12807982,
+        "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+      },
+      "tokenizer_config.json": {
+        "bytes": 16709,
+        "git_blob": "fae3ce993e07c092ad024dde45e592379fde91bb"
+      },
+      "video_preprocessor_config.json": {
+        "bytes": 385,
+        "git_blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"
+      },
+      "vocab.json": {
+        "bytes": 6722759,
+        "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "mrm8488/embeddinggemma-2-ft-typed-decision",
+    "revision": "8403ff7fddc75b6994130e581a832f875fb5bd0e",
+    "adapter": "typed-gemma",
+    "task": "decision_scoring",
+    "issue": 120,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.19.0"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 4115,
+        "git_blob": "20d712ffe24e5d0b305098e029a2516e353e3d5b"
+      },
+      "configuration_gemmadecision.py": {
+        "bytes": 5192,
+        "git_blob": "95b120b75de99649791378eecb7de0449d1547d9",
+        "sha256": "831d2be64e5704ebea3526c5a75ba1b92cecd21f3e67c90267e1cfd2e5dfd240"
+      },
+      "model.safetensors": {
+        "bytes": 1088537684,
+        "sha256": "bccbe25c9664c2997785aa4f24a50ce9cc011e8c7722e085d684ca1dbfd72e28"
+      },
+      "modeling_gemmadecision.py": {
+        "bytes": 24783,
+        "git_blob": "2a9f8f18b61be3e317d3b009b6e145aa3284b867",
+        "sha256": "75dd914b2ae83e9842a816d9ada4e5f1527949a9443e02d92264c0fa4de570b8"
+      },
+      "tokenizer.json": {
+        "bytes": 32170764,
+        "sha256": "dba1bf6b56fe71d2cc69a771a037fa6a7dac2e41f33ed3e1b3254b90fa17c3a5"
+      },
+      "tokenizer_config.json": {
+        "bytes": 1677,
+        "git_blob": "01cddfaf1b1af0eec276d2ccacac034ae511c0de"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "ai-forever/FRIDA-Decisions",
+    "revision": "e8fc105679af2ab44e4c2e52b65d29db58166083",
+    "adapter": "frida",
+    "task": "decision_scoring",
+    "issue": 119,
+    "license": "mit",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "frida-decisions": "0.4.0"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 883,
+        "git_blob": "c62423171ebf36d73648f5293a4662e488f265da"
+      },
+      "decisions_config.json": {
+        "bytes": 1851,
+        "git_blob": "e5f3f2f776e04dcaee533cdec90b95a298059f0d"
+      },
+      "head.safetensors": {
+        "bytes": 6284,
+        "sha256": "e822115e760c243d9b36010573efadc2e29c315323cccdbd5597a4f6dbd74f91"
+      },
+      "model.safetensors": {
+        "bytes": 1646829336,
+        "sha256": "70a8cb915323c072f549f46b0f89c57a83b54128458e3cc7178a7bc3c013de5f"
+      },
+      "onnx/model_int8_pertoken.onnx": {
+        "bytes": 1257200228,
+        "sha256": "09e17f504d100551108d2af96f20d0e8a5b4ee656bf39e18dd092d0115694124"
+      },
+      "tokenizer.json": {
+        "bytes": 8304626,
+        "git_blob": "34d8e01974fdb9b1c535977d110d993a2d643dae"
+      },
+      "tokenizer_config.json": {
+        "bytes": 395,
+        "git_blob": "ecc9062c282961b2d0ee447c90dab773a5e6772a"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "lightonai/LightOnOCR-3-0.8B",
+    "revision": "36d8636925327c671bd8e479c517a004f7566bd9",
+    "adapter": "lighton",
+    "task": "image_to_text",
+    "issue": 104,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.5.4"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 2692,
+        "git_blob": "ecc3812e9f54ae67145b34964e501e179cf6853b"
+      },
+      "generation_config.json": {
+        "bytes": 205,
+        "git_blob": "338b88a230e884b84bcd99938df3d00bd97fe0a9"
+      },
+      "merges.txt": {
+        "bytes": 3353259,
+        "git_blob": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      "model.safetensors": {
+        "bytes": 1706030528,
+        "sha256": "ae46aa6fd7136d57297ac006ed9ec345b7a2083feb2e99501bedcb014ca3efdf"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "processor_config.json": {
+        "bytes": 1191,
+        "git_blob": "33818c7f9e991ad735fd240209f4fa73e6c28c50"
+      },
+      "tokenizer.json": {
+        "bytes": 19989325,
+        "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+      },
+      "tokenizer_config.json": {
+        "bytes": 1168,
+        "git_blob": "5344df8c8031f929defb2717c227e879120c6b6d"
+      },
+      "vocab.json": {
+        "bytes": 6722759,
+        "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "dmis-lab/UltraBERT-Embed-150M",
+    "revision": "b06b36724c5417a1ec1b7863dd4fa542b74e4899",
+    "adapter": "ultrabert",
+    "task": "embedding",
+    "issue": 105,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.16.1",
+      "sentence-transformers": "6.0.1"
+    },
+    "files": {
+      "1_Pooling/config.json": {
+        "bytes": 89,
+        "git_blob": "2236c262f1f83c50f7c304e98a8d1413980280df"
+      },
+      "config.json": {
+        "bytes": 1734,
+        "git_blob": "c252a10b4a4022c429de336b9cf3473b5af07309"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 364,
+        "git_blob": "e146e9bee3cd995218c9f6bfeecd640206fd8c4f"
+      },
+      "configuration_ultrabert.py": {
+        "bytes": 2209,
+        "git_blob": "375deed383aa9c3fae21685aae234f248547ac8b",
+        "sha256": "823d10bda19f5164da4f79f8f9c01e5ebd7a75569abce78c0a26b7674fc78cd9"
+      },
+      "model.safetensors": {
+        "bytes": 604153320,
+        "sha256": "da8be29564b69e4f90fc8f2683e1f369c3d3575e75f7fe798643e28de02e2b9c"
+      },
+      "modeling_ultrabert.py": {
+        "bytes": 30581,
+        "git_blob": "167de2b852439323f415799e72fe6dd8d48216c6",
+        "sha256": "bfca1bd08af72cd170e58b5a048c67b52bc9d06a2a42847c7a387751f527f333"
+      },
+      "modules.json": {
+        "bytes": 277,
+        "git_blob": "45d2436b717b3a70d63c0df4ab2c49d5cdb02c5b"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 241,
+        "git_blob": "d2cd15826913bba6e43310063d75883bb0b7b842"
+      },
+      "tokenizer.json": {
+        "bytes": 3523570,
+        "git_blob": "b312aed63b6ea56ae750c9af813097fd71b5722a"
+      },
+      "tokenizer_config.json": {
+        "bytes": 844,
+        "git_blob": "891ff0f3b6bddd37b6ea0c5fa5c01c2fe0b6dc8b"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "DataScience-UIBK/uibk-embedding-v1",
+    "revision": "b18df82e77306006a1dd0162199f6dfeacb5492e",
+    "adapter": "uibk",
+    "task": "embedding",
+    "issue": 114,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.0",
+      "transformers": "5.3.0",
+      "pylate": "1.6.0",
+      "fast-plaid": "1.4.6.290"
+    },
+    "files": {
+      "1_HybridTokens/config.json": {
+        "bytes": 364,
+        "git_blob": "2bd16786aef5e508e305c6cb901b1eedd82d974f"
+      },
+      "1_HybridTokens/model.safetensors": {
+        "bytes": 41000912,
+        "sha256": "c42363bb43bcfadef8154bc5d13cdc14231242e8b57676c5242590bde2dfbc6f"
+      },
+      "branched_transformer.py": {
+        "bytes": 6383,
+        "git_blob": "f7da06ffb9934e22f1334882b4ed50b120cdd1a6",
+        "sha256": "846cd532c56aeae03479e5d098a5d663ebbf705188d14ea71e3812d67ccc0da4"
+      },
+      "config.json": {
+        "bytes": 1897,
+        "git_blob": "2a1033f017294e48963eb8ade8fce7f7dfcfacb2"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 1516,
+        "git_blob": "e033f617efd319fbaf39c296e27328f45b77058e"
+      },
+      "dense_branch.safetensors": {
+        "bytes": 80246240,
+        "sha256": "1e924278f9c2ec9c7dc326892a19ade45feb72cf2a780bef77006e0bc07ccac6"
+      },
+      "hybrid_tokens.py": {
+        "bytes": 14729,
+        "git_blob": "caafc019a2e91807ed1129133f94d2fb9ca6a563",
+        "sha256": "f4ea6f286eeccff8622efeef8e5dd3a20aac27f627acff2fbc412578c0e836e2"
+      },
+      "model.safetensors": {
+        "bytes": 596076280,
+        "sha256": "8a66be0525cff10c0b1ba931336c49f1637fc4791a34a7d63eca3ee2dae67636"
+      },
+      "modules.json": {
+        "bytes": 224,
+        "git_blob": "f98d84df804a206b0760d8b718d8641107e3392c"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 82,
+        "git_blob": "58dcac56e048410aab414c52b5537baa318fd8b6"
+      },
+      "tokenizer.json": {
+        "bytes": 3583846,
+        "git_blob": "5b7d02281c53d519c433b5014994406d5010cedf"
+      },
+      "tokenizer_config.json": {
+        "bytes": 541,
+        "git_blob": "8954ddc0e296a5c75d92a8fe3f2732534f4b2a17"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "DataScience-UIBK/Agent-uibk-v1",
+    "revision": "fb1c8ae408f36729cb6f507c3898cb6ab93b4416",
+    "adapter": "uibk-agent",
+    "task": "embedding",
+    "issue": 114,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.0",
+      "transformers": "5.3.0",
+      "pylate": "1.6.0",
+      "fast-plaid": "1.4.6.290"
+    },
+    "files": {
+      "1_HybridTokens/config.json": {
+        "bytes": 363,
+        "git_blob": "cb0a10d722bc79cb04f8d263577446e7522cf404"
+      },
+      "1_HybridTokens/model.safetensors": {
+        "bytes": 41000912,
+        "sha256": "810772dc421842550a9cbd8ca9f2002df0af2bce9828a2da040365b5adcf6c91"
+      },
+      "branched_transformer.py": {
+        "bytes": 6383,
+        "git_blob": "f7da06ffb9934e22f1334882b4ed50b120cdd1a6",
+        "sha256": "846cd532c56aeae03479e5d098a5d663ebbf705188d14ea71e3812d67ccc0da4"
+      },
+      "config.json": {
+        "bytes": 1897,
+        "git_blob": "2a1033f017294e48963eb8ade8fce7f7dfcfacb2"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 1516,
+        "git_blob": "3c4c4df2c1c90028cef674154c641b8922e535b5"
+      },
+      "dense_branch.safetensors": {
+        "bytes": 80246240,
+        "sha256": "6a80ec07afcc4363d509aba7dd99570a9fa3bf3de50d95395e9644acc9e494f5"
+      },
+      "hybrid_tokens.py": {
+        "bytes": 14729,
+        "git_blob": "caafc019a2e91807ed1129133f94d2fb9ca6a563",
+        "sha256": "f4ea6f286eeccff8622efeef8e5dd3a20aac27f627acff2fbc412578c0e836e2"
+      },
+      "model.safetensors": {
+        "bytes": 596076280,
+        "sha256": "0a7f9450ea76ac8fef3b9b4b5e66f2e5127682fb4728cc389f76b8e81a81a6ac"
+      },
+      "modules.json": {
+        "bytes": 224,
+        "git_blob": "f98d84df804a206b0760d8b718d8641107e3392c"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 82,
+        "git_blob": "58dcac56e048410aab414c52b5537baa318fd8b6"
+      },
+      "tokenizer.json": {
+        "bytes": 3583846,
+        "git_blob": "5b7d02281c53d519c433b5014994406d5010cedf"
+      },
+      "tokenizer_config.json": {
+        "bytes": 541,
+        "git_blob": "8954ddc0e296a5c75d92a8fe3f2732534f4b2a17"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "moondream/parakeet-ultra",
+    "revision": "73175eb7aeb0d82f1e2a6b53b3aabc10a90bcd0b",
+    "adapter": "photon",
+    "task": "speech_to_text",
+    "issue": 103,
+    "license": "cc-by-4.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "kestrel": "0.9.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 1153,
+        "git_blob": "969c65410a736e4a3922f968b3481b2418aba786"
+      },
+      "model.safetensors": {
+        "bytes": 1255353386,
+        "sha256": "c9608f36d0ab956c14bfcc525479b0746b3b42a56f6949ec85c14eb7466717dc"
+      },
+      "tokenizer.json": {
+        "bytes": 1159960,
+        "git_blob": "a10a554cf61e38108756650018d5781ae9675c1d"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "moondream/parakeet-redux",
+    "revision": "2bf128600aac4b16946f7ed8372e56117fe5e23b",
+    "adapter": "redux",
+    "task": "speech_to_text",
+    "issue": 113,
+    "license": "cc-by-4.0",
+    "precision": "native_ternary",
+    "requirements": {
+      "torch": "2.9.1",
+      "kestrel": "0.9.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 12988,
+        "git_blob": "de96f2b1ea6ccde07e8a7df80b57ab40f2e00d77"
+      },
+      "model.safetensors": {
+        "bytes": 177774490,
+        "sha256": "78ec25733ee0d0c1586d1346fc86db9d0c2e436e3a8ab1d32a82d1bb8f848d21"
+      },
+      "ternary.json": {
+        "bytes": 57970,
+        "git_blob": "a2bba98208d04be9a4c646d00e80b2f6f52ac3a3"
+      },
+      "tokenizer.json": {
+        "bytes": 1159960,
+        "git_blob": "a10a554cf61e38108756650018d5781ae9675c1d"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "Cactus-Compute/whistle",
+    "revision": "741118687e1f008f06d1351a402a731274789790",
+    "adapter": "whistle",
+    "task": "speech_to_text",
+    "issue": 87,
+    "license": "apache-2.0",
+    "precision": "native_quantized",
+    "requirements": {},
+    "files": {
+      "config.json": {
+        "bytes": 603,
+        "git_blob": "17cf17120ca5b91e4e378fc168af5872a11d93e8"
+      },
+      "whistle.cact": {
+        "bytes": 16919407,
+        "sha256": "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb"
+      }
+    },
+    "qualification": "unverified",
+    "unsupported_reason": "The pinned publisher Python/C interface does not expose effective decoder depth or an audited full logical packed-weight count; automatic engine acquisition and telemetry are not permitted. Native Whistle remains pending issue #87."
+  },
+  {
+    "model": "datalab-to/indra-ocr",
+    "revision": "ed345c7f158eddbc7dee0c6a7269afb75a94f7e8",
+    "adapter": "indra",
+    "task": "image_to_text",
+    "issue": 88,
+    "license": "openrail",
+    "precision": "float32",
+    "requirements": {
+      "onnxruntime": "1.31.0",
+      "indra-ocr": "0.3.2"
+    },
+    "files": {
+      "LICENSE": {
+        "bytes": 14750,
+        "git_blob": "953c202748062ee95df59ab3821876339742ac6f"
+      },
+      "config.json": {
+        "bytes": 569,
+        "git_blob": "269864e48849f9df238f4a5dda3c70504a6c029a"
+      },
+      "det.onnx": {
+        "bytes": 389948,
+        "sha256": "46b0050ce4c4692f887a1a9c038480223af1c7a91b3fcced2657d9cf00290dc4"
+      },
+      "math_dec_init.onnx": {
+        "bytes": 1356364,
+        "sha256": "919417fde9962c3318aeb478c1fe3955dd2bb8cd34476c68debed2ba39e5dcd6"
+      },
+      "math_dec_step.onnx": {
+        "bytes": 8429418,
+        "sha256": "5ff6e6cbaf0dea70314f66222a1469736a8c5e7994fab06a5b4e53c90469239f"
+      },
+      "math_enc.onnx": {
+        "bytes": 9889575,
+        "sha256": "d4e4a6c40dad1ee988d32c6403b1590ca42864d4483bbe1e671c5dbb999a5a97"
+      },
+      "math_meta.json": {
+        "bytes": 7797,
+        "git_blob": "27c61906b0e933c2fb9ce29e9362273e680a5774"
+      },
+      "mathcls.onnx": {
+        "bytes": 191005,
+        "sha256": "818b1556e9ef337958db6be0c9791299d3f74a4575586b0cd469aaae9534ff96"
+      },
+      "meta.json": {
+        "bytes": 139429,
+        "git_blob": "392fdb23a511c2ffa369b3d9bf7604cc757d7c72"
+      },
+      "order.onnx": {
+        "bytes": 2973138,
+        "sha256": "23635dd2324b4ccc00c408af961273a2dedd2e4f0386bc54dba678c41bcf6b46"
+      },
+      "orient.onnx": {
+        "bytes": 371414,
+        "sha256": "8d7bfce5d08bcad55955f41ca494a7f9d9d3ed5d5b6da1f6f276d5c509590729"
+      },
+      "rec.onnx": {
+        "bytes": 4977797,
+        "sha256": "e243be069b357e56a0e867a21d7482e498df42fb19678bfb67a25f48b1f06151"
+      },
+      "rec_cjk.onnx": {
+        "bytes": 9255441,
+        "sha256": "4cec840b55e1bb7f375daf30a2975404a867a71ac1a5bc5b1629c4909ce16baa"
+      },
+      "script.onnx": {
+        "bytes": 191005,
+        "sha256": "5ba37030e817affede0097a7503b6829624104166c6e0b6aacecacf919fc7d11"
+      }
+    },
+    "qualification": "unverified"
+  },
+  {
+    "model": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+    "revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+    "adapter": "nemotron",
+    "task": "speech_to_text",
+    "issue": 121,
+    "license": "other",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "nemo-toolkit": "3.0.0",
+      "torchaudio": "2.9.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 1376,
+        "git_blob": "3ba627e56b655f0600b652b273c6d1e05fbc78e4"
+      },
+      "generation_config.json": {
+        "bytes": 193,
+        "git_blob": "b7ca70126139d1bfe866146bb414f372903effdb"
+      },
+      "nemotron-3.5-asr-streaming-0.6b.nemo": {
+        "bytes": 2368284501,
+        "sha256": "210214ed94039bf6bfbb9a047c7fa289628db75b103e2bf6381fa78285436a74"
+      },
+      "processor_config.json": {
+        "bytes": 2519,
+        "git_blob": "d430fe73aa4a2a97b2a0ea606f768b5e71765c3d"
+      },
+      "tokenizer.json": {
+        "bytes": 752051,
+        "git_blob": "425c659bba34d7116233c6e102d2948c26e114f7"
+      },
+      "tokenizer_config.json": {
+        "bytes": 881,
+        "git_blob": "33e468c971b257265e23a56ca113d2e86b363b30"
+      }
+    },
+    "qualification": "unverified"
+  }
+]

@@ -21,6 +21,7 @@ pub struct ProviderClient {
     model: String,
     client: reqwest::Client,
     decision_configuration: Arc<OnceLock<DecisionConfiguration>>,
+    native_retrieval: Arc<OnceLock<bool>>,
 }
 
 impl ProviderClient {
@@ -42,6 +43,7 @@ impl ProviderClient {
             model,
             client,
             decision_configuration: Arc::new(OnceLock::new()),
+            native_retrieval: Arc::new(OnceLock::new()),
         })
     }
 
@@ -150,10 +152,31 @@ impl ProviderClient {
                             "decision scoring requires a recorded checkpoint revision".into()
                         );
                     }
-                    if metadata.configuration.get("dtype").and_then(Value::as_str)
-                        != Some("float32")
-                    {
-                        return Err("decision scoring requires CPU float32 execution".into());
+                    let precision = metadata.configuration.get("dtype").and_then(Value::as_str);
+                    let native_d3 = precision == Some("bfloat16")
+                        && metadata
+                            .configuration
+                            .get("precision_admission")
+                            .and_then(Value::as_str)
+                            == Some("d3-native-bf16-backbone-fp32-readout-v1")
+                        && matches!(
+                            (
+                                self.model.as_str(),
+                                metadata
+                                    .configuration
+                                    .get("revision")
+                                    .and_then(Value::as_str)
+                            ),
+                            (
+                                "vllm-sr/d3-edge",
+                                Some("c454ee39b862248d70abd7f84195d2f54ffe6d43")
+                            ) | (
+                                "vllm-sr/d3-lite",
+                                Some("03560c26f5199c3c04129a2ccb38960c913635e0")
+                            )
+                        );
+                    if precision != Some("float32") && !native_d3 {
+                        return Err("decision scoring requires CPU float32 execution or the explicitly admitted pinned native d3 BF16 configuration".into());
                     }
                     let configuration: DecisionConfiguration = serde_json::from_value(
                         metadata
@@ -200,15 +223,43 @@ impl ProviderClient {
         if configuration.get("device").and_then(Value::as_str) != Some("cpu") {
             return Err("Local CPU endpoint must report CPU-only execution".into());
         }
-        if !configuration
+        let exact_count = configuration
             .get("parameter_count")
             .and_then(Value::as_u64)
-            .is_some_and(|count| count > 0 && count < 1_000_000_000)
-        {
+            .is_some_and(|count| count > 0 && count < 1_000_000_000);
+        let indra_bound = self.model == "datalab-to/indra-ocr"
+            && configuration.get("revision").and_then(Value::as_str)
+                == Some("ed345c7f158eddbc7dee0c6a7269afb75a94f7e8")
+            && configuration.get("dtype").and_then(Value::as_str) == Some("float32")
+            && configuration
+                .get("parameter_count")
+                .is_some_and(Value::is_null)
+            && configuration
+                .get("parameter_count_basis")
+                .and_then(Value::as_str)
+                == Some("onnx-full-static-constant-upper-bound-v1")
+            && configuration
+                .get("parameter_count_upper_bound")
+                .and_then(Value::as_u64)
+                .is_some_and(|count| count > 0 && count < 1_000_000_000);
+        if !exact_count && !indra_bound {
             return Err(
                 "Local CPU model must report fewer than one billion loaded parameters".into(),
             );
         }
+        let native_retrieval = configuration
+            .get("retrieval")
+            .and_then(|value| value.get("method"))
+            .and_then(Value::as_str)
+            == Some("maxsim");
+        if self
+            .native_retrieval
+            .get()
+            .is_some_and(|previous| *previous != native_retrieval)
+        {
+            return Err("provider retrieval method changed during this run".into());
+        }
+        let _ = self.native_retrieval.set(native_retrieval);
         let version = value
             .get("version")
             .and_then(Value::as_str)
@@ -328,6 +379,11 @@ impl ProviderClient {
                     "Local CPU ranking must contain every candidate index exactly once".into(),
                 );
             }
+        }
+        if task == Task::Embedding
+            && output.retrieval.is_some() != *self.native_retrieval.get().unwrap_or(&false)
+        {
+            return Err("provider retrieval result differs from its declared method".into());
         }
         output.latency_ms = elapsed_ms(started);
         Ok(output)
@@ -1134,7 +1190,29 @@ fn parse_local_cpu_event(
                     if let Some(text) = value.get("output_text").and_then(Value::as_str) {
                         output.output_text = Some(text.to_string());
                     }
-                    if task != Task::SpeechToText {
+                    if task == Task::SpeechToText {
+                        if let Some(duration) = value
+                            .get("audio_duration_seconds")
+                            .filter(|value| !value.is_null())
+                        {
+                            let duration = duration
+                                .as_f64()
+                                .filter(|duration| duration.is_finite() && *duration > 0.0)
+                                .ok_or_else(|| {
+                                    "speech audio duration must be a positive finite number"
+                                        .to_string()
+                                })?;
+                            output.audio_duration_seconds = Some(duration);
+                        }
+                        if let Some(routing) =
+                            value.get("speech_routing").filter(|value| !value.is_null())
+                        {
+                            if !routing.is_object() {
+                                return Err("speech routing evidence must be an object".into());
+                            }
+                            output.speech_routing = Some(routing.clone());
+                        }
+                    } else {
                         output.input_tokens = value.get("input_tokens").and_then(Value::as_u64);
                         output.output_tokens = value.get("output_tokens").and_then(Value::as_u64);
                         output.ttft_ms = value
@@ -1153,6 +1231,19 @@ fn parse_local_cpu_event(
                     }
                 }
                 Task::Embedding => {
+                    if let Some(retrieval) = value.get("retrieval") {
+                        if value.get("embeddings").is_some() {
+                            return Err(
+                                "retrieval results must not also supply dense embeddings".into()
+                            );
+                        }
+                        output.retrieval =
+                            Some(serde_json::from_value(retrieval.clone()).map_err(|error| {
+                                format!("invalid native retrieval observation: {error}")
+                            })?);
+                        *terminal = true;
+                        return Ok(());
+                    }
                     output.embeddings = parse_embeddings(
                         value
                             .get("embeddings")

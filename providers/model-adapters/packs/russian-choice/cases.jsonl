@@ -1,0 +1,3 @@
+{"id":"weather","decision":{"state":"Сейчас идёт сильный дождь. Анна выходит на улицу пешком.","question":"Что Анне стоит взять с собой?","candidates":[{"id":"umbrella","text":"Зонт"},{"id":"sunglasses","text":"Солнечные очки"}],"expected":"umbrella"}}
+{"id":"temperature","decision":{"state":"На улице минус десять градусов. Борис собирается на долгую прогулку.","question":"Какую одежду лучше выбрать?","candidates":[{"id":"coat","text":"Тёплую зимнюю куртку"},{"id":"shirt","text":"Лёгкую футболку"}],"expected":"coat"}}
+{"id":"reading","decision":{"state":"В комнате темно. Вера хочет прочитать бумажную книгу.","question":"Какое действие поможет Вере читать?","candidates":[{"id":"close","text":"Закрыть книгу"},{"id":"light","text":"Включить лампу"}],"expected":"light"}}

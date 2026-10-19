@@ -253,6 +253,8 @@ async fn execute_observed(
                 output_excerpt: None,
                 output_image: None,
                 decision: None,
+                retrieval: None,
+                speech: None,
             };
             match result {
                 Ok(invocation) => {
@@ -304,9 +306,12 @@ async fn warm_up(
         .first()
         .ok_or_else(|| "benchmark has no cases".to_string())?;
     for _ in 0..warmups {
-        provider
+        let output = provider
             .invoke(benchmark.task, case, max_output_tokens)
             .await?;
+        if let Some(retrieval) = &output.retrieval {
+            retrieval.validate(case.documents.len())?;
+        }
     }
     Ok(())
 }
@@ -338,7 +343,17 @@ fn measured_sample(
     } else {
         None
     };
+    if task == Task::SpeechToText {
+        sample.speech = Some(crate::model::SpeechObservation {
+            transcript: invocation
+                .output_text
+                .ok_or_else(|| "provider returned no transcript".to_string())?,
+            audio_duration_seconds: invocation.audio_duration_seconds,
+            routing: invocation.speech_routing,
+        });
+    }
     sample.output_image = invocation.output_image;
+    sample.retrieval = invocation.retrieval;
     Ok(())
 }
 
@@ -392,6 +407,18 @@ fn quality_score(
             None => Ok(None),
         },
         Task::Embedding => {
+            if let Some(retrieval) = &invocation.retrieval {
+                retrieval.validate(case.documents.len())?;
+                return Ok(case
+                    .expected_index
+                    .and_then(|expected| {
+                        retrieval
+                            .ranking
+                            .iter()
+                            .position(|index| *index == expected)
+                    })
+                    .map(|position| 1.0 / (position as f64 + 1.0)));
+            }
             let expected_count = case.documents.len() + 1;
             if invocation.embeddings.len() != expected_count {
                 return Err(format!(
@@ -439,6 +466,14 @@ fn quality_score(
 fn output_excerpt(task: Task, invocation: &InvocationResult) -> Result<Option<String>, String> {
     match task {
         Task::Embedding => {
+            if let Some(retrieval) = &invocation.retrieval {
+                return Ok(Some(format!(
+                    "MaxSim scores {:?}; {} query vectors; {} documents",
+                    retrieval.scores,
+                    retrieval.query.len(),
+                    retrieval.documents.len()
+                )));
+            }
             let query = invocation
                 .embeddings
                 .first()

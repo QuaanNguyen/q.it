@@ -7,6 +7,7 @@ pub mod model;
 pub mod packs;
 pub mod paths;
 pub mod provider;
+pub mod retrieval;
 pub mod runner;
 pub mod spa;
 pub mod store;

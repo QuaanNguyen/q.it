@@ -13,3 +13,7 @@
 /providers/local-cpu/dist/
 /.ruff_cache/
 /.venv-cpu/
+/providers/model-adapters/*.egg-info/
+/providers/model-adapters/**/__pycache__/
+/providers/model-adapters/build/
+/providers/model-adapters/dist/

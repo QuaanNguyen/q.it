@@ -696,7 +696,31 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
                     {sample.latency_ms === null ? "-" : time(sample.latency_ms)}
                   </td>
                   <td className="sample-output">
-                    {sample.error ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
+                    {sample.error ?? sample.speech?.transcript ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
+                    {sample.speech?.audio_duration_seconds != null && (
+                      <div>{sample.speech.audio_duration_seconds.toFixed(3)} s audio</div>
+                    )}
+                    {sample.speech?.routing && (
+                      <details>
+                        <summary>Speech route</summary>
+                        <pre>{JSON.stringify(sample.speech.routing, null, 2)}</pre>
+                      </details>
+                    )}
+                    {sample.retrieval && (
+                      <details>
+                        <summary>MaxSim / {sample.retrieval.query.length} query vectors</summary>
+                        <ol>
+                          {sample.retrieval.ranking.map((index) => (
+                            <li key={index}>
+                              Document {index + 1} / {sample.retrieval!.scores[index].toFixed(6)} / {sample.retrieval!.documents[index].length} vectors
+                            </li>
+                          ))}
+                        </ol>
+                        <a download={`${run.id}.json`} href={`/api/runs/${encodeURIComponent(run.id)}`}>
+                          [ raw run JSON ]
+                        </a>
+                      </details>
+                    )}
                     {sample.decision && <DecisionOutput observation={sample.decision} />}
                     {sample.output_image && (
                       <a href={sample.output_image} download={`${sample.case_id}.png`}>

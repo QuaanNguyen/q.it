@@ -145,6 +145,20 @@ export type Sample = {
   output_excerpt: string | null;
   output_image: string | null;
   decision?: DecisionObservation | null;
+  speech?: {
+    transcript: string;
+    audio_duration_seconds: number | null;
+    routing: Record<string, unknown> | null;
+  } | null;
+  retrieval?: {
+    schema_version: number;
+    method: string;
+    query: number[][];
+    documents: number[][][];
+    scores: number[];
+    ranking: number[];
+    tie_break: string;
+  } | null;
 };
 
 export type RunDetail = { run: Run; samples: Sample[] };

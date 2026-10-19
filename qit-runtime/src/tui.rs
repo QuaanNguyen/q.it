@@ -745,8 +745,29 @@ impl App {
                 if let Some(error) = &sample.error {
                     lines.push(format!("Error: {error}"));
                 }
-                if let Some(output) = &sample.output_excerpt {
+                if let Some(speech) = &sample.speech {
+                    lines.push(format!(
+                        "Audio duration {} s",
+                        metric(speech.audio_duration_seconds)
+                    ));
+                    lines.push(speech.transcript.clone());
+                    if let Some(routing) = &speech.routing {
+                        lines.push(serde_json::to_string_pretty(routing).unwrap_or_default());
+                    }
+                } else if let Some(output) = &sample.output_excerpt {
                     lines.push(output.clone());
+                }
+                if let Some(retrieval) = &sample.retrieval {
+                    lines.push(format!("MaxSim / {} query vectors", retrieval.query.len()));
+                    for index in &retrieval.ranking {
+                        lines.push(format!(
+                            "Document {} / score {:.6} / {} vectors",
+                            index + 1,
+                            retrieval.scores[*index],
+                            retrieval.documents[*index].len()
+                        ));
+                    }
+                    lines.push("Complete token vectors are retained in JSONL exports".into());
                 }
                 if let Some(image) = &sample.output_image {
                     lines.push(format!(
