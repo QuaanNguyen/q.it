@@ -209,6 +209,12 @@ def locked_environment(profile):
         source_verification = None
     return {
         "packages": installed,
+        "adapter_source": {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in files("qit_adapters").iterdir()
+            if path.is_file()
+            and (path.name.endswith(".py") or path.name == "models.json")
+        },
         "lock_sha256": hashlib.sha256(content.encode()).hexdigest(),
         "installed_records": records,
         "installed_sources": sources,

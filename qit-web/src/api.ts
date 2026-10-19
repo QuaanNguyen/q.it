@@ -144,6 +144,7 @@ export type Sample = {
   quality_score: number | null;
   output_excerpt: string | null;
   output_image: string | null;
+  output_metadata?: Record<string, unknown> | null;
   decision?: DecisionObservation | null;
   speech?: {
     transcript: string;

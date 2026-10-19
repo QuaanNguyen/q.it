@@ -133,6 +133,20 @@ def audit_graph(path, onnx):
     }
 
 
+class ObservedSession:
+    def __init__(self, session, name, calls):
+        self.session = session
+        self.name = name
+        self.calls = calls
+
+    def run(self, *args, **kwargs):
+        self.calls[self.name] = self.calls.get(self.name, 0) + 1
+        return self.session.run(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.session, name)
+
+
 class OnnxOcrRuntime:
     def __init__(self, profile, directory, threads):
         import numpy
@@ -174,6 +188,14 @@ class OnnxOcrRuntime:
                 )
         if self.model.mask is not None:
             raise ValueError("unmanifested Indra mask graph is forbidden")
+        self.stage_calls = {}
+        for name, session in sessions.items():
+            parent, attribute = (
+                (self.model.math, name.removeprefix("math."))
+                if name.startswith("math.")
+                else (self.model, name)
+            )
+            setattr(parent, attribute, ObservedSession(session, name, self.stage_calls))
         self.numpy = numpy
         self.configuration = None
         self.audit = {
@@ -210,7 +232,16 @@ class OnnxOcrRuntime:
                 "Indra is an OCR route and requires the pack's <OCR> directive"
             )
         image = image_from_case(case).convert("L")
+        self.stage_calls.clear()
         page = self.model(self.numpy.asarray(image), turn=True)
         if not isinstance(page.text, str):
             raise ValueError("Indra did not return native OCR text")
-        return {"type": "result", "output_text": page.text}
+        return {
+            "type": "result",
+            "output_text": page.text,
+            "output_metadata": {
+                "schema_version": 1,
+                "route": "indra-full-ocr",
+                "stage_calls": dict(self.stage_calls),
+            },
+        }

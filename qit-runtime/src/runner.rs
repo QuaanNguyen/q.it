@@ -252,6 +252,7 @@ async fn execute_observed(
                 quality_score: None,
                 output_excerpt: None,
                 output_image: None,
+                output_metadata: None,
                 decision: None,
                 retrieval: None,
                 speech: None,
@@ -353,6 +354,7 @@ fn measured_sample(
         });
     }
     sample.output_image = invocation.output_image;
+    sample.output_metadata = invocation.output_metadata;
     sample.retrieval = invocation.retrieval;
     Ok(())
 }

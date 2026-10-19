@@ -745,6 +745,9 @@ impl App {
                 if let Some(error) = &sample.error {
                     lines.push(format!("Error: {error}"));
                 }
+                if let Some(metadata) = &sample.output_metadata {
+                    lines.push(format!("Output evidence: {metadata}"));
+                }
                 if let Some(speech) = &sample.speech {
                     lines.push(format!(
                         "Audio duration {} s",

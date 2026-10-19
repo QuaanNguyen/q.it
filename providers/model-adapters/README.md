@@ -87,11 +87,12 @@ Review those exact files before adding `--allow-reviewed-code` to `serve`.
 Their manifest includes file sizes, original Git blob or LFS identities, and explicit SHA-256 identities for reviewed Python files.
 Changing a revision or a source file requires a new review and qualification.
 
-The result metadata retains model and source artifacts, the dependency lock digest, installed distribution record digests, package versions, native preparation, loaded tensor device and precision, and original license links.
+The result metadata retains model and source artifacts, the adapter's own source digests, the dependency lock digest, installed distribution record digests, package versions, native preparation, loaded tensor device and precision, and original license links.
 FRIDA additionally validates the pinned source archive's installed provenance.
 NeMo inventories and hashes archive members and matches the restored tokenizer back to an archive member.
 The Indra audit walks nested graphs, sparse tensors, tensor attributes, scalar/list constants, and model-local functions, and rejects unresolved attribute references, external tensor data, quantized operators, and unsupported constant precision.
 Its bound includes duplicated exports and fixed constants, so it establishes a conservative sub-billion ceiling without claiming an exact learned-parameter count.
+Each Indra result separately retains the stages actually invoked and their call counts in history and exports.
 
 Native d3 BF16 and Redux quantized runs have distinct precision and configuration identities.
 Neither is relabelled as float32.

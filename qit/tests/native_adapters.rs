@@ -24,6 +24,16 @@ async fn native_retrieval_and_speech_survive_installed_command_exports() {
         ("indra", "core/image-to-text-smoke", true),
         ("indra-wrong-revision", "core/image-to-text-smoke", false),
         ("indra-oversized", "core/image-to-text-smoke", false),
+        (
+            "indra-bad-output-metadata",
+            "core/image-to-text-smoke",
+            false,
+        ),
+        (
+            "indra-oversized-output-metadata",
+            "core/image-to-text-smoke",
+            false,
+        ),
     ] {
         let run = run(&state, &endpoint, variant, benchmark).await;
         assert_eq!(run.status.success(), succeeds, "{variant}: {run:?}");
@@ -63,6 +73,8 @@ async fn native_retrieval_and_speech_survive_installed_command_exports() {
                     assert_eq!(sample["speech"]["routing"]["language"], "en-US");
                 }
                 "image_to_text" => {
+                    assert_eq!(sample["output_metadata"]["stage_calls"]["det"], 1);
+                    assert_eq!(sample["output_metadata"]["stage_calls"]["rec"], 2);
                     assert!(
                         row["run"]["provider_metadata"]["configuration"]["parameter_count"]
                             .is_null()
@@ -251,7 +263,7 @@ async fn invoke(RoutePath(variant): RoutePath<String>, Json(body): Json<Value>) 
     } else if variant.starts_with("d3") {
         json!({"type":"result","decision":{"schema_version":1,"candidates":[{"id":"a","probability":0.75},{"id":"b","probability":0.25}],"selected_id":"a","provenance":{"calibration":"native","selection_rule":"candidate_order","preprocessing":"fixture","input_digest":"a".repeat(64),"input_truncated":false,"native":{}}}})
     } else if variant.starts_with("indra") {
-        json!({"type":"result","output_text":"fixture OCR"})
+        json!({"type":"result","output_text":"fixture OCR","output_metadata":if variant=="indra-bad-output-metadata" {json!([])} else if variant=="indra-oversized-output-metadata" {json!({"value":"x".repeat(65_536)})} else {json!({"schema_version":1,"stage_calls":{"det":1,"rec":2}})}})
     } else {
         json!({"type":"result","output_text":"complete native transcript ".repeat(50),"audio_duration_seconds":if variant=="speech-bad-duration" {-1.0} else {1.25},"speech_routing":{"language":"en-US"},"output_tokens":999,"first_token_latency_ns":1000})
     };

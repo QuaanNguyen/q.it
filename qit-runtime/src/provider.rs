@@ -1177,6 +1177,15 @@ fn parse_local_cpu_event(
             Ok(())
         }
         Some("result") => {
+            if let Some(metadata) = value
+                .get("output_metadata")
+                .filter(|value| !value.is_null())
+            {
+                if !metadata.is_object() || metadata.to_string().len() > 65_536 {
+                    return Err("output metadata must be an object of at most 64 KiB".into());
+                }
+                output.output_metadata = Some(metadata.clone());
+            }
             match task {
                 Task::DecisionScoring => {
                     output.decision = Some(
