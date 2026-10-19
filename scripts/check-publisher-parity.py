@@ -8,7 +8,6 @@ import math
 import os
 from pathlib import Path
 import sys
-import tempfile
 
 
 def source_module(path):
@@ -364,20 +363,15 @@ def reference(adapter, native, request, configuration, torch):
 
         return native(numpy.asarray(image(case).convert("L")), turn=True).text
     if adapter == "nemotron":
-        import soundfile
-
-        with tempfile.TemporaryDirectory(prefix="qit-native-nemotron-") as directory:
-            path = directory + "/utterance.wav"
-            soundfile.write(path, audio(case), 16000, subtype="FLOAT")
-            return native.transcribe(
-                audio=[path],
-                batch_size=1,
-                return_hypotheses=True,
-                num_workers=0,
-                verbose=False,
-                timestamps=False,
-                target_lang="en-US",
-            )[0].text
+        return native.transcribe(
+            audio=[audio(case)],
+            batch_size=1,
+            return_hypotheses=True,
+            num_workers=0,
+            verbose=False,
+            timestamps=False,
+            target_lang="en-US",
+        )[0].text
     raise ValueError("unsupported native comparison")
 
 

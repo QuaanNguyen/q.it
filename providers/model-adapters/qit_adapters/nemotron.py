@@ -2,7 +2,6 @@ from dataclasses import asdict
 import hashlib
 from pathlib import PurePosixPath
 import tarfile
-import tempfile
 
 from .media import audio_from_case
 
@@ -62,6 +61,11 @@ class NemotronRuntime:
         )
         if type(self.model).__name__ != "EncDecRNNTBPEModelWithPrompt":
             raise ValueError("unsupported Nemotron restored model class")
+        sample_rate = self.model.cfg.get(
+            "sample_rate", getattr(self.model, "sample_rate", None)
+        )
+        if sample_rate != 16000:
+            raise ValueError("native Nemotron waveform loading requires a 16 kHz model")
         prompts = OmegaConf.to_container(
             self.model.cfg.model_defaults.prompt_dictionary, resolve=True
         )
@@ -101,6 +105,11 @@ class NemotronRuntime:
                 "restored Nemotron streaming configuration lacks chunk size"
             )
         self.torch = torch
+        self.prompt_index = int(prompts["en-US"])
+        if not 0 <= self.prompt_index < self.model.num_prompts:
+            raise ValueError(
+                "Nemotron en-US prompt index exceeds the native prompt width"
+            )
         self.extra_tensors = {}
         self.configuration = None
         self.preparation = {
@@ -108,6 +117,10 @@ class NemotronRuntime:
             "audio_rate": 16000,
             "channels": 1,
             "max_seconds": 30,
+            "audio_input": "native in-memory float32 waveform loader",
+            "native_min_audio_seconds": 1.0,
+            "native_audio_pad_direction": "both",
+            "language_prompt_application": "native dynamic prompt; actual one-hot input observed at the prompt projection",
             "language_prompt": {"language": "en-US", "index": prompts["en-US"]},
             "prompt_dictionary": prompts,
             "decoder": actual_decoder,
@@ -120,15 +133,26 @@ class NemotronRuntime:
         }
 
     def invoke(self, case, max_tokens):
-        import soundfile
-
         samples = audio_from_case(case, 16000)
-        with tempfile.TemporaryDirectory(prefix="qit-nemotron-") as temporary:
-            path = temporary + "/utterance.wav"
-            soundfile.write(path, samples, 16000, subtype="FLOAT")
+        observed = []
+
+        def observe_prompt(module, inputs):
+            prompt = inputs[0][..., -self.model.num_prompts :]
+            if (
+                not self.torch.all(prompt[..., self.prompt_index] == 1)
+                or not self.torch.all((prompt == 0) | (prompt == 1))
+                or not self.torch.all(prompt.sum(dim=-1) == 1)
+            ):
+                raise ValueError(
+                    "native Nemotron did not apply the requested en-US prompt"
+                )
+            observed.append({"index": self.prompt_index, "frames": prompt.shape[-2]})
+
+        observer = self.model.prompt_kernel.register_forward_pre_hook(observe_prompt)
+        try:
             with self.torch.inference_mode():
                 hypotheses = self.model.transcribe(
-                    audio=[path],
+                    audio=[samples],
                     batch_size=1,
                     return_hypotheses=True,
                     num_workers=0,
@@ -136,6 +160,12 @@ class NemotronRuntime:
                     timestamps=False,
                     target_lang="en-US",
                 )
+        finally:
+            observer.remove()
+        if not observed:
+            raise ValueError(
+                "native Nemotron did not expose its effective language prompt"
+            )
         if not isinstance(hypotheses, list) or len(hypotheses) != 1:
             raise ValueError("Nemotron must return one complete native hypothesis")
         text = hypotheses[0].text
@@ -148,6 +178,7 @@ class NemotronRuntime:
             "speech_routing": {
                 "route": "nemo-full-utterance",
                 "language_prompt": self.preparation["language_prompt"],
+                "effective_prompt": observed,
                 "streaming_configuration": self.preparation["streaming_configuration"],
                 "cache_execution": self.preparation["cache_execution"],
             },

@@ -77,6 +77,8 @@ No candidate checkbox is completed by dependency resolution or fixture tests.
 
 The NeMo environment is an independent copy of the compatible #112 lock.
 It does not change the QVAC profiles or their recorded validation.
+Nemotron uses the publisher's in-memory waveform path because its pinned file-list loader loses the requested language prompt.
+The adapter observes the actual one-hot language input at the native prompt projection and fails if it differs from the declared English prompt.
 Whistle never invokes a wrapper that downloads an engine or sends publisher telemetry.
 Its pinned artifact manifest is retained, but serving remains a precise unsupported path under #87.
 
