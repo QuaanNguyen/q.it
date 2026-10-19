@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "image-choice-smoke",
+  "name": "Image single-choice smoke",
+  "version": "1.0.0",
+  "description": "One original image-backed transport and scoring case, without dataset-quality claims.",
+  "publisher": "q.it",
+  "license": "MIT",
+  "source": "Original q.it two-color fixture",
+  "benchmarks": [
+    {
+      "id": "choice",
+      "name": "Image choice",
+      "description": "Select the two colors in the supplied image.",
+      "task": "decision_scoring",
+      "decision_input": "image",
+      "cases": "cases.jsonl"
+    }
+  ]
+}
