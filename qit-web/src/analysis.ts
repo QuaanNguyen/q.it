@@ -34,6 +34,7 @@ export function modelKey(run: Run): string {
     const configuration = run.provider_metadata?.configuration;
     identity.push(canonical(configuration ? Object.fromEntries(Object.entries(configuration).filter(([key]) => key !== "pid")) : null));
   }
+  if (run.provider_metadata?.configuration?.configuration_digest) identity.push(run.provider_metadata.configuration.configuration_digest);
   return JSON.stringify(identity);
 }
 

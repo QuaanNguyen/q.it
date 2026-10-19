@@ -1134,7 +1134,29 @@ fn parse_local_cpu_event(
                     if let Some(text) = value.get("output_text").and_then(Value::as_str) {
                         output.output_text = Some(text.to_string());
                     }
-                    if task != Task::SpeechToText {
+                    if task == Task::SpeechToText {
+                        if let Some(duration) = value
+                            .get("audio_duration_seconds")
+                            .filter(|value| !value.is_null())
+                        {
+                            let duration = duration
+                                .as_f64()
+                                .filter(|duration| duration.is_finite() && *duration > 0.0)
+                                .ok_or_else(|| {
+                                    "speech audio duration must be a positive finite number"
+                                        .to_string()
+                                })?;
+                            output.audio_duration_seconds = Some(duration);
+                        }
+                        if let Some(routing) =
+                            value.get("speech_routing").filter(|value| !value.is_null())
+                        {
+                            if !routing.is_object() {
+                                return Err("speech routing evidence must be an object".into());
+                            }
+                            output.speech_routing = Some(routing.clone());
+                        }
+                    } else {
                         output.input_tokens = value.get("input_tokens").and_then(Value::as_u64);
                         output.output_tokens = value.get("output_tokens").and_then(Value::as_u64);
                         output.ttft_ms = value

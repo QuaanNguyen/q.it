@@ -341,6 +341,12 @@ Its image, audio, and video embedding modes still need a suitable server integra
 The current release does not claim multimodal EmbeddingGemma 2 support.
 See [the benchmark landscape](docs/research/pi5-edge-benchmark-landscape.md) for the researched expansion plan.
 
+
+### Optional QVAC speech provider
+
+The original QVAC EU and EU-sub speech checkpoints have an optional NeMo provider with a separate environment.
+See the [QVAC CPU guide](docs/qvac-nemo-cpu.md) for explicit acquisition, language routing, and the Linux qualification boundary.
+
 ## Development
 
 Run the Rust test suite:

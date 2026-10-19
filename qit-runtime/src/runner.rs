@@ -155,6 +155,7 @@ pub async fn execute_benchmark(
                 output_excerpt: None,
                 output_image: None,
                 decision: None,
+                speech: None,
             };
             match result {
                 Ok(invocation) => {
@@ -236,6 +237,15 @@ fn measured_sample(
     } else {
         None
     };
+    if task == Task::SpeechToText {
+        sample.speech = Some(crate::model::SpeechObservation {
+            transcript: invocation
+                .output_text
+                .ok_or_else(|| "provider returned no transcript".to_string())?,
+            audio_duration_seconds: invocation.audio_duration_seconds,
+            routing: invocation.speech_routing,
+        });
+    }
     sample.output_image = invocation.output_image;
     Ok(())
 }
