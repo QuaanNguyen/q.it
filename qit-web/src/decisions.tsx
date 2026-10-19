@@ -2,14 +2,18 @@ import type { DecisionObservation, Run } from "./api";
 import { logLoss, providerLabel } from "./api";
 import { decisionRankings } from "./analysis";
 
-export function DecisionRankings({ runs }: { runs: Run[] }) {
+export function DecisionRankings({ runs, rankings }: { runs: Run[]; rankings?: { run_id: string; rank: number }[] }) {
+  const ranked = rankings ? [
+    ...rankings.flatMap((entry) => runs.filter((run) => run.id === entry.run_id).map((run) => ({ run, rank: entry.rank as number | null }))),
+    ...runs.filter((run) => !rankings.some((entry) => entry.run_id === run.id)).map((run) => ({ run, rank: null })),
+  ] : decisionRankings(runs);
   return (
     <section className="panel decision-rankings" aria-label="Decision accuracy ranking">
       <div className="section-title"><h2>Choice accuracy</h2></div>
       <div className="table-scroll">
         <table>
           <thead><tr><th>Rank</th><th>Model</th><th>Accuracy ↑</th><th>Brier ↓</th><th>Log loss ↓</th><th>Zero-probability gold</th></tr></thead>
-          <tbody>{decisionRankings(runs).map(({ run, rank }) => (
+          <tbody>{ranked.map(({ run, rank }) => (
             <tr key={run.id}>
               <td>{rank ?? "-"}</td>
               <td><a href={`#/runs?run=${encodeURIComponent(run.id)}`}>{run.model}</a><small>{providerLabel(run.provider)}</small></td>

@@ -37,7 +37,7 @@ test ! -e "$smoke_dir/install/bin/qit-stub-worker"
 
 QIT_TEST_BINARY="$smoke_dir/install/bin/qit" cargo test \
   --manifest-path "$repo_dir/Cargo.toml" \
-  --locked --offline -p qit --test decisions
+  --locked --offline -p qit --test decisions --test terminal
 
 cd "$smoke_dir"
 QIT_HOME="$smoke_dir/state" \

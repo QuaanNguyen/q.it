@@ -1,3 +1,4 @@
+pub mod analysis;
 pub mod command;
 pub mod config;
 pub mod dashboard;
@@ -78,3 +79,5 @@ pub async fn bind(config: Config) -> Result<Listening, String> {
         join: Some(join),
     })
 }
+
+pub mod tui;

@@ -38,6 +38,11 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --locked --workspace
+      - name: Verify terminal interaction
+        run: |
+          python3 -m venv /tmp/qit-terminal-tests
+          /tmp/qit-terminal-tests/bin/pip install pyte==0.8.2 wcwidth==0.9.2
+          /tmp/qit-terminal-tests/bin/python scripts/test-terminal-ui.py target/debug/qit
       - name: Verify clean packaged installation
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/qit-package-target

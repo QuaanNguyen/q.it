@@ -73,3 +73,13 @@ qit benchmark verify ./path-to-pack
 Check formatting, tests, generated dashboard assets, and the final diff before handing work off.
 Do not edit generated dashboard files manually.
 Do not manually edit `CHANGELOG.md`.
+
+The terminal interaction check drives an 80 by 24 pseudo-terminal with a loopback fixture provider.
+It needs the test-only terminal emulator, with no model downloads:
+
+```bash
+python3 -m venv /tmp/qit-terminal-tests
+/tmp/qit-terminal-tests/bin/pip install pyte==0.8.2 wcwidth==0.9.2
+cargo build --locked -p qit
+/tmp/qit-terminal-tests/bin/python scripts/test-terminal-ui.py target/debug/qit
+```

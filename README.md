@@ -64,7 +64,19 @@ Make a small model available from another terminal:
 ollama pull gemma3:1b
 ```
 
-### 3. Check compatibility
+### 3. Open the terminal workspace
+
+```bash
+qit tui
+```
+
+Use the numbered screens to choose a benchmark, start a run, watch progress, inspect saved results, and compare models.
+Use the arrow keys and Enter to select or edit, Tab to change screens, and `q` to exit.
+Press `x` on the progress screen to interrupt a run and retain its completed cases in history.
+The terminal workspace works inside an SSH session without a browser, listening port, Node, or special font.
+Models and their optional serving packages must already be installed and running.
+
+### Command-line alternatives
 
 List the available server types:
 
@@ -78,7 +90,7 @@ List benchmarks that Ollama can run:
 qit benchmark list --provider ollama
 ```
 
-### 4. Run a benchmark
+### Run a benchmark from a script
 
 ```bash
 qit run core/text-generation-smoke \
@@ -86,16 +98,20 @@ qit run core/text-generation-smoke \
   --model gemma3:1b
 ```
 
+Each saved case prints a progress line to standard error while the final summary remains on standard output.
+Ctrl-C interrupts a run and retains its completed cases.
 The default run performs one warmup and three measured passes over every case.
 The warmup is excluded from the reported measurements.
 
-### 5. Inspect the result
+### Inspect the result
 
 ```bash
 qit results
 ```
 
-Start the optional dashboard when you want charts:
+### Optional web dashboard
+
+For charts, or for browsing results from a laptop, start the optional dashboard:
 
 ```bash
 qit dashboard
@@ -110,6 +126,10 @@ ssh -L 2471:127.0.0.1:2471 pi@raspberrypi.local
 ```
 
 Then open [http://127.0.0.1:2471](http://127.0.0.1:2471) on your computer.
+
+You can also use `qit export` for portable results.
+To browse a copied history, stop q.it before copying its entire results directory to your laptop, then point the laptop installation at that copy and run `qit dashboard`.
+This avoids needing an SSH tunnel.
 
 The overview compares models in a grid of latency, time-to-first-token, throughput, quality, CPU, and memory charts.
 Choose a benchmark version and machine setup to compare the latest successful run for each model configuration.

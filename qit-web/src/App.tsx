@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 import { api, bytes, metric, providerLabel, taskLabel } from "./api";
 import { DecisionOutput, DecisionRankings } from "./decisions";
 import type {
+  Analysis,
   Benchmark,
   Host,
   Provider,
@@ -12,10 +13,7 @@ import type {
   RunsResponse,
 } from "./api";
 import {
-  comparisonGroups,
-  latestModels,
   qualityLabel,
-  setupKey,
 } from "./analysis";
 import {
   ModelChartColors,
@@ -30,6 +28,7 @@ type DashboardData = {
   benchmarks: Benchmark[];
   providers: ProviderInfo[];
   history: RunsResponse;
+  analysis: Analysis;
 };
 
 function currentView(): View {
@@ -59,13 +58,14 @@ export default function App() {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [host, benchmarks, providers, history] = await Promise.all([
+      const [host, benchmarks, providers, history, analysis] = await Promise.all([
         api.host(),
         api.benchmarks(),
         api.providers(),
         api.runs(),
+        api.analysis(),
       ]);
-      setData({ host, benchmarks, providers, history });
+      setData({ host, benchmarks, providers, history, analysis });
       setUpdatedAt(new Date());
       setError(null);
     } catch (reason) {
@@ -185,30 +185,20 @@ export default function App() {
 }
 
 function Overview({ data }: { data: DashboardData }) {
-  const groups = useMemo(
-    () => comparisonGroups(data.history.runs),
-    [data.history.runs],
-  );
+  const groups = useMemo(() => {
+    const grouped = new Map<string, Run[]>();
+    for (const setup of data.analysis.groups) {
+      grouped.set(setup.benchmark_key, [...(grouped.get(setup.benchmark_key) ?? []), ...setup.runs]);
+    }
+    return [...grouped].map(([key, runs]) => ({ key, runs }));
+  }, [data.analysis]);
   const [selectedBenchmark, setSelectedBenchmark] = useState("");
   const [selectedSetup, setSelectedSetup] = useState("");
-  const group =
-    groups.find((item) => item.key === selectedBenchmark) ?? groups[0];
-  const setups = useMemo(
-    () =>
-      [...new Set((group?.runs ?? []).map(setupKey))]
-        .map((key) => ({
-          key,
-          runs: group!.runs.filter((run) => setupKey(run) === key),
-        }))
-        .sort(
-          (left, right) =>
-            latestModels(right.runs).length - latestModels(left.runs).length,
-        ),
-    [group],
-  );
+  const group = groups.find((item) => item.key === selectedBenchmark) ?? groups[0];
+  const setups = data.analysis.groups.filter((item) => item.benchmark_key === group?.key);
   const setup = setups.find((item) => item.key === selectedSetup) ?? setups[0];
   const runs = setup?.runs ?? [];
-  const models = latestModels(runs);
+  const models = setup?.models ?? [];
   const reference = models[0];
   const benchmark = data.benchmarks.find(
     (item) => item.id === reference?.benchmark_id,
@@ -284,7 +274,7 @@ function Overview({ data }: { data: DashboardData }) {
               Latest successful run per model configuration
             </span>
           </div>
-          {reference?.task === "decision_scoring" && <DecisionRankings runs={models} />}
+          {reference?.task === "decision_scoring" && <DecisionRankings runs={models} rankings={setup?.rankings["Quality"]} />}
           <ModelChartColors runs={data.history.runs}>
             <section
               className="chart-grid"
@@ -292,6 +282,7 @@ function Overview({ data }: { data: DashboardData }) {
             >
               <RankingChart
                 title="Latency"
+                ranking={setup?.rankings["Latency ms"]}
                 number="01"
                 detail="Total request time · lower is better"
                 runs={models}
@@ -302,6 +293,7 @@ function Overview({ data }: { data: DashboardData }) {
               />
               {reference?.task !== "decision_scoring" && <RankingChart
                 title="Time to first token"
+                ranking={setup?.rankings["TTFT ms"]}
                 number="02"
                 detail="First streamed output · lower is better"
                 runs={models}
@@ -313,6 +305,7 @@ function Overview({ data }: { data: DashboardData }) {
               />}
               {reference?.task !== "decision_scoring" && <RankingChart
                 title="Token throughput"
+                ranking={setup?.rankings["Tokens/s"]}
                 number="03"
                 detail="Median decode rate · higher is better"
                 runs={models}
@@ -324,6 +317,7 @@ function Overview({ data }: { data: DashboardData }) {
               />}
               <RankingChart
                 title="Benchmark quality"
+                ranking={setup?.rankings["Quality"]}
                 number="04"
                 detail={`${quality} · higher is better`}
                 runs={models}
@@ -336,6 +330,7 @@ function Overview({ data }: { data: DashboardData }) {
               />
               <RankingChart
                 title="Provider memory"
+                ranking={setup?.rankings["Provider RSS MiB"]}
                 number="05"
                 detail="Peak process RSS · lower is better"
                 runs={models}
@@ -346,6 +341,7 @@ function Overview({ data }: { data: DashboardData }) {
               />
               <RankingChart
                 title="Host CPU use"
+                ranking={setup?.rankings["CPU %"]}
                 number="06"
                 detail="Mean whole-machine utilization · lower is lighter"
                 runs={models}

@@ -69,29 +69,6 @@ struct RunDetailBody {
     samples: Vec<SampleRecord>,
 }
 
-#[derive(Clone, Serialize)]
-struct AnalysisPoint {
-    run_id: String,
-    benchmark_id: String,
-    pack_version: String,
-    model: String,
-    provider: ProviderKind,
-    host_name: String,
-    provider_metadata: crate::model::ProviderMetadata,
-    latency_ms: Option<f64>,
-    ttft_ms: Option<f64>,
-    tokens_per_second: Option<f64>,
-    memory_bytes: Option<u64>,
-    cpu_percent: Option<f64>,
-    quality_score: Option<f64>,
-    pareto: bool,
-}
-
-#[derive(Serialize)]
-struct AnalysisBody {
-    points: Vec<AnalysisPoint>,
-}
-
 #[derive(Deserialize)]
 struct RunsQuery {
     limit: Option<usize>,
@@ -306,68 +283,16 @@ async fn start_run(
     Ok((StatusCode::ACCEPTED, Json(run)))
 }
 
-async fn analysis(State(state): State<DashboardState>) -> Result<Json<AnalysisBody>, ApiError> {
+async fn analysis(
+    State(state): State<DashboardState>,
+) -> Result<Json<crate::analysis::Analysis>, ApiError> {
     let runs = state
         .store
         .lock()
         .await
         .runs(10_000, true)
         .map_err(ApiError::internal)?;
-    let mut points = runs
-        .into_iter()
-        .map(|run| AnalysisPoint {
-            run_id: run.id,
-            benchmark_id: run.benchmark_id,
-            pack_version: run.pack_version,
-            model: run.model,
-            provider: run.provider,
-            host_name: run.host_name,
-            provider_metadata: run.provider_metadata,
-            latency_ms: run.summary.latency_ms_p50,
-            ttft_ms: run.summary.ttft_ms_p50,
-            tokens_per_second: run.summary.tokens_per_second_p50,
-            memory_bytes: run
-                .summary
-                .process_rss_bytes_peak
-                .or(run.summary.host_memory_used_bytes_peak),
-            cpu_percent: run.summary.host_cpu_percent_mean,
-            quality_score: run.summary.quality_score_mean,
-            pareto: false,
-        })
-        .collect::<Vec<_>>();
-    for index in 0..points.len() {
-        points[index].pareto = is_pareto(&points, index);
-    }
-    Ok(Json(AnalysisBody { points }))
-}
-
-fn is_pareto(points: &[AnalysisPoint], index: usize) -> bool {
-    let Some(latency) = points[index].latency_ms else {
-        return false;
-    };
-    let Some(memory) = points[index].memory_bytes else {
-        return false;
-    };
-    !points.iter().enumerate().any(|(other_index, other)| {
-        if index == other_index {
-            return false;
-        }
-        if other.benchmark_id != points[index].benchmark_id
-            || other.pack_version != points[index].pack_version
-            || other.host_name != points[index].host_name
-            || other.provider_metadata != points[index].provider_metadata
-        {
-            return false;
-        }
-        match (other.latency_ms, other.memory_bytes) {
-            (Some(other_latency), Some(other_memory)) => {
-                other_latency <= latency
-                    && other_memory <= memory
-                    && (other_latency < latency || other_memory < memory)
-            }
-            _ => false,
-        }
-    })
+    Ok(Json(crate::analysis::analyze(runs)))
 }
 
 async fn index() -> Html<String> {
