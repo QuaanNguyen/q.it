@@ -252,3 +252,8 @@ export function logLoss(value: LogLoss | null | undefined): string {
   if (!value) return "-";
   return value.status === "infinite" ? "∞" : value.value.toFixed(3);
 }
+
+export function modelLabel(run: Run): string {
+  const route = run.provider_metadata?.configuration?.route;
+  return typeof route === "string" ? `${run.model} (${route})` : run.model;
+}

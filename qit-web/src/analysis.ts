@@ -30,10 +30,8 @@ function providerSetup(run: Run): unknown {
 
 export function modelKey(run: Run): string {
   const identity: unknown[] = [run.model, run.provider, run.base_url, run.provider_metadata?.configuration?.revision ?? null];
-  if (run.task === "decision_scoring") {
-    const configuration = run.provider_metadata?.configuration;
-    identity.push(canonical(configuration ? Object.fromEntries(Object.entries(configuration).filter(([key]) => key !== "pid")) : null));
-  }
+  const configuration = run.provider_metadata?.configuration;
+  identity.push(canonical(configuration ? Object.fromEntries(Object.entries(configuration).filter(([key]) => key !== "pid")) : null));
   return JSON.stringify(identity);
 }
 

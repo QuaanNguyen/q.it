@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { api, bytes, metric, providerLabel, taskLabel } from "./api";
+import { api, bytes, metric, modelLabel, providerLabel, taskLabel } from "./api";
 import { DecisionOutput, DecisionRankings } from "./decisions";
 import type {
   Analysis,
@@ -540,7 +540,7 @@ function RunTable({ runs }: { runs: Run[] }) {
                 </a>
               </td>
               <td className="model-cell">
-                {run.model}
+                {modelLabel(run)}
                 <small>{providerLabel(run.provider)}</small>
               </td>
               <td>
@@ -629,7 +629,7 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
       <div className="detail-heading">
         <div>
           <p className="eyebrow">[ benchmark run ]</p>
-          <h2>{run.model}</h2>
+          <h2>{modelLabel(run)}</h2>
           <p>
             {run.benchmark_name} / {run.host_name}
           </p>
@@ -696,14 +696,13 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
                     {sample.latency_ms === null ? "-" : time(sample.latency_ms)}
                   </td>
                   <td className="sample-output">
-                    {sample.error ?? sample.speech?.transcript ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
-                    {sample.speech?.audio_duration_seconds != null && (
-                      <div>{sample.speech.audio_duration_seconds.toFixed(3)} s audio</div>
-                    )}
-                    {sample.speech?.routing && (
-                      <details>
-                        <summary>Speech route</summary>
-                        <pre>{JSON.stringify(sample.speech.routing, null, 2)}</pre>
+                    {sample.error ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
+                    {sample.speech && (
+                      <details className="speech-output">
+                        <summary>Full transcript</summary>
+                        <p>{sample.speech.transcript}</p>
+                        {sample.speech.audio_duration_seconds !== null && <p>Audio: {sample.speech.audio_duration_seconds.toFixed(3)} seconds</p>}
+                        {sample.speech.routing && <details><summary>Speech routing</summary><pre>{JSON.stringify(sample.speech.routing, null, 2)}</pre></details>}
                       </details>
                     )}
                     {sample.retrieval && (
