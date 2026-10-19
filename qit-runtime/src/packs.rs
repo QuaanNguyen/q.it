@@ -179,6 +179,9 @@ fn load_pack_dir(directory: &Path) -> Result<Vec<BenchmarkDefinition>, String> {
                 || media.starts_with("http://")
                 || media.starts_with("https://")
             {
+                if definition.task == Task::DecisionScoring {
+                    crate::provider::validate_decision_media(media, case.media_type.as_deref())?;
+                }
                 continue;
             }
             let relative = validated_relative_path(media)?;
@@ -191,7 +194,18 @@ fn load_pack_dir(directory: &Path) -> Result<Vec<BenchmarkDefinition>, String> {
                     path.display()
                 ));
             }
-            case.media = Some(path.to_string_lossy().to_string());
+            let canonical = fs::canonicalize(&path)
+                .map_err(|error| format!("resolve benchmark media: {error}"))?;
+            if !canonical.starts_with(&root) {
+                return Err("benchmark media must stay inside its pack".into());
+            }
+            if definition.task == Task::DecisionScoring {
+                crate::provider::validate_decision_media(
+                    &canonical.to_string_lossy(),
+                    case.media_type.as_deref(),
+                )?;
+            }
+            case.media = Some(canonical.to_string_lossy().to_string());
         }
     }
     Ok(definitions)
@@ -247,6 +261,21 @@ where
         }
         let content = read_cases(&benchmark.cases)?;
         let cases = parse_cases(&manifest.id, &benchmark.id, benchmark.task, &content)?;
+        if benchmark.task == Task::DecisionScoring {
+            let input = benchmark.decision_input.ok_or_else(|| {
+                "decision benchmarks require decision_input text or image".to_string()
+            })?;
+            if cases.iter().any(|case| {
+                case.media.is_some() != (input == crate::decision::DecisionInput::Image)
+            }) {
+                return Err(
+                    "decision benchmarks must keep text-only and image-backed cases separate"
+                        .into(),
+                );
+            }
+        } else if benchmark.decision_input.is_some() {
+            return Err("decision_input is only valid for decision benchmarks".into());
+        }
         let supported_providers = ProviderKind::ALL
             .into_iter()
             .filter(|provider| provider.supports(benchmark.task))
@@ -259,6 +288,7 @@ where
             name: benchmark.name,
             description: benchmark.description,
             task: benchmark.task,
+            decision_input: benchmark.decision_input,
             case_count: cases.len(),
             tags: benchmark.tags,
             default_max_output_tokens: benchmark.default_max_output_tokens,
@@ -319,7 +349,30 @@ fn parse_cases(
 }
 
 fn validate_case(task: Task, case: &BenchmarkCase) -> Result<(), String> {
+    if task != Task::DecisionScoring && case.decision.is_some() {
+        return Err("decision cases require the decision_scoring task".into());
+    }
     match task {
+        Task::DecisionScoring => {
+            if case.prompt.is_some()
+                || case.input.is_some()
+                || !case.documents.is_empty()
+                || case.expected_index.is_some()
+                || !case.expected_contains.is_empty()
+                || case.expected_text.is_some()
+                || case.query_prefix.is_some()
+                || case.document_prefix.is_some()
+                || case.image_settings.is_some()
+            {
+                return Err(
+                    "decision cases must use only the decision input and optional image".into(),
+                );
+            }
+            case.decision
+                .as_ref()
+                .ok_or_else(|| "decision input is required".to_string())?
+                .validate()
+        }
         Task::TextGeneration => require_text(&case.prompt, "prompt"),
         Task::TextToImage => {
             require_text(&case.prompt, "prompt")?;

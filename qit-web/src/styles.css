@@ -1070,6 +1070,21 @@ progress::-webkit-progress-value {
   border: 1px solid var(--line);
 }
 
+.decision-rankings {
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.decision-rankings small {
+  display: block;
+}
+.decision-output {
+  margin-top: 10px;
+}
+.decision-output pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .speech-output {
   margin-top: 10px;
   white-space: normal;

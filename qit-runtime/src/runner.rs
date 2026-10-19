@@ -44,11 +44,17 @@ pub fn prepare_benchmark(
         return Err("model is required".into());
     }
     let benchmark = catalog.benchmark(&request.benchmark_id)?;
-    let max_output_tokens = request
+    let mut max_output_tokens = request
         .max_output_tokens
         .unwrap_or(benchmark.default_max_output_tokens);
     if max_output_tokens == 0 {
         return Err("max output tokens must be at least 1".into());
+    }
+    if benchmark.task == Task::DecisionScoring {
+        if request.max_output_tokens.is_some() {
+            return Err("decision scoring does not accept generation token limits".into());
+        }
+        max_output_tokens = 0;
     }
     let host = HostInfo::detect();
     let run = RunRecord {
@@ -148,6 +154,7 @@ pub async fn execute_benchmark(
                 quality_score: None,
                 output_excerpt: None,
                 output_image: None,
+                decision: None,
                 speech: None,
             };
             match result {
@@ -216,6 +223,20 @@ fn measured_sample(
     sample.tokens_per_second = invocation.tokens_per_second;
     sample.quality_score = quality_score(task, case, &invocation)?;
     sample.output_excerpt = output_excerpt(task, &invocation)?;
+    sample.decision = if let Some(result) = invocation.decision {
+        let case = case
+            .decision
+            .as_ref()
+            .ok_or_else(|| "decision input is required".to_string())?;
+        Some(crate::decision::DecisionObservation {
+            case: case.clone(),
+            media: invocation.decision_media,
+            metrics: result.score(case),
+            result,
+        })
+    } else {
+        None
+    };
     if task == Task::SpeechToText {
         sample.speech = Some(crate::model::SpeechObservation {
             transcript: invocation
@@ -235,6 +256,23 @@ fn quality_score(
     invocation: &InvocationResult,
 ) -> Result<Option<f64>, String> {
     match task {
+        Task::DecisionScoring => {
+            let result = invocation
+                .decision
+                .as_ref()
+                .ok_or_else(|| "provider returned no decision".to_string())?;
+            Ok(case
+                .decision
+                .as_ref()
+                .and_then(|case| case.expected.as_ref())
+                .map(|expected| {
+                    if result.selected_id == *expected {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }))
+        }
         Task::TextGeneration | Task::ImageToText => {
             if case.expected_contains.is_empty() {
                 return Ok(None);
@@ -320,6 +358,10 @@ fn output_excerpt(task: Task, invocation: &InvocationResult) -> Result<Option<St
             )))
         }
         Task::Reranking => Ok(Some(format!("ranking: {:?}", invocation.ranking))),
+        Task::DecisionScoring => Ok(invocation
+            .decision
+            .as_ref()
+            .map(|result| format!("selected: {}", result.selected_id))),
         _ => Ok(invocation.output_text.as_deref().map(excerpt)),
     }
 }
@@ -391,6 +433,11 @@ fn summarize(samples: &[SampleRecord]) -> RunSummary {
             .filter_map(|sample| sample.process_rss_bytes_peak)
             .max(),
         quality_score_mean: mean(successful.iter().filter_map(|sample| sample.quality_score)),
+        decision_metrics: crate::decision::summarize(
+            successful
+                .iter()
+                .filter_map(|sample| sample.decision.as_ref()?.metrics.as_ref()),
+        ),
     }
 }
 

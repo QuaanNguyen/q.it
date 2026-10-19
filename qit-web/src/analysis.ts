@@ -25,13 +25,31 @@ export function setupKey(run: Run): string {
 function providerSetup(run: Run): unknown {
   const configuration = run.provider_metadata?.configuration;
   if (!configuration) return null;
-  return [configuration.device, configuration.dtype, configuration.threads, configuration.packages];
+  return canonical([configuration.device, configuration.dtype, configuration.threads, configuration.packages]);
 }
 
 export function modelKey(run: Run): string {
   const identity: unknown[] = [run.model, run.provider, run.base_url, run.provider_metadata?.configuration?.revision ?? null];
+  if (run.task === "decision_scoring") {
+    const configuration = run.provider_metadata?.configuration;
+    identity.push(canonical(configuration ? Object.fromEntries(Object.entries(configuration).filter(([key]) => key !== "pid")) : null));
+  }
   if (run.provider_metadata?.configuration?.configuration_digest) identity.push(run.provider_metadata.configuration.configuration_digest);
   return JSON.stringify(identity);
+}
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => [key, canonical(entry)]));
+  }
+  return value;
+}
+
+export function decisionRankings(runs: Run[]): { run: Run; rank: number | null }[] {
+  const sorted = runs.filter((run) => run.status === "succeeded").sort((left, right) =>
+    (right.summary.quality_score_mean ?? -1) - (left.summary.quality_score_mean ?? -1) || left.model.localeCompare(right.model));
+  return sorted.map((run) => ({ run, rank: run.summary.quality_score_mean === null ? null : 1 + sorted.filter((other) => (other.summary.quality_score_mean ?? -1) > run.summary.quality_score_mean!).length }));
 }
 
 export function latestModels(runs: Run[]): Run[] {
@@ -109,6 +127,7 @@ export function frontier(
 }
 
 export function qualityLabel(task: Task): string {
+  if (task === "decision_scoring") return "Choice accuracy";
   if (task === "embedding" || task === "reranking")
     return "Mean reciprocal rank";
   if (task === "speech_to_text") return "Word accuracy";
