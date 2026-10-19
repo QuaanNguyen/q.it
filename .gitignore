@@ -17,3 +17,4 @@
 /providers/model-adapters/**/__pycache__/
 /providers/model-adapters/build/
 /providers/model-adapters/dist/
+/scripts/__pycache__/
