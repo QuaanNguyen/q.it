@@ -1,0 +1,33 @@
+[
+  {
+    "model": "qvac/TranscribePsy-250M-EU",
+    "revision": "49d2b21e72018798a755c0cbe5ebb4fefe2384a1",
+    "routes": [
+      "english",
+      "multilingual",
+      "automatic"
+    ],
+    "archive": "TranscribePsy-250M-EU.nemo",
+    "files": {
+      "TranscribePsy-250M-EU.nemo": "84b06a5807e61cac873a85b5f80a1c29573153266d1c31022f2d0448237f9927",
+      "inference.py": "6d4c4b25a8e353e6c6f20bf813e92b947509af68e337f8bb66473665d86d2bbe",
+      "inference_gated.py": "93fbcaf68da776952c0ca80fc211496ad6cfd0285426af5075ee023bca5686b2",
+      "adapters.safetensors": "c7023d491655c21028a8b09d84b260e7f92ba5051bf900cbfe0e5facb047598b",
+      "language_gate.safetensors": "9049ac1cbbd484a85388184682ce3fd56d56d5c7a4b779c14b743d97c7970d18"
+    },
+    "published_tensor_elements": 253954838
+  },
+  {
+    "model": "qvac/TranscribePsy-250M-EU-sub",
+    "revision": "ccf70de9ff9848f5cd5975adda1370ce4addf6f1",
+    "routes": [
+      "shared"
+    ],
+    "archive": "TranscribePsy-250M-EU-sub.nemo",
+    "files": {
+      "TranscribePsy-250M-EU-sub.nemo": "0acdaf1e1ebf09094400263006d134d33b0ebb871ebb064253cfd3a7c528903c",
+      "inference.py": "2925f17dbd65d9129e695c3407d04bc1cabcc81e0eaf84acbdb920ae0d523cde"
+    },
+    "published_tensor_elements": 253954838
+  }
+]

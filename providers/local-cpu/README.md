@@ -163,3 +163,9 @@ Image generators use an explicitly reduced 64 by 64, two-step profile for this l
 Successful checks are reused only when the provider source, q.it executable, validation cases, checker, and thread settings match.
 A successful smoke request establishes local loading and transport behavior, not an official evaluation score or Raspberry Pi performance.
 Linux ARM64 package availability and real Pi memory fit require separate qualification.
+
+## Optional QVAC NeMo installation
+
+QVAC speech checkpoints use a separate optional NeMo environment and command.
+The existing Transformers setup remains unchanged.
+See the [QVAC NeMo guide](../../docs/qvac-nemo-cpu.md) for the pinned CPU installation, explicit downloads, language routes, and qualification boundaries.

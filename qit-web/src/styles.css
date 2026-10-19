@@ -1084,3 +1084,16 @@ progress::-webkit-progress-value {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.speech-output {
+  margin-top: 10px;
+  white-space: normal;
+}
+.progress-panel td {
+  vertical-align: top;
+}
+.speech-output p,
+.speech-output pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

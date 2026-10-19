@@ -1,5 +1,5 @@
 import { frontier, modelPalette, modelKey } from "./analysis";
-import { providerLabel } from "./api";
+import { modelLabel, providerLabel } from "./api";
 import type { Run } from "./api";
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
@@ -126,7 +126,7 @@ export function RankingChart({
                 className="ranked-row"
                 href={`#/runs?run=${encodeURIComponent(run.id)}`}
                 key={run.id}
-                title={`${run.model} / ${providerLabel(run.provider)} / ${run.base_url} / ${run.summary.successful_sample_count} samples`}
+                title={`${modelLabel(run)} / ${providerLabel(run.provider)} / ${run.base_url} / ${run.summary.successful_sample_count} samples`}
               >
                 <span className="rank-number">
                   {String(rank(run)).padStart(2, "0")}
@@ -137,7 +137,7 @@ export function RankingChart({
                       className="chart-model"
                       style={{ color: color(run.model) }}
                     >
-                      {run.model}
+                      {modelLabel(run)}
                     </span>
                     <strong>
                       {format(value(run)!)}
@@ -279,11 +279,11 @@ function Legend({ runs }: { runs: Run[] }) {
       {runs.map((run) => (
         <span
           key={modelKey(run)}
-          title={run.model}
+          title={modelLabel(run)}
           style={{ color: color(run.model) }}
         >
           <i style={{ color: color(run.model) }}>+</i>
-          {run.model}
+          {modelLabel(run)}
         </span>
       ))}
     </div>
@@ -373,7 +373,7 @@ export function ScatterChart({
               <a
                 key={run.id}
                 href={`#/runs?run=${encodeURIComponent(run.id)}`}
-                aria-label={`${run.model}: ${xFormat(xValue(run)!)}, ${yFormat(yValue(run)!)}`}
+                aria-label={`${modelLabel(run)}: ${xFormat(xValue(run)!)}, ${yFormat(yValue(run)!)}`}
               >
                 <g>
                   {optimal.has(run.id) && (
@@ -393,7 +393,7 @@ export function ScatterChart({
                     fill={color(run.model)}
                   >
                     +
-                    <title>{`${run.model}: ${xFormat(xValue(run)!)}, ${yFormat(yValue(run)!)}`}</title>
+                    <title>{`${modelLabel(run)}: ${xFormat(xValue(run)!)}, ${yFormat(yValue(run)!)}`}</title>
                   </text>
                 </g>
               </a>
@@ -492,7 +492,7 @@ export function TrendChart({ runs }: { runs: Run[] }) {
                   textAnchor="middle"
                 >
                   +
-                  <title>{`${run.model}: ${run.summary.latency_ms_p50!.toFixed(1)} ms / ${new Date(run.started_at_ms).toLocaleString()}`}</title>
+                  <title>{`${modelLabel(run)}: ${run.summary.latency_ms_p50!.toFixed(1)} ms / ${new Date(run.started_at_ms).toLocaleString()}`}</title>
                 </text>
               </a>
             ))}
