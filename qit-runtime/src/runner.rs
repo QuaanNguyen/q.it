@@ -1,4 +1,7 @@
 use std::cmp::Ordering;
+use std::sync::Arc;
+
+use tokio::sync::watch;
 
 use uuid::Uuid;
 
@@ -17,6 +20,41 @@ pub async fn run_benchmark(
     request: RunRequest,
 ) -> Result<RunRecord, String> {
     execute_benchmark(store, prepare_benchmark(store, catalog, request)?).await
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RunProgress {
+    pub run_id: String,
+    pub phase: String,
+    pub case_id: Option<String>,
+    pub completed: usize,
+    pub expected: usize,
+    pub warmups_completed: u32,
+    pub warmups_expected: u32,
+    pub summary: RunSummary,
+}
+
+#[derive(Clone)]
+pub struct ExecutionControl {
+    cancellation: watch::Sender<bool>,
+    observer: Arc<dyn Fn(RunProgress) + Send + Sync>,
+}
+
+impl ExecutionControl {
+    pub fn new(observer: impl Fn(RunProgress) + Send + Sync + 'static) -> Self {
+        Self {
+            cancellation: watch::channel(false).0,
+            observer: Arc::new(observer),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancellation.send_replace(true);
+    }
+
+    fn report(&self, progress: &RunProgress) {
+        (self.observer)(progress.clone());
+    }
 }
 
 pub struct PreparedBenchmark {
@@ -99,12 +137,61 @@ pub async fn execute_benchmark(
     store: &Store,
     prepared: PreparedBenchmark,
 ) -> Result<RunRecord, String> {
+    execute_with_control(store, prepared, ExecutionControl::new(|_| {})).await
+}
+
+pub async fn execute_with_control(
+    store: &Store,
+    prepared: PreparedBenchmark,
+    control: ExecutionControl,
+) -> Result<RunRecord, String> {
+    let run_id = prepared.run.id.clone();
+    let mut cancelled = control.cancellation.subscribe();
+    let outcome = tokio::select! {
+        biased;
+        _ = cancelled.wait_for(|value| *value) => Err("benchmark interrupted".to_string()),
+        result = execute_observed(store, prepared, &control) => result,
+    };
+    let run = match outcome {
+        Ok(run) => run,
+        Err(error) => {
+            let mut run = store
+                .run(&run_id)?
+                .ok_or_else(|| "run disappeared".to_string())?;
+            run.summary = summarize(&store.samples(&run_id)?);
+            finish_failed(store, &mut run, error)?;
+            run
+        }
+    };
+    control.report(&RunProgress {
+        run_id: run.id.clone(),
+        phase: run.status.as_str().into(),
+        completed: run.summary.sample_count as usize,
+        summary: run.summary.clone(),
+        ..Default::default()
+    });
+    Ok(run)
+}
+
+async fn execute_observed(
+    store: &Store,
+    prepared: PreparedBenchmark,
+    control: &ExecutionControl,
+) -> Result<RunRecord, String> {
     let PreparedBenchmark {
         mut run,
         benchmark,
         provider,
         request,
     } = prepared;
+    let mut progress = RunProgress {
+        run_id: run.id.clone(),
+        phase: "preflight".into(),
+        expected: benchmark.cases.len() * request.iterations as usize,
+        warmups_expected: request.warmups,
+        ..Default::default()
+    };
+    control.report(&progress);
     let max_output_tokens = run.max_output_tokens;
     match provider.metadata().await {
         Ok(metadata) => {
@@ -123,13 +210,24 @@ pub async fn execute_benchmark(
         finish_failed(store, &mut run, format!("preflight failed: {error}"))?;
         return Ok(run);
     }
-    if let Err(error) = warm_up(&provider, &benchmark, request.warmups, max_output_tokens).await {
-        finish_failed(store, &mut run, format!("warmup failed: {error}"))?;
-        return Ok(run);
+    for warmup in 0..request.warmups {
+        progress.phase = "warmup".into();
+        progress.case_id = benchmark.cases.first().map(|case| case.id.clone());
+        progress.warmups_completed = warmup;
+        control.report(&progress);
+        if let Err(error) = warm_up(&provider, &benchmark, 1, max_output_tokens).await {
+            finish_failed(store, &mut run, format!("warmup failed: {error}"))?;
+            return Ok(run);
+        }
+        progress.warmups_completed = warmup + 1;
+        control.report(&progress);
     }
     let mut samples = Vec::new();
     for iteration in 1..=request.iterations {
         for case in &benchmark.cases {
+            progress.phase = "measuring".into();
+            progress.case_id = Some(case.id.clone());
+            control.report(&progress);
             let sampler = TelemetrySampler::start(request.target_pid);
             let result = provider
                 .invoke(benchmark.task, case, max_output_tokens)
@@ -168,6 +266,10 @@ pub async fn execute_benchmark(
             }
             store.insert_sample(&sample)?;
             samples.push(sample);
+            progress.phase = "saved".into();
+            progress.completed = samples.len();
+            progress.summary = summarize(&samples);
+            control.report(&progress);
         }
     }
     run.summary = summarize(&samples);

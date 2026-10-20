@@ -74,6 +74,7 @@ export function RankingChart({
   format,
   unit,
   higher = false,
+  ranking,
   max,
   empty = "No measurement is available for this selection.",
 }: {
@@ -86,11 +87,12 @@ export function RankingChart({
   format: Format;
   unit: string;
   higher?: boolean;
+  ranking?: { run_id: string; rank: number; value: number }[];
   max?: number;
   empty?: string;
 }) {
   const color = useModelColor();
-  const usable = runs
+  const usable = ranking ? ranking.flatMap((entry) => runs.filter((run) => run.id === entry.run_id)) : runs
     .filter((run) => value(run) !== null)
     .sort(
       (left, right) =>
@@ -101,10 +103,10 @@ export function RankingChart({
     max ??
     Math.max(...usable.flatMap((run) => [value(run)!, tail?.(run) ?? 0]), 1);
   const rank = (run: Run) =>
-    1 +
+    ranking?.find((entry) => entry.run_id === run.id)?.rank ?? (1 +
     usable.filter((other) =>
       higher ? value(other)! > value(run)! : value(other)! < value(run)!,
-    ).length;
+    ).length);
   return (
     <ChartPanel
       title={title}

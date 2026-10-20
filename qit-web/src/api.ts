@@ -89,6 +89,16 @@ export type AnalysisPoint = {
   pareto: boolean;
 };
 
+export type ComparisonGroup = {
+  key: string;
+  benchmark_key: string;
+  runs: Run[];
+  models: Run[];
+  rankings: Record<string, { run_id: string; rank: number; value: number }[]>;
+};
+
+export type Analysis = { points: AnalysisPoint[]; groups: ComparisonGroup[] };
+
 export type Host = {
   host_name: string;
   operating_system: string;
@@ -157,6 +167,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   host: () => request<Host>("/api/host"),
+  analysis: () => request<Analysis>("/api/analysis"),
   providers: () => request<ProviderInfo[]>("/api/providers"),
   benchmarks: () => request<Benchmark[]>("/api/benchmarks"),
   runs: () => request<RunsResponse>("/api/runs?limit=10000"),

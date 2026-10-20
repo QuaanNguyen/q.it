@@ -7,7 +7,7 @@ use crate::config::{home_from_env, Config};
 use crate::model::{ProviderKind, RunRecord, RunRequest, RunStatus, Task};
 use crate::packs::PackCatalog;
 use crate::paths::Paths;
-use crate::runner::run_benchmark;
+use crate::runner::{execute_with_control, prepare_benchmark, ExecutionControl};
 use crate::store::Store;
 
 pub fn run() -> i32 {
@@ -44,6 +44,7 @@ fn execute(arguments: Vec<String>) -> Result<i32, String> {
         "benchmark" | "benchmarks" => benchmark_command(rest),
         "provider" | "providers" => provider_command(rest),
         "run" => run_command(rest),
+        "tui" => tui_command(rest),
         "results" => results_command(rest),
         "export" => export_command(rest),
         "dashboard" => dashboard_command(rest),
@@ -180,6 +181,54 @@ fn run_command(arguments: &[String]) -> Result<i32, String> {
         print_run_help();
         return Ok(0);
     }
+    let request = parse_run_request(arguments)?;
+    let (_, catalog, store) = workspace()?;
+    println!(
+        "Running {} with {} against {}",
+        request.benchmark_id, request.provider, request.model
+    );
+    let prepared = prepare_benchmark(&store, &catalog, request)?;
+    let control = ExecutionControl::new(|progress| {
+        if progress.phase == "saved" {
+            eprintln!(
+                "[{}/{}] {} | latency {} | TTFT {} | TPS {}",
+                progress.completed,
+                progress.expected,
+                progress.case_id.as_deref().unwrap_or(""),
+                format_metric(progress.summary.latency_ms_p50, " ms"),
+                format_metric(progress.summary.ttft_ms_p50, " ms"),
+                format_metric(progress.summary.tokens_per_second_p50, "")
+            );
+        } else if progress.phase == "warmup" {
+            eprintln!(
+                "Warmup {}/{}",
+                progress.warmups_completed, progress.warmups_expected
+            );
+        }
+    });
+    let runtime = runtime()?;
+    let run = runtime.block_on(async {
+        let execution = execute_with_control(&store, prepared, control.clone());
+        tokio::pin!(execution);
+        tokio::select! {
+            biased;
+            signal = tokio::signal::ctrl_c() => {
+                signal.map_err(|error| format!("listen for Ctrl-C: {error}"))?;
+                control.cancel();
+                execution.await
+            }
+            result = &mut execution => result,
+        }
+    })?;
+    print_run_summary(&run);
+    Ok(if run.status == RunStatus::Succeeded {
+        0
+    } else {
+        2
+    })
+}
+
+pub(crate) fn parse_run_request(arguments: &[String]) -> Result<RunRequest, String> {
     let options = Options::parse(
         arguments,
         &[
@@ -220,7 +269,7 @@ fn run_command(arguments: &[String]) -> Result<i32, String> {
             ProviderKind::Tei | ProviderKind::HfServe => std::env::var("HF_TOKEN").ok(),
             ProviderKind::Ollama | ProviderKind::LocalCpu => None,
         });
-    let request = RunRequest {
+    Ok(RunRequest {
         benchmark_id,
         provider,
         base_url,
@@ -231,20 +280,19 @@ fn run_command(arguments: &[String]) -> Result<i32, String> {
         max_output_tokens: options.number("max-tokens")?,
         timeout_seconds: options.number("timeout")?.unwrap_or(120),
         target_pid: options.number("pid")?,
-    };
-    let (_, catalog, store) = workspace()?;
-    println!(
-        "Running {} with {} against {}",
-        request.benchmark_id, request.provider, request.model
-    );
-    let runtime = runtime()?;
-    let run = runtime.block_on(run_benchmark(&store, &catalog, request))?;
-    print_run_summary(&run);
-    Ok(if run.status == RunStatus::Succeeded {
-        0
-    } else {
-        2
     })
+}
+
+fn tui_command(arguments: &[String]) -> Result<i32, String> {
+    if arguments == ["--help"] || arguments == ["-h"] {
+        println!("Usage: qit tui\n\n1 Benchmarks  2 Start  3 Progress  4 Results  5 Compare\nTab switches screens; arrows select; Enter opens; q or Ctrl-C exits.");
+        return Ok(0);
+    }
+    if !arguments.is_empty() {
+        return Err("qit tui takes no arguments".into());
+    }
+    crate::tui::run()?;
+    Ok(0)
 }
 
 fn results_command(arguments: &[String]) -> Result<i32, String> {
@@ -345,7 +393,7 @@ fn dashboard_command(arguments: &[String]) -> Result<i32, String> {
     Ok(0)
 }
 
-fn workspace() -> Result<(Paths, PackCatalog, Store), String> {
+pub(crate) fn workspace() -> Result<(Paths, PackCatalog, Store), String> {
     let paths = Paths::new(home_from_env());
     paths.ensure()?;
     let catalog = PackCatalog::new(paths.packs.clone());
@@ -531,7 +579,7 @@ fn print_help() {
     println!(
         "q.it - Raspberry Pi edge-model benchmarks\n\n\
 Usage:\n  qit <command> [options]\n\n\
-Commands:\n  benchmark list              List installed benchmarks\n  benchmark verify PATH       Validate a benchmark pack\n  benchmark install PATH      Install a declarative benchmark pack\n  benchmark remove ID         Remove an installed benchmark pack\n  provider list               List serving protocols and supported tasks\n  run BENCHMARK               Run a benchmark and store its result\n  results                     Show run history\n  export                      Export the successful run dataset\n  dashboard                   Start the local analysis dashboard\n  help                        Show this help\n\n\
+Commands:\n  benchmark list              List installed benchmarks\n  benchmark verify PATH       Validate a benchmark pack\n  benchmark install PATH      Install a declarative benchmark pack\n  benchmark remove ID         Remove an installed benchmark pack\n  provider list               List serving protocols and supported tasks\n  tui                         Open the terminal workspace\n  run BENCHMARK               Run a benchmark and store its result\n  results                     Show run history\n  export                      Export the successful run dataset\n  dashboard                   Start the local analysis dashboard\n  help                        Show this help\n\n\
 Run 'qit run --help' for execution options."
     );
 }
