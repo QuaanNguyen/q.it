@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "english-choice-smoke",
+  "name": "English single-choice smoke",
+  "version": "1.0.0",
+  "description": "Three original English transport and scoring cases, without dataset-quality claims.",
+  "publisher": "q.it",
+  "license": "MIT",
+  "source": "Original q.it cases",
+  "benchmarks": [
+    {
+      "id": "choice",
+      "name": "English choices",
+      "description": "Single-choice text decisions in English.",
+      "task": "decision_scoring",
+      "cases": "cases.jsonl",
+      "decision_input": "text"
+    }
+  ]
+}

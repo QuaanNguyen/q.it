@@ -16,6 +16,11 @@ def profile_for(model):
         if profile["model"] == model:
             if not re.fullmatch(r"[0-9a-f]{40}", profile["revision"]):
                 raise ValueError("checkpoint revision must be an immutable commit")
+            count = profile.get("model_card", {}).get("parameter_count")
+            if type(count) is not int or not 0 < count < 1_000_000_000:
+                raise ValueError(
+                    "model card must establish fewer than one billion parameters"
+                )
             return profile
     raise ValueError(f"unsupported model {model!r}; use qit-adapter list")
 
