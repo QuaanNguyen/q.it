@@ -1,9 +1,10 @@
 # Optional model adapter package
 
 This package provides local artifact verification, CPU parameter audits, offline startup, and the existing q.it local CPU serving protocol.
-The catalog currently contains five optional text decision routes.
+The catalog currently contains six optional text decision routes.
 GLiClass v4 edge and GLiNER2.5 Decide use their classifier libraries.
 Intern Decision, Liquid d1 omni, and typed-decision Gemma use pinned publisher code.
+FRIDA-Decisions uses a pinned installed publisher library for Russian text.
 Their model files and isolated runtimes are installed separately by the user.
 Installing it does not download a model or install a model runtime.
 
@@ -68,6 +69,35 @@ All three retain their publisher's complete single-choice probabilities and load
 Intern and Liquid accept text cases only; their multimodal model components are still included in the loaded-stack count.
 Image and audio decision execution are not included in these routes.
 Use the existing three-case English pack to check transport and scoring.
+
+## Run FRIDA Russian text decisions
+
+Use the retained FRIDA lock for your Linux CPython 3.12 architecture in a separate environment.
+The lock installs the exact publisher archive and its runtime dependencies.
+
+```bash
+python3.12 -m venv .venv-frida
+.venv-frida/bin/pip install uv==0.9.5
+.venv-frida/bin/uv pip sync --python .venv-frida/bin/python --torch-backend cpu --require-hashes providers/model-adapters/qit_adapters/locks/frida-linux-aarch64-py312.txt
+.venv-frida/bin/uv pip install --python .venv-frida/bin/python --no-deps ./providers/model-adapters
+.venv-frida/bin/qit-adapter verify --model ai-forever/FRIDA-Decisions --model-path /absolute/path/to/frida
+.venv-frida/bin/qit-adapter serve --model ai-forever/FRIDA-Decisions --model-path /absolute/path/to/frida
+```
+
+Use the `frida-linux-x86_64-py312.txt` lock on x86_64.
+Install the pinned local checkpoint yourself before verification or serving.
+Verification checks checkpoint artifacts.
+Serving additionally verifies the installed publisher archive identity, exact Python-file inventory, and source hashes before importing FRIDA.
+It requires no reviewed-code flag because this route uses an installed dependency rather than checkpoint Python.
+Startup retains the runtime commit and verified source hashes in environment metadata.
+
+Use `providers/model-adapters/packs/russian-choice` for the original three-case text smoke check.
+The adapter preserves native candidate probabilities and refuses overlength state, question, or candidate text.
+It requires Cyrillic state text as a conservative pack check, not a complete language detector.
+The complete CPU float32 audit includes the encoder and scalar head.
+The publisher card's rounded 823M and exact 823,401,216 stored encoder parameters differ from the retained 823,402,753 complete loaded parameters.
+The head accounts for 1,537 parameters.
+[Retained CPU checks](../../docs/research/optional-classifier-cpu-checks.md) describe the historical execution scope.
 
 ## Adding a route
 

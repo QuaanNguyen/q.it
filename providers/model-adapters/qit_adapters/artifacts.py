@@ -97,6 +97,36 @@ def fingerprint(value):
     ).hexdigest()
 
 
+def verify_runtime_source(profile, distribution):
+    expected = profile["runtime_source"]
+    package = Path(distribution.locate_file("frida_decisions"))
+    root = package.resolve()
+    if package.is_symlink() or not root.is_dir():
+        raise ValueError("FRIDA source path escapes its installed package")
+    if any(path.is_symlink() for path in root.rglob("*")):
+        raise ValueError("FRIDA source path escapes its installed package")
+    installed = {path.relative_to(root).as_posix(): path for path in root.rglob("*.py")}
+    if installed.keys() != expected["python_files"].keys():
+        raise ValueError(
+            "FRIDA installed Python inventory differs from the pinned publisher source"
+        )
+    observed = {}
+    for name, digest in expected["python_files"].items():
+        path = installed[name]
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            raise ValueError("FRIDA source path escapes its installed package")
+        observed[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if observed[name] != digest:
+            raise ValueError(
+                f"FRIDA installed source differs from the reviewed commit: {name}"
+            )
+    return {
+        "reviewed_archive_sha256": expected["archive_sha256"],
+        "commit": expected["commit"],
+        "installed_python_sha256": observed,
+    }
+
+
 def locked_environment(profile):
     import platform
     import sys
@@ -139,6 +169,28 @@ def locked_environment(profile):
         direct_url = distribution.read_text("direct_url.json")
         if direct_url:
             sources[name] = json.loads(direct_url)
+    source_verification = None
+    if family == "frida":
+        expected = profile["runtime_source"]
+        source = sources.get("frida-decisions", {})
+        url = f"https://github.com/ai-forever/FRIDA-Decisions/archive/{expected['commit']}.tar.gz"
+        if source.get("url") != url:
+            raise ValueError(
+                "FRIDA runtime must retain the exact publisher Git source identity"
+            )
+        archive = source.get("archive_info", {})
+        recorded = archive.get("hashes", {}).get("sha256")
+        legacy = archive.get("hash", "")
+        if (recorded is not None and recorded != expected["archive_sha256"]) or (
+            legacy.startswith("sha256=")
+            and legacy != "sha256=" + expected["archive_sha256"]
+        ):
+            raise ValueError(
+                "FRIDA runtime archive hash differs from the reviewed source"
+            )
+        source_verification = verify_runtime_source(
+            profile, importlib.metadata.distribution("frida-decisions")
+        )
     return {
         "packages": installed,
         "adapter_source": {
@@ -150,4 +202,5 @@ def locked_environment(profile):
         "lock_sha256": hashlib.sha256(content.encode()).hexdigest(),
         "installed_records": records,
         "installed_sources": sources,
+        "source_verification": source_verification,
     }

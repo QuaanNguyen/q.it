@@ -85,6 +85,17 @@ class DecisionRuntime:
                 attn_implementation="eager",
             )
             self.model = self.engine.backend.model
+        elif adapter == "frida":
+            from frida_decisions import Judge
+
+            self.engine = Judge.from_pretrained(
+                self.directory,
+                device="cpu",
+                dtype=torch.float32,
+                state_max=512,
+                state_cache_mb=0,
+            )
+            self.model = self.engine.model
         elif adapter == "gliclass":
             from gliclass import GLiClassModel, ZeroShotClassificationPipeline
 
@@ -176,6 +187,31 @@ class DecisionRuntime:
                     "input_tokens": len(encoded),
                     "tie_rule": "first-maximal-in-candidate-order",
                 }
+            elif adapter == "frida":
+                if not any("\u0400" <= character <= "\u04ff" for character in state):
+                    raise ValueError("FRIDA requires a Russian decision pack")
+                request = {"state": state, "questions": questions}
+                _, native_candidates, tokenized = self.engine.compile(request)
+                for candidate in native_candidates:
+                    if (
+                        self.engine.text.count(candidate.state) > 512
+                        or self.engine.text.count(candidate.instruction)
+                        > self.engine.config.instruction_max_tokens
+                        or self.engine.text.count(candidate.text)
+                        > self.engine.config.option_max_tokens - 1
+                    ):
+                        raise ValueError("FRIDA input would be truncated")
+                prepared = {
+                    "state": tokenized.state,
+                    "questions": tokenized.questions,
+                    "options": tokenized.options,
+                }
+                result = self.engine.judge(request)
+                if result["usage"].get("state_truncated"):
+                    raise ValueError("FRIDA reported a truncated state")
+                native = result["answers"]["choice"]
+                probabilities = native["probabilities"]
+                selected = native.get("choice", native.get("decision"))
             elif adapter == "gliner2":
                 captured = []
                 original = getattr(
