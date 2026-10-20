@@ -528,3 +528,189 @@ async fn invoke(RoutePath(model): RoutePath<String>, Json(body): Json<Value>) ->
     }
     format!("{value}\n")
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pinned_native_d3_admission_is_checked_before_text_or_image_inference() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    for (model, revision, count) in [
+        (
+            "vllm-sr/d3-edge",
+            "c454ee39b862248d70abd7f84195d2f54ffe6d43",
+            594_582_720,
+        ),
+        (
+            "vllm-sr/d3-lite",
+            "03560c26f5199c3c04129a2ccb38960c913635e0",
+            853_247_040,
+        ),
+    ] {
+        for mode in [
+            "text",
+            "image",
+            "wrong-tag",
+            "missing-tag",
+            "wrong-revision",
+            "cross-revision",
+            "unlisted",
+            "float16",
+            "cuda",
+            "billion",
+            "missing-count",
+            "zero-count",
+        ] {
+            let temporary = TempDir::new().unwrap();
+            let state = temporary.path().join("state");
+            let pack = temporary.path().join("pack");
+            let image = mode == "image";
+            write_pack(
+                &pack,
+                if image { "image" } else { "text" },
+                image.then_some("image.png"),
+            );
+            if image {
+                std::fs::write(
+                    pack.join("image.png"),
+                    include_bytes!("fixtures/decision.png"),
+                )
+                .unwrap();
+            }
+            assert!(command(&state)
+                .args(["benchmark", "install"])
+                .arg(&pack)
+                .output()
+                .await
+                .unwrap()
+                .status
+                .success());
+            let requested = if mode == "unlisted" {
+                "fixture/unlisted"
+            } else {
+                model
+            };
+            let mut value = metadata(RoutePath("good".into())).await.0;
+            value["model"] = json!(requested);
+            value["configuration"]["dtype"] = json!("bfloat16");
+            value["configuration"]["revision"] = json!(revision);
+            value["configuration"]["parameter_count"] = json!(count);
+            value["configuration"]["precision_admission"] =
+                json!("d3-native-bf16-backbone-fp32-readout-v1");
+            let expected = match mode {
+                "wrong-tag" => {
+                    value["configuration"]["precision_admission"] = json!("unreviewed");
+                    "requires CPU float32"
+                }
+                "missing-tag" => {
+                    value["configuration"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("precision_admission");
+                    "requires CPU float32"
+                }
+                "wrong-revision" => {
+                    value["configuration"]["revision"] = json!("a".repeat(40));
+                    "requires CPU float32"
+                }
+                "cross-revision" => {
+                    value["configuration"]["revision"] = json!(if model.ends_with("edge") {
+                        "03560c26f5199c3c04129a2ccb38960c913635e0"
+                    } else {
+                        "c454ee39b862248d70abd7f84195d2f54ffe6d43"
+                    });
+                    "requires CPU float32"
+                }
+                "unlisted" => "requires CPU float32",
+                "float16" => {
+                    value["configuration"]["dtype"] = json!("float16");
+                    "requires CPU float32"
+                }
+                "cuda" => {
+                    value["configuration"]["device"] = json!("cuda");
+                    "CPU-only execution"
+                }
+                "billion" => {
+                    value["configuration"]["parameter_count"] = json!(1_000_000_000);
+                    "fewer than one billion"
+                }
+                "missing-count" => {
+                    value["configuration"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("parameter_count");
+                    "fewer than one billion"
+                }
+                "zero-count" => {
+                    value["configuration"]["parameter_count"] = json!(0);
+                    "fewer than one billion"
+                }
+                _ => "",
+            };
+            let calls = Arc::new(AtomicUsize::new(0));
+            let observed = calls.clone();
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            let server = tokio::spawn(
+                axum::serve(
+                    listener,
+                    Router::new()
+                        .route(
+                            "/v1/qit/model",
+                            get(move || {
+                                let value = value.clone();
+                                async move { Json(value) }
+                            }),
+                        )
+                        .route(
+                            "/v1/qit/invoke",
+                            post(move |body: Json<Value>| {
+                                let observed = observed.clone();
+                                async move {
+                                    observed.fetch_add(1, Ordering::SeqCst);
+                                    invoke(RoutePath("good".into()), body).await
+                                }
+                            }),
+                        ),
+                )
+                .into_future(),
+            );
+            let output = command(&state)
+                .args([
+                    "run",
+                    "decisions/choice",
+                    "--provider",
+                    "local-cpu",
+                    "--model",
+                    requested,
+                    "--base-url",
+                    &endpoint,
+                    "--warmups",
+                    "0",
+                    "--iterations",
+                    "1",
+                ])
+                .output()
+                .await
+                .unwrap();
+            if expected.is_empty() {
+                assert!(output.status.success(), "{model} {mode}: {output:?}");
+                assert_eq!(calls.load(Ordering::SeqCst), 1);
+                let row: Value = serde_json::from_str(&export(&state, "jsonl").await).unwrap();
+                assert_eq!(
+                    row["samples"][0]["decision"]["result"]["candidates"][0]["probability"],
+                    0.25
+                );
+            } else {
+                assert_eq!(output.status.code(), Some(2), "{model} {mode}: {output:?}");
+                assert!(
+                    (String::from_utf8_lossy(&output.stderr).to_string()
+                        + &String::from_utf8_lossy(&output.stdout))
+                        .contains(expected),
+                    "{model} {mode}: {output:?}"
+                );
+                assert_eq!(calls.load(Ordering::SeqCst), 0, "{model} {mode}");
+            }
+            server.abort();
+        }
+    }
+}

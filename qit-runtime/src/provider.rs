@@ -150,10 +150,31 @@ impl ProviderClient {
                             "decision scoring requires a recorded checkpoint revision".into()
                         );
                     }
-                    if metadata.configuration.get("dtype").and_then(Value::as_str)
-                        != Some("float32")
-                    {
-                        return Err("decision scoring requires CPU float32 execution".into());
+                    let precision = metadata.configuration.get("dtype").and_then(Value::as_str);
+                    let native_d3 = precision == Some("bfloat16")
+                        && metadata
+                            .configuration
+                            .get("precision_admission")
+                            .and_then(Value::as_str)
+                            == Some("d3-native-bf16-backbone-fp32-readout-v1")
+                        && matches!(
+                            (
+                                self.model.as_str(),
+                                metadata
+                                    .configuration
+                                    .get("revision")
+                                    .and_then(Value::as_str)
+                            ),
+                            (
+                                "vllm-sr/d3-edge",
+                                Some("c454ee39b862248d70abd7f84195d2f54ffe6d43")
+                            ) | (
+                                "vllm-sr/d3-lite",
+                                Some("03560c26f5199c3c04129a2ccb38960c913635e0")
+                            )
+                        );
+                    if precision != Some("float32") && !native_d3 {
+                        return Err("decision scoring requires CPU float32 execution or the explicitly admitted pinned native d3 BF16 configuration".into());
                     }
                     let configuration: DecisionConfiguration = serde_json::from_value(
                         metadata

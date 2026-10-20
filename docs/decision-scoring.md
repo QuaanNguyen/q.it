@@ -2,7 +2,7 @@
 
 Decision scoring asks a model to select one answer from an ordered set of candidates and return a probability for every candidate.
 The task uses an explicitly started, compatible Local CPU endpoint.
-The bundled Python server does not yet load decision models; Liquid d1 and Intern-Decision adapters and their real-model qualification are separate follow-ups.
+The [optional adapter package](../providers/model-adapters/README.md) loads cataloged decision models from verified local files in separate runtimes.
 
 ## Pack format
 
@@ -76,7 +76,13 @@ Unlabelled cases still produce durable observations and latency measurements, wi
 ## Provider contract
 
 The Local CPU protocol uses `GET /v1/qit/model` and NDJSON from `POST /v1/qit/invoke`.
-Preflight requires the requested model, protocol version one, a nonempty server version, CPU execution, float32 precision, a nonempty checkpoint revision, and a loaded parameter count greater than zero and below one billion.
+Preflight requires the requested model, protocol version one, a nonempty server version, CPU execution, a nonempty checkpoint revision, and a loaded parameter count greater than zero and below one billion.
+Decision precision is float32 except for two pinned native D3 configurations.
+D3 Edge at `c454ee39b862248d70abd7f84195d2f54ffe6d43` and D3 Lite at `03560c26f5199c3c04129a2ccb38960c913635e0` admit `bfloat16` only with `precision_admission` equal to `d3-native-bf16-backbone-fp32-readout-v1`.
+The adapter emits that identity after observing a CPU FP32 learned readout and auditing the complete loaded stack, including its native BF16 backbone.
+All other model and revision combinations retain float32 admission.
+D3 supports text and image cases through the same protocol.
+[Retained D3 CPU checks](research/d3-cpu-checks.md) document the historical execution scope separately from current fixtures.
 The decision configuration declares supported inputs and stable identities for calibration, native selection rules, and input preparation:
 
 ```json
