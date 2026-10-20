@@ -50,14 +50,15 @@ def load_decision(profile, directory, threads):
 
     if torch.version.cuda is not None:
         raise ValueError("optional CPU adapters require a CPU-only PyTorch build")
-    if profile["precision"] != "float32":
-        raise ValueError("these classifier routes require CPU float32")
+    precision = "bfloat16" if profile.get("adapter") == "d3" else "float32"
+    if profile["precision"] != precision:
+        raise ValueError(f"this classifier route requires CPU {precision}")
     torch.set_num_threads(threads)
     if torch.get_num_interop_threads() != 1:
         torch.set_num_interop_threads(1)
     runtime = DecisionRuntime(profile, directory, torch)
     runtime.audit = audit_modules(
-        {"model": runtime.model}, runtime.extra_tensors, torch, "float32"
+        {"model": runtime.model}, runtime.extra_tensors, torch, precision
     )
     return runtime
 
@@ -122,13 +123,24 @@ class DecisionRuntime:
                 .float()
                 .eval()
             )
-        elif adapter in ("liquid", "typed-gemma"):
+        elif adapter in ("liquid", "typed-gemma", "d3"):
             options = {"local_files_only": True, "trust_remote_code": True}
-            options["dtype"] = torch.float32
+            if adapter == "d3":
+                options.update(
+                    {"device": "cpu", "dtype": torch.bfloat16, "verify": "full"}
+                )
+            else:
+                options["dtype"] = torch.float32
             self.model = (
                 AutoModel.from_pretrained(self.directory, **options).to("cpu").eval()
             )
-            self.model.float()
+            if adapter == "d3":
+                readout = self.model.runtime.readout
+                if readout.device.type != "cpu" or readout.dtype != torch.float32:
+                    raise ValueError("D3 native readout requires CPU float32")
+                self.extra_tensors["readout"] = readout
+            else:
+                self.model.float()
             if adapter == "liquid":
                 self.model.tokenizer = self.tokenizer
             self.publisher = importlib.import_module(type(self.model).__module__)
@@ -136,7 +148,7 @@ class DecisionRuntime:
             raise ValueError(f"unsupported classifier adapter {adapter}")
         self.configuration = {
             "schema_version": 1,
-            "inputs": ["text"],
+            "inputs": ["text", "image"] if adapter == "d3" else ["text"],
             "calibration": f"publisher-{adapter}-{profile['revision']}",
             "selection_rule": "publisher-native-argmax",
             "preprocessing": f"publisher-{adapter}-single-choice-no-truncation-v1",
@@ -347,6 +359,30 @@ class DecisionRuntime:
                 native = self.model.system_one(state=state, questions=questions)[
                     "answers"
                 ]["choice"]
+                probabilities = native["probabilities"]
+                selected = native["choice"]
+            elif adapter == "d3":
+                images = [image] if image else None
+                prepared_native = self.model.runtime.prepare(
+                    state, questions, images=images
+                )
+                if prepared_native.errors:
+                    raise ValueError(
+                        f"native input preparation failed: {prepared_native.errors}"
+                    )
+                prepared = {
+                    "sequences": prepared_native.sequences,
+                    "texts": prepared_native.texts,
+                    "lengths": prepared_native.lengths,
+                    "media": image,
+                }
+                probabilities_by_question, tokens = self.model.runtime.run(
+                    prepared_native
+                )
+                result = self.model.runtime.respond(
+                    prepared_native, probabilities_by_question, tokens
+                )
+                native = result["answers"]["choice"]
                 probabilities = native["probabilities"]
                 selected = native["choice"]
             else:

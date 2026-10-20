@@ -362,5 +362,243 @@
       "publisher_rounded_parameter_count": "823M",
       "count_source": "https://huggingface.co/api/models/ai-forever/FRIDA-Decisions/revision/e8fc105679af2ab44e4c2e52b65d29db58166083?blobs=true"
     }
+  },
+  {
+    "model": "vllm-sr/d3-edge",
+    "revision": "c454ee39b862248d70abd7f84195d2f54ffe6d43",
+    "adapter": "d3",
+    "task": "decision_scoring",
+    "issue": 118,
+    "license": "apache-2.0",
+    "precision": "bfloat16",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "torchvision": "0.24.1",
+      "accelerate": "1.15.0"
+    },
+    "files": {
+      "MODEL_MANIFEST.json": {
+        "bytes": 11428,
+        "git_blob": "58ac87024392525de2c8532e0edbbd3f720331e3"
+      },
+      "config.json": {
+        "bytes": 2572,
+        "git_blob": "b0d720318d668d113913b65b4e942c6deaa84065"
+      },
+      "d3_engine.py": {
+        "bytes": 4413,
+        "git_blob": "24a3ebb4152f3dcde5e9403baff2323c7380b214",
+        "sha256": "086238942762df45047a32cd9a8e2bedd9b63167eb40be260c776de567979f53"
+      },
+      "d3_fast.py": {
+        "bytes": 22331,
+        "git_blob": "02b5e7811c901ebe1f8d33f44b4a4a67dde4ed2a",
+        "sha256": "68a1fb9a2c3bde9ac2763bf504decae592ca12722698fbde1b39a31262955535"
+      },
+      "d3_format.py": {
+        "bytes": 7008,
+        "git_blob": "18a97be8b097d3bf9eda82be649666175a9e4f59",
+        "sha256": "3badfbc70561bb3f5b8ec16a11d2c455b96ddb32caace0a8a54ca102eae1f3fa"
+      },
+      "d3_kernels.py": {
+        "bytes": 16129,
+        "git_blob": "31cb79b7d5dee117c8fec5a820db5a2cc7c8f229",
+        "sha256": "8f7534ca1e1846ebf7c4c73058002f3be4dbf0d5d426f0815150ae0cbe7677bd"
+      },
+      "d3_runtime.py": {
+        "bytes": 95505,
+        "git_blob": "18cfc31416a6df520fba4d4881ef1b878f7ab472",
+        "sha256": "adf7f7aa085674b5682e492d8b2e3cc4f11c67b0d153515c742e907e9b550917"
+      },
+      "d3_server.py": {
+        "bytes": 17705,
+        "git_blob": "36657b7fb605dfacfd88bf5a027574a0ab2f6b35",
+        "sha256": "766a20a69101e36ab0535a1ec683379db422380a83091f0eccd7e82edb6a02de"
+      },
+      "decision_config.json": {
+        "bytes": 5504,
+        "git_blob": "5bf6f72adb66002996fcf44a04947687eb2c2034"
+      },
+      "merges.txt": {
+        "bytes": 3353259,
+        "git_blob": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      "model-00001-of-00001.safetensors": {
+        "bytes": 1188677968,
+        "sha256": "91bb8618450a7f628f1432bbced76bc19ee7346c93d191a228fdd33c25a57a9d"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 25448,
+        "git_blob": "436b722d945d5bcb49f6b44b0e96c35c964e3326"
+      },
+      "modeling_d3.py": {
+        "bytes": 12079,
+        "git_blob": "b327030a25153668a0a34914a517c857946798f7",
+        "sha256": "f8f8db23ff58f1a990ffa24977d744a50e1b4446d02a64c22070967705b6dbef"
+      },
+      "pipeline_d3.py": {
+        "bytes": 2936,
+        "git_blob": "21fd672f2ef50e9db0646c7ab6a1bceb44df2974",
+        "sha256": "4f9297c7c74e596e9b67df91a1e6823cfada48bf781336f141974ff6a2f1038e"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "readout.safetensors": {
+        "bytes": 1044560,
+        "sha256": "de33d5dc795bbd77168e40bfadc340cca9b9f163b88744c10e1a788f4e166d3d"
+      },
+      "requirements.txt": {
+        "bytes": 723,
+        "git_blob": "06295a2ec746f4f9a3f8d166e36f1a7e740eb860"
+      },
+      "tokenizer.json": {
+        "bytes": 12807982,
+        "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+      },
+      "tokenizer_config.json": {
+        "bytes": 16709,
+        "git_blob": "fae3ce993e07c092ad024dde45e592379fde91bb"
+      },
+      "video_preprocessor_config.json": {
+        "bytes": 385,
+        "git_blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"
+      },
+      "vocab.json": {
+        "bytes": 6722759,
+        "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/vllm-sr/d3-edge/blob/c454ee39b862248d70abd7f84195d2f54ffe6d43/README.md",
+      "parameter_count": 594321600,
+      "count_source": "https://huggingface.co/api/models/vllm-sr/d3-edge/revision/c454ee39b862248d70abd7f84195d2f54ffe6d43?blobs=true"
+    }
+  },
+  {
+    "model": "vllm-sr/d3-lite",
+    "revision": "03560c26f5199c3c04129a2ccb38960c913635e0",
+    "adapter": "d3",
+    "task": "decision_scoring",
+    "issue": 118,
+    "license": "apache-2.0",
+    "precision": "bfloat16",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "torchvision": "0.24.1",
+      "accelerate": "1.15.0"
+    },
+    "files": {
+      "MODEL_MANIFEST.json": {
+        "bytes": 11428,
+        "git_blob": "4914d0597f46a4d3d6cf8ebd00703ec8e6aef3b8"
+      },
+      "config.json": {
+        "bytes": 2884,
+        "git_blob": "fdc4f45ab464793cdf8121af141f782c8db44482"
+      },
+      "d3_engine.py": {
+        "bytes": 4413,
+        "git_blob": "24a3ebb4152f3dcde5e9403baff2323c7380b214",
+        "sha256": "086238942762df45047a32cd9a8e2bedd9b63167eb40be260c776de567979f53"
+      },
+      "d3_fast.py": {
+        "bytes": 22331,
+        "git_blob": "02b5e7811c901ebe1f8d33f44b4a4a67dde4ed2a",
+        "sha256": "68a1fb9a2c3bde9ac2763bf504decae592ca12722698fbde1b39a31262955535"
+      },
+      "d3_format.py": {
+        "bytes": 7008,
+        "git_blob": "18a97be8b097d3bf9eda82be649666175a9e4f59",
+        "sha256": "3badfbc70561bb3f5b8ec16a11d2c455b96ddb32caace0a8a54ca102eae1f3fa"
+      },
+      "d3_kernels.py": {
+        "bytes": 16129,
+        "git_blob": "31cb79b7d5dee117c8fec5a820db5a2cc7c8f229",
+        "sha256": "8f7534ca1e1846ebf7c4c73058002f3be4dbf0d5d426f0815150ae0cbe7677bd"
+      },
+      "d3_runtime.py": {
+        "bytes": 95505,
+        "git_blob": "18cfc31416a6df520fba4d4881ef1b878f7ab472",
+        "sha256": "adf7f7aa085674b5682e492d8b2e3cc4f11c67b0d153515c742e907e9b550917"
+      },
+      "d3_server.py": {
+        "bytes": 17705,
+        "git_blob": "36657b7fb605dfacfd88bf5a027574a0ab2f6b35",
+        "sha256": "766a20a69101e36ab0535a1ec683379db422380a83091f0eccd7e82edb6a02de"
+      },
+      "decision_config.json": {
+        "bytes": 5504,
+        "git_blob": "5bf6f72adb66002996fcf44a04947687eb2c2034"
+      },
+      "merges.txt": {
+        "bytes": 3353259,
+        "git_blob": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      "model-00001-of-00001.safetensors": {
+        "bytes": 1706027688,
+        "sha256": "ca6222dbf2b72899ae45580ed84d26d1f0e69a8de212edda295072000e34a4c2"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 41066,
+        "git_blob": "e69d803dea3ab777681fc08e1e26bca18596bf6c"
+      },
+      "modeling_d3.py": {
+        "bytes": 12079,
+        "git_blob": "b327030a25153668a0a34914a517c857946798f7",
+        "sha256": "f8f8db23ff58f1a990ffa24977d744a50e1b4446d02a64c22070967705b6dbef"
+      },
+      "pipeline_d3.py": {
+        "bytes": 2936,
+        "git_blob": "21fd672f2ef50e9db0646c7ab6a1bceb44df2974",
+        "sha256": "4f9297c7c74e596e9b67df91a1e6823cfada48bf781336f141974ff6a2f1038e"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "readout.safetensors": {
+        "bytes": 1044560,
+        "sha256": "fe11cfac5c79b6a83e35b707581b1260214279bb22b003c215c62719186ef629"
+      },
+      "requirements.txt": {
+        "bytes": 723,
+        "git_blob": "06295a2ec746f4f9a3f8d166e36f1a7e740eb860"
+      },
+      "tokenizer.json": {
+        "bytes": 12807982,
+        "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+      },
+      "tokenizer_config.json": {
+        "bytes": 16709,
+        "git_blob": "fae3ce993e07c092ad024dde45e592379fde91bb"
+      },
+      "video_preprocessor_config.json": {
+        "bytes": 385,
+        "git_blob": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"
+      },
+      "vocab.json": {
+        "bytes": 6722759,
+        "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/vllm-sr/d3-lite/blob/03560c26f5199c3c04129a2ccb38960c913635e0/README.md",
+      "parameter_count": 852985920,
+      "count_source": "https://huggingface.co/api/models/vllm-sr/d3-lite/revision/03560c26f5199c3c04129a2ccb38960c913635e0?blobs=true"
+    }
   }
 ]
