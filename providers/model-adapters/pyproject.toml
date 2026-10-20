@@ -12,6 +12,9 @@ dependencies = []
 [project.optional-dependencies]
 gliclass = ["torch==2.9.1", "transformers==5.17.0", "gliclass==0.1.21", "sentencepiece==0.2.1"]
 gliner2 = ["torch==2.9.1", "transformers==5.17.0", "gliner2[local]==2.1.0", "sentencepiece==0.2.1"]
+liquid = ["torch==2.9.1", "torchvision==0.24.1", "transformers==5.16.1", "numpy==2.3.4", "Pillow==12.0.0"]
+intern = ["torch==2.9.1", "torchvision==0.24.1", "transformers==5.14.1", "Pillow==12.0.0"]
+typed-gemma = ["torch==2.9.1", "transformers==5.19.0", "sentencepiece==0.2.1"]
 
 [project.scripts]
 qit-adapter = "qit_adapters.cli:main"

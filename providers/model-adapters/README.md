@@ -1,7 +1,9 @@
 # Optional model adapter package
 
 This package provides local artifact verification, CPU parameter audits, offline startup, and the existing q.it local CPU serving protocol.
-The catalog currently contains two optional text classifiers, GLiClass v4 edge and GLiNER2.5 Decide.
+The catalog currently contains five optional text decision routes.
+GLiClass v4 edge and GLiNER2.5 Decide use their classifier libraries.
+Intern Decision, Liquid d1 omni, and typed-decision Gemma use pinned publisher code.
 Their model files and isolated runtimes are installed separately by the user.
 Installing it does not download a model or install a model runtime.
 
@@ -48,6 +50,24 @@ The loaded stack is audited as CPU float32 independently of the model-card count
 The [retained CPU checks](../../docs/research/optional-classifier-cpu-checks.md) describe original installed-command smoke runs and publisher comparisons.
 The three cases test transport and scoring rather than dataset-wide quality.
 Dependency locks and these Sol checks do not establish native Raspberry Pi qualification.
+
+## Run a publisher decision model
+
+Install the matching `intern`, `liquid`, or `typed-gemma` lock in a separate environment.
+The three checkpoints require different pinned Transformers versions and must not share a runtime environment.
+Review the pinned publisher Python files before opting in to execution.
+
+```bash
+.venv-adapter/bin/qit-adapter serve --model internlm/Intern-Decision-0.8B --model-path /absolute/path/to/pinned-model --allow-reviewed-code
+```
+
+The matching checkpoints are `LiquidAI/d1-omni-600M` and `mrm8488/embeddinggemma-2-ft-typed-decision` for the other two locks.
+The adapter checks required file identities before applying the publisher-code gate and importing a model runtime.
+Changing the pinned source requires a new source review and CPU verification.
+All three retain their publisher's complete single-choice probabilities and loaded CPU float32 audit.
+Intern and Liquid accept text cases only; their multimodal model components are still included in the loaded-stack count.
+Image and audio decision execution are not included in these routes.
+Use the existing three-case English pack to check transport and scoring.
 
 ## Adding a route
 

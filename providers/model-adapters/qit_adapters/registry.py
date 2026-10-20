@@ -14,4 +14,7 @@ class Adapter:
 ADAPTERS: dict[str, Adapter] = {
     "gliclass": Adapter(load_decision),
     "gliner2": Adapter(load_decision),
+    "intern": Adapter(load_decision, reviewed_code=True),
+    "liquid": Adapter(load_decision, reviewed_code=True),
+    "typed-gemma": Adapter(load_decision, reviewed_code=True),
 }
