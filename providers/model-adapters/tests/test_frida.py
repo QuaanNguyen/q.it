@@ -126,9 +126,9 @@ class FridaTests(unittest.TestCase):
     def test_catalog_and_archive_pins_retain_one_new_route(self):
         self.assertEqual(
             set(ADAPTERS),
-            {"gliclass", "gliner2", "intern", "liquid", "typed-gemma", "frida"},
+            {"gliclass", "gliner2", "intern", "liquid", "typed-gemma", "frida", "d3"},
         )
-        self.assertEqual(len(profiles()), 6)
+        self.assertEqual(len(profiles()), 8)
         self.assertFalse(ADAPTERS["frida"].reviewed_code)
         value = profile()
         self.assertEqual(len(value["files"]), 7)

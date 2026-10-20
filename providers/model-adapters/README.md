@@ -1,10 +1,11 @@
 # Optional model adapter package
 
 This package provides local artifact verification, CPU parameter audits, offline startup, and the existing q.it local CPU serving protocol.
-The catalog currently contains six optional text decision routes.
+The catalog contains eight optional decision routes.
 GLiClass v4 edge and GLiNER2.5 Decide use their classifier libraries.
 Intern Decision, Liquid d1 omni, and typed-decision Gemma use pinned publisher code.
 FRIDA-Decisions uses a pinned installed publisher library for Russian text.
+D3 Edge and Lite use pinned publisher code for text and image decisions.
 Their model files and isolated runtimes are installed separately by the user.
 Installing it does not download a model or install a model runtime.
 
@@ -98,6 +99,28 @@ The complete CPU float32 audit includes the encoder and scalar head.
 The publisher card's rounded 823M and exact 823,401,216 stored encoder parameters differ from the retained 823,402,753 complete loaded parameters.
 The head accounts for 1,537 parameters.
 [Retained CPU checks](../../docs/research/optional-classifier-cpu-checks.md) describe the historical execution scope.
+
+## Run D3 text and image decisions
+
+Install the `d3-linux-aarch64-py312.txt` or `d3-linux-x86_64-py312.txt` lock in a separate Linux CPython 3.12 environment.
+Review the pinned publisher Python files and install the pinned local checkpoint before serving.
+Both D3 profiles require explicit reviewed-code admission.
+
+```bash
+.venv-adapter/bin/qit-adapter serve --model vllm-sr/d3-edge --model-path /absolute/path/to/pinned-d3 --allow-reviewed-code
+qit benchmark install providers/model-adapters/packs/english-choice
+qit run english-choice-smoke/choice --provider local-cpu --model vllm-sr/d3-edge --base-url http://127.0.0.1:8766 --warmups 0 --iterations 1
+qit benchmark install providers/model-adapters/packs/image-choice
+qit run image-choice-smoke/choice --provider local-cpu --model vllm-sr/d3-edge --base-url http://127.0.0.1:8766 --warmups 0 --iterations 1
+```
+
+Use `vllm-sr/d3-lite` with its own pinned checkpoint for Lite.
+The publisher loads its native CPU BF16 backbone with full verification and retains its CPU FP32 learned readout.
+The complete learned audit includes both the registered backbone and the unregistered readout, and must remain strictly below one billion parameters.
+D3 rejects preparation errors before inference and preserves the publisher's complete candidate distribution and choice.
+These two exact checkpoint revisions are the only native BF16 exceptions to the general float32 decision gate.
+The [D3 retained CPU evidence](../../docs/research/d3-cpu-checks.md) separates historical model execution from current fixture verification.
+Neither architecture lock establishes Raspberry Pi qualification.
 
 ## Adding a route
 

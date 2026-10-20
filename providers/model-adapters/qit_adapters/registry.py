@@ -12,6 +12,7 @@ class Adapter:
 
 
 ADAPTERS: dict[str, Adapter] = {
+    "d3": Adapter(load_decision, reviewed_code=True),
     "frida": Adapter(load_decision),
     "gliclass": Adapter(load_decision),
     "gliner2": Adapter(load_decision),

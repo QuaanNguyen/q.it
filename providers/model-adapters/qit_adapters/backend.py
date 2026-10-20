@@ -117,6 +117,10 @@ class Backend:
             "preparation": getattr(self.runtime, "preparation", None),
             "qualification": "experimental; real checkpoint execution remains unverified",
         }
+        if profile["adapter"] == "d3":
+            self.configuration["precision_admission"] = (
+                "d3-native-bf16-backbone-fp32-readout-v1"
+            )
         self.configuration["configuration_id"] = fingerprint(self.configuration)
 
     def metadata(self):

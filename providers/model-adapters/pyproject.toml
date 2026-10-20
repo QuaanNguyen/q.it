@@ -10,6 +10,7 @@ requires-python = ">=3.11,<3.14"
 dependencies = []
 
 [project.optional-dependencies]
+d3 = ["torch==2.9.1", "torchvision==0.24.1", "transformers==5.17.0", "opencv-python-headless==4.12.0.88", "Pillow==12.0.0", "accelerate==1.15.0"]
 frida = ["frida-decisions[torch] @ https://github.com/ai-forever/FRIDA-Decisions/archive/00c8b5f0a88312e969d65b01a076bd9e447de2db.tar.gz#sha256=9a927dbd9958b18772ec0b35f6240f0a865e3f4fbb6df3f5dabfbe0a74608e8b", "torch==2.9.1", "transformers==5.17.0"]
 gliclass = ["torch==2.9.1", "transformers==5.17.0", "gliclass==0.1.21", "sentencepiece==0.2.1"]
 gliner2 = ["torch==2.9.1", "transformers==5.17.0", "gliner2[local]==2.1.0", "sentencepiece==0.2.1"]
