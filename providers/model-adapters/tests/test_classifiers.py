@@ -32,7 +32,7 @@ class ClassifierTests(unittest.TestCase):
         catalog = profiles()
         self.assertEqual(
             {row["adapter"] for row in catalog},
-            {"gliclass", "gliner2", "intern", "liquid", "typed-gemma"},
+            {"gliclass", "gliner2", "intern", "liquid", "typed-gemma", "frida"},
         )
         for row in catalog:
             self.assertEqual(profile_for(row["model"]), row)
