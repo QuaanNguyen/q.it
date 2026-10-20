@@ -50,3 +50,23 @@ The extraction uses the same constructors, input preparation, native scoring, an
 Its loader uses the shared package registry and attaches the existing complete CPU float32 audit.
 Fixture and installed-package checks validate that integration separately from the historical real-model runs.
 No new model run is implied by those fixture checks.
+
+## FRIDA Russian text evidence
+
+FRIDA-Decisions retained three successful original Russian text cases and matching complete native candidate distributions and choices on Sol Linux x86_64.
+Its checkpoint revision is `e8fc105679af2ab44e4c2e52b65d29db58166083`.
+The [pinned publisher card](https://huggingface.co/ai-forever/FRIDA-Decisions/blob/e8fc105679af2ab44e4c2e52b65d29db58166083/README.md) labels the route 823M.
+The [pinned Hugging Face safetensors metadata](https://huggingface.co/api/models/ai-forever/FRIDA-Decisions/revision/e8fc105679af2ab44e4c2e52b65d29db58166083?blobs=true), verified on 2026-10-20, reports 823,401,216 stored encoder parameters.
+The retained CPU float32 audit counts 823,402,753 learned parameters, including the 1,537-parameter scalar head.
+Startup independently audits the complete loaded stack and requires strictly fewer than one billion parameters.
+
+The retained result directory is `/scratch/qnguye19/qit-optional-cpu-20261019-3d11256/attempts/3/outcomes/7/text`.
+It used four CPU threads, draft adapter source `7c5964ec8fe13b259b7b37a8e1e9c941e0e76082`, and q.it binary source `3d112569a9d7f28f7185b25d28e2f2fd2b8c4b8f`.
+The independent publisher comparison matched the full distributions and choices for weather, temperature, and reading.
+The installed publisher runtime was pinned to commit `00c8b5f0a88312e969d65b01a076bd9e447de2db` and archive SHA-256 `9a927dbd9958b18772ec0b35f6240f0a865e3f4fbb6df3f5dabfbe0a74608e8b`.
+The extraction retains the original constructor, compile and judge calls, truncation refusals, source inventory, and artifact identities.
+Installed dependency source verification runs before publisher import and records the runtime commit separately from the checkpoint revision.
+
+These historical checks establish compatibility of that original source and runtime combination.
+The extraction's fixture and installed-package checks establish integration behavior separately.
+No fresh model run, dataset quality, performance ranking, aarch64 installation, or Raspberry Pi qualification is claimed.
