@@ -385,14 +385,23 @@ async fn dashboard_starts_runs_without_blocking_history_and_retains_failures() {
     }
     let initial: serde_json::Value = client.get(&url).send().await.unwrap().json().await.unwrap();
     assert!(initial["runs"].as_array().unwrap().is_empty());
-    let accepted = client
-        .post(&url)
-        .header("origin", dashboard.base_url())
-        .json(&body)
-        .send()
-        .await
-        .unwrap();
+    let (first, second) = tokio::join!(
+        client
+            .post(&url)
+            .header("origin", dashboard.base_url())
+            .json(&body)
+            .send(),
+        client.post(&url).json(&body).send(),
+    );
+    let first = first.unwrap();
+    let second = second.unwrap();
+    let (accepted, rejected) = if first.status() == StatusCode::ACCEPTED {
+        (first, second)
+    } else {
+        (second, first)
+    };
     assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
     let accepted: serde_json::Value = accepted.json().await.unwrap();
     let id = accepted["id"].as_str().unwrap();
     assert_eq!(accepted["status"], "running");
@@ -404,11 +413,13 @@ async fn dashboard_starts_runs_without_blocking_history_and_retains_failures() {
         .await
         .unwrap();
     assert_eq!(history["running"], 1);
+    assert_eq!(history["runs"].as_array().unwrap().len(), 1);
+    assert_eq!(history["runs"][0]["id"], id);
     let observer = Store::open(&home.join("results.db")).unwrap();
-    assert_eq!(
-        observer.runs(10, false).unwrap()[0].status,
-        RunStatus::Running
-    );
+    let stored = observer.runs(10, false).unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].id, id);
+    assert_eq!(stored[0].status, RunStatus::Running);
     let conflict = client.post(&url).json(&body).send().await.unwrap();
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
     gate.add_permits(1);
@@ -421,15 +432,10 @@ async fn dashboard_starts_runs_without_blocking_history_and_retains_failures() {
     gate.add_permits(1);
     let mut broken = body.clone();
     broken["model"] = serde_json::json!("broken-model");
-    let failed: serde_json::Value = client
-        .post(&url)
-        .json(&broken)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let failed = client.post(&url).json(&broken).send().await.unwrap();
+    let status = failed.status();
+    let failed: serde_json::Value = failed.json().await.unwrap();
+    assert_eq!(status, StatusCode::ACCEPTED, "{failed}");
     let failed = await_run(
         &client,
         &dashboard.base_url(),
