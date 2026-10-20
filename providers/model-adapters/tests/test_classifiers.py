@@ -30,7 +30,10 @@ def payload():
 class ClassifierTests(unittest.TestCase):
     def test_catalog_has_complete_pinned_sub_billion_card_evidence(self):
         catalog = profiles()
-        self.assertEqual({row["adapter"] for row in catalog}, {"gliclass", "gliner2"})
+        self.assertEqual(
+            {row["adapter"] for row in catalog},
+            {"gliclass", "gliner2", "intern", "liquid", "typed-gemma"},
+        )
         for row in catalog:
             self.assertEqual(profile_for(row["model"]), row)
             self.assertIs(type(row["model_card"]["parameter_count"]), int)

@@ -1,6 +1,8 @@
 import copy
+import importlib
+import importlib.util
 import math
-
+import sys
 from .artifacts import fingerprint
 
 
@@ -31,9 +33,19 @@ def distribution(candidates, probabilities, selected):
     return [{"id": key, "probability": probabilities[key]} for key in identifiers]
 
 
+def load_module(path, identity):
+    name = "qit_publisher_" + identity[:16]
+    specification = importlib.util.spec_from_file_location(name, path)
+    if specification is None or specification.loader is None:
+        raise ValueError("publisher module cannot be imported")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[name] = module
+    specification.loader.exec_module(module)
+    return module
+
+
 def load_decision(profile, directory, threads):
     import torch
-
     from .backend import audit_modules
 
     if torch.version.cuda is not None:
@@ -52,7 +64,7 @@ def load_decision(profile, directory, threads):
 
 class DecisionRuntime:
     def __init__(self, profile, directory, torch):
-        from transformers import AutoTokenizer
+        from transformers import AutoModel, AutoTokenizer
 
         self.profile = profile
         self.directory = str(directory)
@@ -62,7 +74,18 @@ class DecisionRuntime:
             self.directory, local_files_only=True
         )
         self.extra_tensors = {}
-        if adapter == "gliclass":
+        if adapter == "intern":
+            self.publisher = load_module(
+                directory / "inference.py", profile["revision"]
+            )
+            self.engine = self.publisher.DecisionEngine(
+                checkpoint=self.directory,
+                device="cpu",
+                dtype="float32",
+                attn_implementation="eager",
+            )
+            self.model = self.engine.backend.model
+        elif adapter == "gliclass":
             from gliclass import GLiClassModel, ZeroShotClassificationPipeline
 
             self.model = (
@@ -88,6 +111,16 @@ class DecisionRuntime:
                 .float()
                 .eval()
             )
+        elif adapter in ("liquid", "typed-gemma"):
+            options = {"local_files_only": True, "trust_remote_code": True}
+            options["dtype"] = torch.float32
+            self.model = (
+                AutoModel.from_pretrained(self.directory, **options).to("cpu").eval()
+            )
+            self.model.float()
+            if adapter == "liquid":
+                self.model.tokenizer = self.tokenizer
+            self.publisher = importlib.import_module(type(self.model).__module__)
         else:
             raise ValueError(f"unsupported classifier adapter {adapter}")
         self.configuration = {
@@ -101,7 +134,17 @@ class DecisionRuntime:
     def invoke(self, case):
         decision = case["decision"]
         candidates = decision["candidates"]
+        questions = {
+            "choice": {
+                "type": "choice",
+                "instructions": decision["question"],
+                "criteria": {
+                    candidate["id"]: candidate["text"] for candidate in candidates
+                },
+            }
+        }
         state = decision["state"]
+        image = case.get("media")
         adapter = self.profile["adapter"]
         prepared = None
         native = {}
@@ -199,6 +242,77 @@ class DecisionRuntime:
                     "probabilities": values,
                     "observer": "unmodified native _compute_classification_probabilities return value",
                 }
+            elif adapter == "intern":
+                request = {"state": state, "questions": questions}
+                if image:
+                    raise ValueError(
+                        "Intern image execution awaits installed native processor qualification"
+                    )
+                compiled, inputs, _ = self.engine.backend.encode(request)
+                prepared = {
+                    "messages": compiled.messages,
+                    "input_ids": inputs["input_ids"].tolist(),
+                }
+                native = self.engine.predict(request)["answers"]["choice"]
+                probabilities = native["probabilities"]
+                selected = native.get("decision", native.get("choice"))
+            elif adapter == "typed-gemma":
+                inputs, _, texts = self.model._build_inputs(
+                    [("", state, questions, None)], self.tokenizer
+                )
+                limit = int(self.model.config.max_seq_length or 32768)
+                for text in texts:
+                    prompt = (self.model.config.prompt or "") + text
+                    if (
+                        len(self.tokenizer(prompt, truncation=False)["input_ids"])
+                        > limit
+                    ):
+                        raise ValueError("typed decision input would be truncated")
+                prepared = {"texts": texts, "input_ids": inputs["input_ids"].tolist()}
+                answer = self.model.decide(state, questions, tokenizer=self.tokenizer)[
+                    "choice"
+                ]
+                native = answer.to_dict()
+                probabilities = answer.probabilities
+                selected = answer.label
+            elif adapter == "liquid":
+                if image:
+                    raise ValueError(
+                        "Liquid image execution awaits installed native processor qualification"
+                    )
+                module = importlib.import_module(
+                    type(self.model).__module__.rsplit(".", 1)[0] + ".prompt"
+                )
+                question = module.as_question(questions["choice"])
+                limit = int(self.model.config.max_length)
+                budget = max(96, min(len(candidates) * 24 + 32, limit // 2))
+                per_option = max(2, (budget - 3 * len(candidates)) // len(candidates))
+
+                def encode(text):
+                    return self.tokenizer(
+                        module.escape(text), add_special_tokens=False
+                    )["input_ids"]
+
+                if len(encode(question.instructions)) + 1 > max(16, budget):
+                    raise ValueError("Liquid question would be truncated")
+                if any(
+                    (
+                        len(encode(" " + text)) > per_option
+                        for text in module.render_options(question)
+                    )
+                ):
+                    raise ValueError("Liquid candidate text would be truncated")
+                ids, markers = module.encode(self.tokenizer, state, question, limit)
+                state_size = len(encode(module.serialize(state)))
+                empty_ids, _ = module.encode(self.tokenizer, "", question, limit)
+                if state_size + len(empty_ids) > limit:
+                    raise ValueError("Liquid state would be truncated")
+                prepared = {"input_ids": ids, "markers": markers}
+                native = self.model.system_one(state=state, questions=questions)[
+                    "answers"
+                ]["choice"]
+                probabilities = native["probabilities"]
+                selected = native["choice"]
             else:
                 raise ValueError(f"unsupported classifier adapter {adapter}")
         ordered = distribution(candidates, probabilities, selected)
