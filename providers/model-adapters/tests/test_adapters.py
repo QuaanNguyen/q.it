@@ -17,7 +17,6 @@ from qit_adapters.artifacts import (
     environment,
     fingerprint,
     profile_for,
-    profiles,
     verify,
 )
 from qit_adapters.backend import Backend, audit_modules
@@ -35,6 +34,7 @@ def profile():
         "license": "MIT",
         "requirements": {},
         "files": {},
+        "model_card": {"parameter_count": 10},
     }
 
 
@@ -104,9 +104,7 @@ def backend(runtime=None, reviewed_code=False, allow_reviewed_code=False):
 
 
 class AdapterTests(unittest.TestCase):
-    def test_package_has_no_routes_or_runtime_dependencies(self):
-        self.assertEqual(profiles(), [])
-        self.assertEqual(ADAPTERS, {})
+    def test_unknown_model_is_rejected_without_loading(self):
         with self.assertRaisesRegex(ValueError, "unsupported model"):
             profile_for("fixture/model")
 

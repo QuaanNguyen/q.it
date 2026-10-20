@@ -1,7 +1,8 @@
 # Optional model adapter package
 
 This package provides local artifact verification, CPU parameter audits, offline startup, and the existing q.it local CPU serving protocol.
-The catalog is empty, and this package does not include any model routes, model files, runtime extras, or dependency locks.
+The catalog currently contains two optional text classifiers, GLiClass v4 edge and GLiNER2.5 Decide.
+Their model files and isolated runtimes are installed separately by the user.
 Installing it does not download a model or install a model runtime.
 
 ```bash
@@ -10,8 +11,43 @@ python3.12 -m venv /tmp/qit-adapter
 /tmp/qit-adapter/bin/qit-adapter list
 ```
 
-The list command succeeds without output until a model route is added.
+The list command reports the available routes without importing their runtimes.
 Verification and serving reject models absent from the catalog.
+
+## Run a text classifier
+
+Use Linux CPython 3.12 and install one runtime in a separate environment.
+Choose the lock matching the runtime and host architecture.
+
+```bash
+python3.12 -m venv .venv-adapter
+.venv-adapter/bin/pip install uv==0.9.5
+.venv-adapter/bin/uv pip sync --python .venv-adapter/bin/python --torch-backend cpu --require-hashes providers/model-adapters/qit_adapters/locks/gliclass-linux-aarch64-py312.txt
+.venv-adapter/bin/uv pip install --python .venv-adapter/bin/python --no-deps ./providers/model-adapters
+.venv-adapter/bin/qit-adapter verify --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model
+.venv-adapter/bin/qit-adapter serve --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model
+```
+
+Use the `linux-x86_64` lock on Sol.
+GLiNER uses the `gliner2` lock and the original `fastino/GLiNER2.5-Decide` checkpoint.
+The original artifact manifest pins each required file and refuses missing or modified files before loading.
+There is no automatic acquisition or runtime fallback.
+
+Run the original three-case decision pack against the serving endpoint.
+
+```bash
+qit benchmark install providers/model-adapters/packs/english-choice
+qit run english-choice-smoke/choice --provider local-cpu --model knowledgator/gliclass-v4-edge --base-url http://127.0.0.1:8766 --warmups 0 --iterations 1
+```
+
+Both routes retain the publisher's complete ordered probabilities and refuse generation settings.
+GLiClass refuses truncated input and duplicate candidate text.
+GLiNER observes native complete probabilities before the publisher's public top-choice decoding and restores the original method after every request.
+The loaded stack is audited as CPU float32 independently of the model-card count.
+
+The [retained CPU checks](../../docs/research/optional-classifier-cpu-checks.md) describe original installed-command smoke runs and publisher comparisons.
+The three cases test transport and scoring rather than dataset-wide quality.
+Dependency locks and these Sol checks do not establish native Raspberry Pi qualification.
 
 ## Adding a route
 

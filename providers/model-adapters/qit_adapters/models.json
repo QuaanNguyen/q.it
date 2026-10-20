@@ -1,1 +1,86 @@
-[]
+[
+  {
+    "model": "knowledgator/gliclass-v4-edge",
+    "revision": "90be5550327b138635db1f63531f9dfa15e624da",
+    "adapter": "gliclass",
+    "task": "decision_scoring",
+    "issue": 115,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "gliclass": "0.1.21"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 4406,
+        "git_blob": "830220555b415fcac72231a0bc406b88ada64538"
+      },
+      "model.safetensors": {
+        "bytes": 881878644,
+        "sha256": "672cabebce49caa011ce4b5c62eaa19857e45b27644e20b242abc30a02bb2702"
+      },
+      "tokenizer.json": {
+        "bytes": 8340434,
+        "git_blob": "1eb53a8fb2386315be6810da2158a802d9377f39"
+      },
+      "tokenizer_config.json": {
+        "bytes": 537,
+        "git_blob": "dea6754cb345e3bfea5aa18311b49d2b7613b9c6"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/knowledgator/gliclass-v4-edge/blob/90be5550327b138635db1f63531f9dfa15e624da/README.md",
+      "parameter_count": 439790595,
+      "count_source": "https://huggingface.co/api/models/knowledgator/gliclass-v4-edge/revision/90be5550327b138635db1f63531f9dfa15e624da"
+    }
+  },
+  {
+    "model": "fastino/GLiNER2.5-Decide",
+    "revision": "9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90",
+    "adapter": "gliner2",
+    "task": "decision_scoring",
+    "issue": 116,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.17.0",
+      "gliner2": "2.1.0"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 1612,
+        "git_blob": "68c038426487c85f7fc37ee4885062b799ed6d22"
+      },
+      "encoder_config/config.json": {
+        "bytes": 920,
+        "git_blob": "63faecad180aed6a59dc33f9bf256e1ad5a8b8ec"
+      },
+      "model.safetensors": {
+        "bytes": 1945828140,
+        "sha256": "40a5a23ff860dc3dff426cecd1048cacdd29c648c96db209dad818e9686dc997"
+      },
+      "special_tokens_map.json": {
+        "bytes": 2414,
+        "git_blob": "4f5d30b2c191a6fe27a92901a543cfad1f9832ab"
+      },
+      "tokenizer.json": {
+        "bytes": 8333952,
+        "git_blob": "846fee96bd81469a49d54a6e37909cf2070a8833"
+      },
+      "tokenizer_config.json": {
+        "bytes": 3356,
+        "git_blob": "eaa0e9bae635e8571f2501ade39b3be479d3fa0f"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/fastino/GLiNER2.5-Decide/blob/9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90/README.md",
+      "parameter_count": 486444053,
+      "count_source": "https://huggingface.co/api/models/fastino/GLiNER2.5-Decide/revision/9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90"
+    }
+  }
+]

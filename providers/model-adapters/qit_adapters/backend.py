@@ -106,6 +106,7 @@ class Backend:
             if adapter.reviewed_code and allow_reviewed_code
             else None,
             "license": profile["license"],
+            "model_card": profile.get("model_card"),
             "license_url": f"https://huggingface.co/{profile['model']}/tree/{profile['revision']}",
             "platform": {
                 "python": platform.python_version(),

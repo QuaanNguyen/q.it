@@ -9,6 +9,10 @@ description = "Optional local-only model adapters for q.it"
 requires-python = ">=3.11,<3.14"
 dependencies = []
 
+[project.optional-dependencies]
+gliclass = ["torch==2.9.1", "transformers==5.17.0", "gliclass==0.1.21", "sentencepiece==0.2.1"]
+gliner2 = ["torch==2.9.1", "transformers==5.17.0", "gliner2[local]==2.1.0", "sentencepiece==0.2.1"]
+
 [project.scripts]
 qit-adapter = "qit_adapters.cli:main"
 

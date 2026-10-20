@@ -2,6 +2,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from .decisions import load_decision
+
 
 @dataclass(frozen=True)
 class Adapter:
@@ -9,4 +11,7 @@ class Adapter:
     reviewed_code: bool = False
 
 
-ADAPTERS: dict[str, Adapter] = {}
+ADAPTERS: dict[str, Adapter] = {
+    "gliclass": Adapter(load_decision),
+    "gliner2": Adapter(load_decision),
+}

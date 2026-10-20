@@ -127,4 +127,4 @@ jobs:
           /tmp/qit-adapter-installed/bin/pip install --no-deps ./providers/model-adapters
           cd /tmp
           /tmp/qit-adapter-installed/bin/qit-adapter list
-          /tmp/qit-adapter-installed/bin/python -c 'from qit_adapters.backend import Backend; from qit_adapters.registry import ADAPTERS; assert not ADAPTERS'
+          /tmp/qit-adapter-installed/bin/python -c 'from qit_adapters.backend import Backend; import sys; assert "torch" not in sys.modules'
