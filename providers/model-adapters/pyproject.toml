@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qit-model-adapters"
+version = "0.1.0"
+description = "Optional local-only model adapters for q.it"
+requires-python = ">=3.11,<3.14"
+dependencies = []
+
+[project.scripts]
+qit-adapter = "qit_adapters.cli:main"
+
+[tool.setuptools.package-data]
+qit_adapters = ["models.json", "locks/*.txt"]
+
+[tool.setuptools.packages.find]
+include = ["qit_adapters*"]
