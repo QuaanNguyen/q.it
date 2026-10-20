@@ -7,7 +7,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Mutex;
 
 use crate::model::{
     BenchmarkDefinition, HostInfo, ProviderKind, RunRecord, RunRequest, RunStatus, SampleRecord,
@@ -24,7 +24,6 @@ pub struct DashboardState {
     pub catalog: PackCatalog,
     pub host: HostInfo,
     pub database: PathBuf,
-    pub execution: Arc<Semaphore>,
 }
 
 #[derive(Deserialize)]
@@ -192,10 +191,6 @@ async fn start_run(
             ));
         }
     }
-    let permit =
-        state.execution.clone().try_acquire_owned().map_err(|_| {
-            ApiError::conflict("a benchmark is already running; wait for it to finish")
-        })?;
     let benchmark = state
         .catalog
         .benchmark(&body.benchmark_id)
@@ -278,7 +273,6 @@ async fn start_run(
                 tracing::error!("{error}");
             }
         }
-        drop(permit);
     });
     Ok((StatusCode::ACCEPTED, Json(run)))
 }
