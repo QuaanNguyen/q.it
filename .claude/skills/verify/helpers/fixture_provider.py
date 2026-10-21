@@ -11,10 +11,13 @@ computed from real vectors rather than copied from the case expectation.
 """
 
 import argparse
+import base64
 import hashlib
 import json
+import io
 import math
 import sys
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -44,6 +47,12 @@ def document_vectors(text):
         return [embed(words), embed(words)]
     middle = max(1, len(words) // 2)
     return [embed(words[:middle]), embed(words[middle:])]
+
+
+def wav_duration(data_url):
+    encoded = data_url.partition(",")[2]
+    with wave.open(io.BytesIO(base64.b64decode(encoded))) as audio:
+        return audio.getnframes() / audio.getframerate()
 
 
 def maxsim(query, documents):
@@ -103,12 +112,24 @@ class Handler(BaseHTTPRequestHandler):
     def ocr(self):
         return self.model().endswith("indra-ocr")
 
+    def speech(self):
+        return "parakeet" in self.model()
+
     def do_GET(self):
         model = self.model()
         if not urlparse(self.path).path.endswith("/v1/qit/model"):
             self.reply(404, {"error": "unknown route"})
             return
-        if self.ocr():
+        if self.speech():
+            configuration = {
+                "device": "cpu",
+                "task": "speech_to_text",
+                "dtype": "float32",
+                "precision": "float32",
+                "parameter_count": 10,
+                "revision": "fixture-revision",
+            }
+        elif self.ocr():
             configuration = {
                 "device": "cpu",
                 "task": "image_to_text",
@@ -150,7 +171,22 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("content-length", "0"))
         body = json.loads(self.rfile.read(length) or b"{}")
         case = body.get("case") or {}
-        if self.ocr():
+        if self.speech():
+            media = case.get("media")
+            if not isinstance(media, str):
+                self.reply(400, {"error": "speech case requires inline media"})
+                return
+            duration = -1.0 if self.server.mode == "invalid-duration" else wav_duration(media)
+            event = {
+                "type": "result",
+                "output_text": "the birch canoe slid on the smooth planks",
+                "audio_duration_seconds": duration,
+                "speech_routing": {
+                    "requested_mode": "automatic",
+                    "selected_route": "english",
+                },
+            }
+        elif self.ocr():
             if not isinstance(case.get("media"), str):
                 self.reply(400, {"error": "ocr case requires inline media"})
                 return

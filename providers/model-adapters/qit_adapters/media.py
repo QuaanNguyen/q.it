@@ -1,5 +1,6 @@
 import base64
 import io
+from fractions import Fraction
 
 
 def media_bytes(case, prefix):
@@ -28,3 +29,24 @@ def image_from_case(case):
         raise ValueError("input image exceeds sixteen million pixels")
     image.load()
     return image.convert("RGB")
+
+
+def audio_from_case(case, sampling_rate):
+    import numpy as np
+    import soundfile as sf
+    from scipy.signal import resample_poly
+
+    data = media_bytes(case, "audio/")
+    with sf.SoundFile(io.BytesIO(data)) as audio:
+        if audio.frames > audio.samplerate * 30:
+            raise ValueError("CPU speech cases must be at most thirty seconds")
+        samples = audio.read(dtype="float32", always_2d=True).mean(axis=1)
+        original_rate = audio.samplerate
+    if not samples.size or not np.isfinite(samples).all():
+        raise ValueError("audio must contain finite samples")
+    if original_rate != sampling_rate:
+        ratio = Fraction(sampling_rate, original_rate)
+        samples = resample_poly(samples, ratio.numerator, ratio.denominator).astype(
+            "float32"
+        )
+    return samples

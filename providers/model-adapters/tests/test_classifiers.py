@@ -45,6 +45,9 @@ class ClassifierTests(unittest.TestCase):
                 "uibk-agent",
                 "lighton",
                 "indra",
+                "photon",
+                "redux",
+                "nemotron",
             },
         )
         for row in catalog:
