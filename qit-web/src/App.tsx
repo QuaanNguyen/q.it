@@ -698,6 +698,12 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
                   <td className="sample-output">
                     {sample.error ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
                     {sample.decision && <DecisionOutput observation={sample.decision} />}
+                    {sample.output_metadata && (
+                      <details>
+                        <summary>Output evidence</summary>
+                        <pre>{JSON.stringify(sample.output_metadata, null, 2)}</pre>
+                      </details>
+                    )}
                     {sample.retrieval && (
                       <details>
                         <summary>MaxSim / {sample.retrieval.query.length} query vectors</summary>

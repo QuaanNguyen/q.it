@@ -37,13 +37,14 @@ It is read-only. It reports the binary path and whether it is older than the Rus
 
 ## Drive
 
-One command runs the full retrieval journey, asserts the result, and writes evidence:
+One command per mapped feature runs the full journey, asserts the result, and writes evidence:
 
 ```sh
 .claude/skills/verify/helpers/drive-retrieval.sh
+.claude/skills/verify/helpers/drive-ocr.sh
 ```
 
-It builds, starts the fixture provider, runs `qit run core/embedding-retrieval` with one warmup and two iterations, records `qit results`, exports JSONL, reads the same run from `qit dashboard`'s `/api/runs/<id>`, then drives an invalid observation to prove the CLI refuses it with exit code 2. Individual steps stay separated in the evidence directory so a failure names the step that broke.
+Both build, start the fixture provider, run the pack with one warmup and two iterations, record `qit results`, export JSONL, read the same run from `qit dashboard`'s `/api/runs/<id>`, then drive an invalid provider answer to prove the CLI refuses it with exit code 2. The OCR drive additionally proves that a failed run stays in history. Individual steps stay separated in the evidence directory so a failure names the step that broke.
 
 To drive a different feature by hand, keep the same shape: isolated `QIT_HOME`, explicit provider base URL, capture exit code plus both streams.
 
@@ -60,7 +61,9 @@ Each drive writes `.qit-evidence/verify/<UTC timestamp>/`:
 | `invalid.out`, `invalid.status` | inconsistent provider output is refused |
 | `summary.md` | what was asserted, with counts and the run ID |
 
-Assertions recompute MaxSim from the retained vectors, check that ranking follows score order with document-order ties, and check that `quality_score` equals `1 / (position + 1)` for the case's expected document. They read the expectation from the installed benchmark pack, not from the run output.
+The retrieval assertions recompute MaxSim from the retained vectors, check that ranking follows score order with document-order ties, and check that `quality_score` equals `1 / (position + 1)` for the case's expected document. They read the expectation from the installed benchmark pack, not from the run output.
+
+The OCR assertions check the expected colors score 1.0, that retained output evidence names the route and stage calls, and that the dashboard serves the exported evidence unchanged.
 
 Mocks are limited to the provider endpoint, which is a real process boundary. The command, store, export, and dashboard are the production paths.
 
@@ -78,7 +81,9 @@ stops any process whose PID is recorded in the newest evidence directory. The dr
 
 | Helper | Purpose |
 |--------|---------|
-| `helpers/fixture_provider.py` | loopback Local CPU provider with `maxsim-fixture` and `maxsim-inconsistent` models |
+| `helpers/fixture_provider.py` | loopback Local CPU provider: `maxsim-fixture`, `maxsim-inconsistent`, and `datalab-to/indra-ocr`, with `--mode invalid-metadata` |
 | `helpers/doctor.sh` | read-only readiness check |
 | `helpers/assert_retrieval.py` | recomputes MaxSim from the evidence and writes `summary.md` |
+| `helpers/assert_ocr.py` | checks OCR evidence, history, and dashboard parity |
 | `helpers/drive-retrieval.sh` | full retrieval journey plus cleanup mode |
+| `helpers/drive-ocr.sh` | full OCR journey plus cleanup mode |

@@ -373,6 +373,7 @@ pub struct SampleRecord {
     pub quality_score: Option<f64>,
     pub output_excerpt: Option<String>,
     pub output_image: Option<String>,
+    pub output_metadata: Option<serde_json::Value>,
     pub decision: Option<crate::decision::DecisionObservation>,
     pub retrieval: Option<crate::retrieval::RetrievalObservation>,
     pub speech: Option<SpeechObservation>,
@@ -395,6 +396,7 @@ pub struct RunRequest {
 #[derive(Clone, Debug, Default)]
 pub struct InvocationResult {
     pub output_text: Option<String>,
+    pub output_metadata: Option<serde_json::Value>,
     pub embeddings: Vec<Vec<f64>>,
     pub ranking: Vec<usize>,
     pub latency_ms: f64,

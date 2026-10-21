@@ -94,32 +94,51 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def model(self):
-        parts = urlparse(self.path).path.strip("/").split("/")
-        return parts[0] if parts and parts[0] else "fixture"
+        path = urlparse(self.path).path.strip("/")
+        for suffix in ("v1/qit/model", "v1/qit/invoke"):
+            if path.endswith(suffix):
+                return path[: -len(suffix)].rstrip("/")
+        return path
+
+    def ocr(self):
+        return self.model().endswith("indra-ocr")
 
     def do_GET(self):
         model = self.model()
         if not urlparse(self.path).path.endswith("/v1/qit/model"):
             self.reply(404, {"error": "unknown route"})
             return
+        if self.ocr():
+            configuration = {
+                "device": "cpu",
+                "task": "image_to_text",
+                "dtype": "float32",
+                "precision": "float32",
+                "revision": "ed345c7f158eddbc7dee0c6a7269afb75a94f7e8",
+                "parameter_count": None,
+                "parameter_count_basis": "onnx-full-static-constant-upper-bound-v1",
+                "parameter_count_upper_bound": 300000000,
+            }
+        else:
+            configuration = {
+                "device": "cpu",
+                "task": "embedding",
+                "parameter_count": 10,
+                "revision": "fixture-revision",
+                "retrieval": {
+                    "schema_version": 1,
+                    "method": "maxsim",
+                    "dimensions": 128,
+                    "tie_break": "document_order",
+                },
+            }
         self.reply(
             200,
             {
                 "schema_version": 1,
                 "version": "0.1.0",
                 "model": model,
-                "configuration": {
-                    "device": "cpu",
-                    "task": "embedding",
-                    "parameter_count": 10,
-                    "revision": "fixture-revision",
-                    "retrieval": {
-                        "schema_version": 1,
-                        "method": "maxsim",
-                        "dimensions": 128,
-                        "tie_break": "document_order",
-                    },
-                },
+                "configuration": configuration,
             },
         )
 
@@ -131,13 +150,31 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("content-length", "0"))
         body = json.loads(self.rfile.read(length) or b"{}")
         case = body.get("case") or {}
-        if not case.get("input") or not case.get("documents"):
-            self.reply(400, {"error": "embedding case requires input and documents"})
-            return
-        event = {
-            "type": "result",
-            "retrieval": observation(case, model.endswith("inconsistent")),
-        }
+        if self.ocr():
+            if not isinstance(case.get("media"), str):
+                self.reply(400, {"error": "ocr case requires inline media"})
+                return
+            evidence = {
+                "schema_version": 1,
+                "route": "indra-full-ocr",
+                "stage_calls": {"det": 1, "rec": 1},
+            }
+            if self.server.mode == "invalid-metadata":
+                evidence = ["not", "an", "object"]
+            event = {
+                "type": "result",
+                "output_text": "red and blue",
+                "output_tokens": 3,
+                "output_metadata": evidence,
+            }
+        else:
+            if not case.get("input") or not case.get("documents"):
+                self.reply(400, {"error": "embedding case requires input and documents"})
+                return
+            event = {
+                "type": "result",
+                "retrieval": observation(case, model.endswith("inconsistent")),
+            }
         body = (json.dumps(event) + "\n").encode("utf-8")
         self.send_response(200)
         self.send_header("content-type", "application/x-ndjson")
@@ -151,8 +188,10 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--port-file", type=Path)
+    parser.add_argument("--mode", default="ok")
     options = parser.parse_args()
     server = ThreadingHTTPServer((options.host, options.port), Handler)
+    server.mode = options.mode
     if options.port_file:
         options.port_file.write_text(str(server.server_address[1]))
     print(

@@ -43,6 +43,8 @@ class ClassifierTests(unittest.TestCase):
                 "ultrabert",
                 "uibk",
                 "uibk-agent",
+                "lighton",
+                "indra",
             },
         )
         for row in catalog:

@@ -119,6 +119,12 @@ impl Store {
         ensure_column(&connection, "benchmark_samples", "decision_json", "TEXT")?;
         ensure_column(&connection, "benchmark_samples", "retrieval_json", "TEXT")?;
         ensure_column(&connection, "benchmark_samples", "speech_json", "TEXT")?;
+        ensure_column(
+            &connection,
+            "benchmark_samples",
+            "output_metadata_json",
+            "TEXT",
+        )?;
         Ok(Self { connection })
     }
 
@@ -195,10 +201,10 @@ impl Store {
                     ttft_ms, input_tokens, output_tokens, tokens_per_second,
                     host_cpu_percent_mean, host_cpu_percent_peak,
                     host_memory_used_bytes_peak, process_rss_bytes_peak,
-                    quality_score, output_excerpt, output_image, decision_json, retrieval_json, speech_json
+                    quality_score, output_excerpt, output_image, decision_json, retrieval_json, speech_json, output_metadata_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+                    ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
                  )",
                 params![
                     sample.id,
@@ -237,6 +243,12 @@ impl Store {
                         .map(serde_json::to_string)
                         .transpose()
                         .map_err(|error| format!("serialize speech sample: {error}"))?,
+                    sample
+                        .output_metadata
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()
+                        .map_err(|error| format!("serialize output metadata: {error}"))?,
                 ],
             )
             .map_err(|error| format!("store benchmark sample: {error}"))?;
@@ -328,7 +340,7 @@ impl Store {
                         ttft_ms, input_tokens, output_tokens, tokens_per_second,
                         host_cpu_percent_mean, host_cpu_percent_peak,
                         host_memory_used_bytes_peak, process_rss_bytes_peak,
-                        quality_score, output_excerpt, output_image, decision_json, retrieval_json, speech_json
+                        quality_score, output_excerpt, output_image, decision_json, retrieval_json, speech_json, output_metadata_json
                  FROM benchmark_samples
                  WHERE run_id = ?1
                  ORDER BY iteration, case_id",
@@ -370,6 +382,11 @@ impl Store {
                         .map(|value| serde_json::from_str(&value))
                         .transpose()
                         .map_err(|error| conversion_error(20, error.to_string()))?,
+                    output_metadata: row
+                        .get::<_, Option<String>>(21)?
+                        .map(|value| serde_json::from_str(&value))
+                        .transpose()
+                        .map_err(|error| conversion_error(21, error.to_string()))?,
                 })
             })
             .map_err(|error| format!("query benchmark samples: {error}"))?;

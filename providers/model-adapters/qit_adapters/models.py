@@ -1,3 +1,82 @@
+def load_image(profile, directory, threads):
+    import torch
+    from .backend import audit_modules
+
+    if torch.version.cuda is not None:
+        raise ValueError("optional CPU adapters require a CPU-only PyTorch build")
+    if profile["precision"] != "float32":
+        raise ValueError("image routes require CPU float32")
+    torch.set_num_threads(threads)
+    if torch.get_num_interop_threads() != 1:
+        torch.set_num_interop_threads(1)
+    runtime = ImageRuntime(profile, directory, torch)
+    runtime.audit = audit_modules(
+        {"model": runtime.model}, runtime.extra_tensors, torch, "float32"
+    )
+    return runtime
+
+
+class ImageRuntime:
+    def __init__(self, profile, directory, torch):
+        if profile["adapter"] != "lighton":
+            raise ValueError(f"unsupported native image adapter {profile['adapter']}")
+        from transformers import AutoProcessor, Qwen3_5ForConditionalGeneration
+
+        self.profile = profile
+        self.torch = torch
+        self.configuration = None
+        self.extra_tensors = {}
+        self.model = (
+            Qwen3_5ForConditionalGeneration.from_pretrained(
+                str(directory),
+                local_files_only=True,
+                dtype=torch.float32,
+                attn_implementation="eager",
+            )
+            .to("cpu")
+            .eval()
+        )
+        self.processor = AutoProcessor.from_pretrained(
+            str(directory), local_files_only=True
+        )
+        self.preparation = {
+            "mode": "ocr-transcription",
+            "instruction": "",
+            "enable_thinking": False,
+            "do_sample": False,
+            "image_longest_edge": 2048,
+        }
+
+    def invoke(self, case, max_tokens):
+        from .media import image_from_case
+
+        with self.torch.inference_mode():
+            if case.get("prompt") != "<OCR>":
+                raise ValueError(
+                    "LightOnOCR accepts only the <OCR> transcription directive; chat, VQA, and grounding cases require separate integrations"
+                )
+            image = image_from_case(case)
+            image.thumbnail((2048, 2048))
+            inputs = self.processor.apply_chat_template(
+                [{"role": "user", "content": [{"type": "image", "image": image}]}],
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                enable_thinking=False,
+            ).to("cpu")
+            output = self.model.generate(
+                **inputs, max_new_tokens=max_tokens, do_sample=False
+            )
+            tokens = output[0, inputs["input_ids"].shape[1] :]
+            return {
+                "type": "result",
+                "output_text": self.processor.decode(tokens, skip_special_tokens=True),
+                "output_tokens": len(tokens),
+                "input_tokens": inputs["input_ids"].shape[1],
+            }
+
+
 def load_embedding(profile, directory, threads):
     import torch
     from .backend import audit_modules
