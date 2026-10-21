@@ -4,7 +4,9 @@ from pathlib import Path
 
 from .decisions import load_decision
 from .models import load_embedding, load_image
+from .nemotron import load_nemotron
 from .onnx_ocr import load_onnx_ocr
+from .speech import load_speech
 
 
 @dataclass(frozen=True)
@@ -26,4 +28,7 @@ ADAPTERS: dict[str, Adapter] = {
     "uibk-agent": Adapter(load_embedding, reviewed_code=True),
     "lighton": Adapter(load_image),
     "indra": Adapter(load_onnx_ocr),
+    "photon": Adapter(load_speech),
+    "redux": Adapter(load_speech),
+    "nemotron": Adapter(load_nemotron),
 }

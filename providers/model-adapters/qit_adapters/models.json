@@ -954,5 +954,121 @@
       "parameter_count": 1250566,
       "count_source": "https://huggingface.co/api/models/datalab-to/indra-ocr/revision/ed345c7f158eddbc7dee0c6a7269afb75a94f7e8?blobs=true"
     }
+  },
+  {
+    "model": "moondream/parakeet-ultra",
+    "revision": "73175eb7aeb0d82f1e2a6b53b3aabc10a90bcd0b",
+    "adapter": "photon",
+    "task": "speech_to_text",
+    "issue": 103,
+    "license": "cc-by-4.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "kestrel": "0.9.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 1153,
+        "git_blob": "969c65410a736e4a3922f968b3481b2418aba786"
+      },
+      "model.safetensors": {
+        "bytes": 1255353386,
+        "sha256": "c9608f36d0ab956c14bfcc525479b0746b3b42a56f6949ec85c14eb7466717dc"
+      },
+      "tokenizer.json": {
+        "bytes": 1159960,
+        "git_blob": "a10a554cf61e38108756650018d5781ae9675c1d"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/moondream/parakeet-ultra/blob/73175eb7aeb0d82f1e2a6b53b3aabc10a90bcd0b/README.md",
+      "parameter_count": 627270663,
+      "count_source": "https://huggingface.co/api/models/moondream/parakeet-ultra/revision/73175eb7aeb0d82f1e2a6b53b3aabc10a90bcd0b?blobs=true"
+    }
+  },
+  {
+    "model": "moondream/parakeet-redux",
+    "revision": "2bf128600aac4b16946f7ed8372e56117fe5e23b",
+    "adapter": "redux",
+    "task": "speech_to_text",
+    "issue": 113,
+    "license": "cc-by-4.0",
+    "precision": "native_ternary",
+    "requirements": {
+      "torch": "2.9.1",
+      "kestrel": "0.9.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 12988,
+        "git_blob": "de96f2b1ea6ccde07e8a7df80b57ab40f2e00d77"
+      },
+      "model.safetensors": {
+        "bytes": 177774490,
+        "sha256": "78ec25733ee0d0c1586d1346fc86db9d0c2e436e3a8ab1d32a82d1bb8f848d21"
+      },
+      "ternary.json": {
+        "bytes": 57970,
+        "git_blob": "a2bba98208d04be9a4c646d00e80b2f6f52ac3a3"
+      },
+      "tokenizer.json": {
+        "bytes": 1159960,
+        "git_blob": "a10a554cf61e38108756650018d5781ae9675c1d"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/moondream/parakeet-redux/blob/2bf128600aac4b16946f7ed8372e56117fe5e23b/README.md",
+      "parameter_count": 148923399,
+      "count_source": "https://huggingface.co/api/models/moondream/parakeet-redux/revision/2bf128600aac4b16946f7ed8372e56117fe5e23b?blobs=true"
+    }
+  },
+  {
+    "model": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+    "revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+    "adapter": "nemotron",
+    "task": "speech_to_text",
+    "issue": 121,
+    "license": "other",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "nemo-toolkit": "3.0.0",
+      "torchaudio": "2.9.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 1376,
+        "git_blob": "3ba627e56b655f0600b652b273c6d1e05fbc78e4"
+      },
+      "generation_config.json": {
+        "bytes": 193,
+        "git_blob": "b7ca70126139d1bfe866146bb414f372903effdb"
+      },
+      "nemotron-3.5-asr-streaming-0.6b.nemo": {
+        "bytes": 2368284501,
+        "sha256": "210214ed94039bf6bfbb9a047c7fa289628db75b103e2bf6381fa78285436a74"
+      },
+      "processor_config.json": {
+        "bytes": 2519,
+        "git_blob": "d430fe73aa4a2a97b2a0ea606f768b5e71765c3d"
+      },
+      "tokenizer.json": {
+        "bytes": 752051,
+        "git_blob": "425c659bba34d7116233c6e102d2948c26e114f7"
+      },
+      "tokenizer_config.json": {
+        "bytes": 881,
+        "git_blob": "33e468c971b257265e23a56ca113d2e86b363b30"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b/blob/ea30d66debe3740a08b573244286791d423d6b3e/README.md",
+      "parameter_count": 637997088,
+      "count_source": "https://huggingface.co/api/models/nvidia/nemotron-3.5-asr-streaming-0.6b/revision/ea30d66debe3740a08b573244286791d423d6b3e?blobs=true"
+    }
   }
 ]

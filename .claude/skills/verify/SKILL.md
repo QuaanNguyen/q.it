@@ -42,9 +42,10 @@ One command per mapped feature runs the full journey, asserts the result, and wr
 ```sh
 .claude/skills/verify/helpers/drive-retrieval.sh
 .claude/skills/verify/helpers/drive-ocr.sh
+.claude/skills/verify/helpers/drive-speech.sh
 ```
 
-Both build, start the fixture provider, run the pack with one warmup and two iterations, record `qit results`, export JSONL, read the same run from `qit dashboard`'s `/api/runs/<id>`, then drive an invalid provider answer to prove the CLI refuses it with exit code 2. The OCR drive additionally proves that a failed run stays in history. Individual steps stay separated in the evidence directory so a failure names the step that broke.
+All three build, start the fixture provider, run the pack with one warmup and two iterations, record `qit results`, export JSONL, read the same run from `qit dashboard`'s `/api/runs/<id>`, then drive an invalid provider answer to prove the CLI refuses it with exit code 2. The OCR and speech drives additionally prove that a failed run stays in history. Individual steps stay separated in the evidence directory so a failure names the step that broke.
 
 To drive a different feature by hand, keep the same shape: isolated `QIT_HOME`, explicit provider base URL, capture exit code plus both streams.
 
@@ -64,6 +65,8 @@ Each drive writes `.qit-evidence/verify/<UTC timestamp>/`:
 The retrieval assertions recompute MaxSim from the retained vectors, check that ranking follows score order with document-order ties, and check that `quality_score` equals `1 / (position + 1)` for the case's expected document. They read the expectation from the installed benchmark pack, not from the run output.
 
 The OCR assertions check the expected colors score 1.0, that retained output evidence names the route and stage calls, and that the dashboard serves the exported evidence unchanged.
+
+The speech assertions check that the stored duration equals the duration of the case audio rather than a value the provider invented, that the transcript and routing survive the dashboard, and that a negative duration is refused.
 
 Mocks are limited to the provider endpoint, which is a real process boundary. The command, store, export, and dashboard are the production paths.
 
@@ -85,5 +88,7 @@ stops any process whose PID is recorded in the newest evidence directory. The dr
 | `helpers/doctor.sh` | read-only readiness check |
 | `helpers/assert_retrieval.py` | recomputes MaxSim from the evidence and writes `summary.md` |
 | `helpers/assert_ocr.py` | checks OCR evidence, history, and dashboard parity |
+| `helpers/assert_speech.py` | checks transcript, measured duration, history, and dashboard parity |
 | `helpers/drive-retrieval.sh` | full retrieval journey plus cleanup mode |
 | `helpers/drive-ocr.sh` | full OCR journey plus cleanup mode |
+| `helpers/drive-speech.sh` | full speech journey plus cleanup mode |

@@ -1077,21 +1077,17 @@ progress::-webkit-progress-value {
 .decision-rankings small {
   display: block;
 }
-.decision-output {
-  margin-top: 10px;
-}
-.decision-output pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
+.decision-output,
 .speech-output {
   margin-top: 10px;
+}
+.speech-output {
   white-space: normal;
 }
 .progress-panel td {
   vertical-align: top;
 }
+.decision-output pre,
 .speech-output p,
 .speech-output pre {
   white-space: pre-wrap;
