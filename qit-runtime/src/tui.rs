@@ -757,6 +757,18 @@ impl App {
                 if let Some(decision) = &sample.decision {
                     lines.push(serde_json::to_string_pretty(decision).unwrap_or_default());
                 }
+                if let Some(retrieval) = &sample.retrieval {
+                    lines.push(format!("MaxSim / {} query vectors", retrieval.query.len()));
+                    for index in &retrieval.ranking {
+                        lines.push(format!(
+                            "Document {} / score {:.6} / {} vectors",
+                            index + 1,
+                            retrieval.scores[*index],
+                            retrieval.documents[*index].len()
+                        ));
+                    }
+                    lines.push("Complete token vectors are retained in JSONL exports".into());
+                }
             }
             frame.render_widget(
                 Paragraph::new(lines.join("\n"))

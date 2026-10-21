@@ -374,6 +374,7 @@ pub struct SampleRecord {
     pub output_excerpt: Option<String>,
     pub output_image: Option<String>,
     pub decision: Option<crate::decision::DecisionObservation>,
+    pub retrieval: Option<crate::retrieval::RetrievalObservation>,
     pub speech: Option<SpeechObservation>,
 }
 
@@ -406,6 +407,7 @@ pub struct InvocationResult {
     pub decision_media: Option<String>,
     pub audio_duration_seconds: Option<f64>,
     pub speech_routing: Option<serde_json::Value>,
+    pub retrieval: Option<crate::retrieval::RetrievalObservation>,
 }
 
 #[derive(Clone, Debug, Default)]

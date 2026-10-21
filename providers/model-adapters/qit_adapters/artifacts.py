@@ -6,6 +6,9 @@ from pathlib import Path
 import re
 
 
+LOCK_FAMILIES = {"uibk-agent": "uibk"}
+
+
 def profiles():
     catalog = json.loads(files("qit_adapters").joinpath("models.json").read_text())
     return catalog
@@ -127,6 +130,10 @@ def verify_runtime_source(profile, distribution):
     }
 
 
+def lock_family(adapter):
+    return LOCK_FAMILIES.get(adapter, adapter)
+
+
 def locked_environment(profile):
     import platform
     import sys
@@ -147,7 +154,7 @@ def locked_environment(profile):
         raise ValueError(
             "unsupported libc: optional CPU wheels require glibc 2.28 or later"
         )
-    family = profile["adapter"]
+    family = lock_family(profile["adapter"])
     resource = files("qit_adapters").joinpath(
         f"locks/{family}-linux-{platform.machine()}-py312.txt"
     )

@@ -115,6 +115,7 @@ class Backend:
             },
             "decision": self.runtime.configuration,
             "preparation": getattr(self.runtime, "preparation", None),
+            "retrieval": getattr(self.runtime, "retrieval", None),
             "qualification": "experimental; real checkpoint execution remains unverified",
         }
         if profile["adapter"] == "d3":

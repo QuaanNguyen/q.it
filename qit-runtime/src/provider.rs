@@ -21,6 +21,7 @@ pub struct ProviderClient {
     model: String,
     client: reqwest::Client,
     decision_configuration: Arc<OnceLock<DecisionConfiguration>>,
+    native_retrieval: Arc<OnceLock<bool>>,
 }
 
 impl ProviderClient {
@@ -42,6 +43,7 @@ impl ProviderClient {
             model,
             client,
             decision_configuration: Arc::new(OnceLock::new()),
+            native_retrieval: Arc::new(OnceLock::new()),
         })
     }
 
@@ -235,6 +237,19 @@ impl ProviderClient {
             .and_then(Value::as_str)
             .filter(|version| !version.is_empty())
             .ok_or_else(|| "Local CPU endpoint has no server version".to_string())?;
+        let native_retrieval = configuration
+            .get("retrieval")
+            .and_then(|value| value.get("method"))
+            .and_then(Value::as_str)
+            == Some("maxsim");
+        if self
+            .native_retrieval
+            .get()
+            .is_some_and(|previous| *previous != native_retrieval)
+        {
+            return Err("provider retrieval method changed during this run".into());
+        }
+        let _ = self.native_retrieval.set(native_retrieval);
         Ok(ProviderMetadata {
             version: Some(version.to_string()),
             configuration: configuration.clone(),
@@ -349,6 +364,11 @@ impl ProviderClient {
                     "Local CPU ranking must contain every candidate index exactly once".into(),
                 );
             }
+        }
+        if task == Task::Embedding
+            && output.retrieval.is_some() != *self.native_retrieval.get().unwrap_or(&false)
+        {
+            return Err("provider retrieval result differs from its declared method".into());
         }
         output.latency_ms = elapsed_ms(started);
         Ok(output)
@@ -1196,6 +1216,19 @@ fn parse_local_cpu_event(
                     }
                 }
                 Task::Embedding => {
+                    if let Some(retrieval) = value.get("retrieval") {
+                        if value.get("embeddings").is_some() {
+                            return Err(
+                                "retrieval results must not also supply dense embeddings".into()
+                            );
+                        }
+                        output.retrieval =
+                            Some(serde_json::from_value(retrieval.clone()).map_err(|error| {
+                                format!("invalid native retrieval observation: {error}")
+                            })?);
+                        *terminal = true;
+                        return Ok(());
+                    }
                     output.embeddings = parse_embeddings(
                         value
                             .get("embeddings")
