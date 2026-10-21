@@ -1,157 +1,129 @@
-# Optional model adapter package
+# Optional model adapters
 
-This package provides local artifact verification, CPU parameter audits, offline startup, and the existing q.it local CPU serving protocol.
-The catalog contains eight optional decision routes.
-GLiClass v4 edge and GLiNER2.5 Decide use their classifier libraries.
-Intern Decision, Liquid d1 omni, and typed-decision Gemma use pinned publisher code.
-FRIDA-Decisions uses a pinned installed publisher library for Russian text.
-D3 Edge and Lite use pinned publisher code for text and image decisions.
-Their model files and isolated runtimes are installed separately by the user.
-Installing it does not download a model or install a model runtime.
-
-```bash
-python3.12 -m venv /tmp/qit-adapter
-/tmp/qit-adapter/bin/pip install ./providers/model-adapters
-/tmp/qit-adapter/bin/qit-adapter list
-```
-
-The list command reports the available routes without importing their runtimes.
-Verification and serving reject models absent from the catalog.
-
-## Run a text classifier
-
-Use Linux CPython 3.12 and install one runtime in a separate environment.
-Choose the lock matching the runtime and host architecture.
+Install one runtime in its own environment.
+You install the original model files yourself, separately from q.it.
+Installing q.it, opening its interfaces, and starting an adapter never downloads a model.
 
 ```bash
 python3.12 -m venv .venv-adapter
 .venv-adapter/bin/pip install uv==0.9.5
 .venv-adapter/bin/uv pip sync --python .venv-adapter/bin/python --torch-backend cpu --require-hashes providers/model-adapters/qit_adapters/locks/gliclass-linux-aarch64-py312.txt
 .venv-adapter/bin/uv pip install --python .venv-adapter/bin/python --no-deps ./providers/model-adapters
+.venv-adapter/bin/qit-adapter list
 .venv-adapter/bin/qit-adapter verify --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model
 .venv-adapter/bin/qit-adapter serve --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model
 ```
 
 Use the `linux-x86_64` lock on Sol.
-GLiNER uses the `gliner2` lock and the original `fastino/GLiNER2.5-Decide` checkpoint.
-The original artifact manifest pins each required file and refuses missing or modified files before loading.
-There is no automatic acquisition or runtime fallback.
+The retained locks require Linux, CPython 3.12, and a matching 64-bit architecture.
+The loader requires glibc 2.28 or later.
+Individual wheels can require newer glibc, and a host that satisfies the loader floor can still fail to resolve them.
+UIBK has no retained Linux ARM64 environment because its pinned FastPLAID release has no compatible wheel.
+A resolved dependency lock is not evidence of a working native installation or Raspberry Pi execution.
 
-Run the original three-case decision pack against the serving endpoint.
+Run a decision smoke pack from another terminal:
 
 ```bash
 qit benchmark install providers/model-adapters/packs/english-choice
 qit run english-choice-smoke/choice --provider local-cpu --model knowledgator/gliclass-v4-edge --base-url http://127.0.0.1:8766 --warmups 0 --iterations 1
+qit tui
 ```
 
-Both routes retain the publisher's complete ordered probabilities and refuse generation settings.
-GLiClass refuses truncated input and duplicate candidate text.
-GLiNER observes native complete probabilities before the publisher's public top-choice decoding and restores the original method after every request.
-The loaded stack is audited as CPU float32 independently of the model-card count.
+These three original cases test transport and scoring, without a dataset-quality claim.
+Use the versioned `russian-choice` pack for FRIDA.
+The FRIDA adapter rejects non-Russian states; it must not be scored on English packs.
+An Agent UIBK pack must retain the publisher's reasoning-and-query format.
+OCR routes require an OCR pack whose prompt is `<OCR>`; chat and VQA packs are rejected.
+Speech qualification needs actual spoken audio, such as the pinned LibriSpeech case retained with the Sol evidence, rather than the core tone transport case.
 
-The [retained CPU checks](../../docs/research/optional-classifier-cpu-checks.md) describe original installed-command smoke runs and publisher comparisons.
-The three cases test transport and scoring rather than dataset-wide quality.
-Dependency locks and these Sol checks do not establish native Raspberry Pi qualification.
+## Explicit artifact staging
 
-## Run a publisher decision model
+`qit-adapter verify` compares every required file against the exact revision and byte identity in the installed manifest.
+Missing files report `model not installed` before importing a runtime.
+Symlinks, modified artifacts, unsafe paths, unexpected Indra graphs, and incompatible environments fail without a fallback.
 
-Install the matching `intern`, `liquid`, or `typed-gemma` lock in a separate environment.
-The three checkpoints require different pinned Transformers versions and must not share a runtime environment.
-Review the pinned publisher Python files before opting in to execution.
+The separate repository helper prints an acquisition plan by default:
 
 ```bash
-.venv-adapter/bin/qit-adapter serve --model internlm/Intern-Decision-0.8B --model-path /absolute/path/to/pinned-model --allow-reviewed-code
+.venv-adapter/bin/python scripts/stage-optional-model.py --model knowledgator/gliclass-v4-edge --output /absolute/path/to/pinned-model
 ```
 
-The matching checkpoints are `LiquidAI/d1-omni-600M` and `mrm8488/embeddinggemma-2-ft-typed-decision` for the other two locks.
-The adapter checks required file identities before applying the publisher-code gate and importing a model runtime.
-Changing the pinned source requires a new source review and CPU verification.
-All three retain their publisher's complete single-choice probabilities and loaded CPU float32 audit.
-Intern and Liquid accept text cases only; their multimodal model components are still included in the loaded-stack count.
-Image and audio decision execution are not included in these routes.
-Use the existing three-case English pack to check transport and scoring.
+Adding `--download` explicitly acquires those original pinned files and verifies them.
+This helper is outside the benchmark runner and serving lifecycle.
+An authentication token, if required, comes from the environment and is never written to results.
+Normal serving sets offline and telemetry-disable settings before importing model code, rejects external Python socket connections, and uses direct local publisher loading.
+Native network behavior still requires a traced qualification run.
 
-## Run FRIDA Russian text decisions
+## Adapter status
 
-Use the retained FRIDA lock for your Linux CPython 3.12 architecture in a separate environment.
-The lock installs the exact publisher archive and its runtime dependencies.
+Every new checkpoint is experimental and remains unqualified until its real installed-command, publisher-parity, CPU audit, and appropriate benchmark checks pass.
+No candidate checkbox is completed by dependency resolution or fixture tests.
+
+| Runtime extra / lock | Models | Method and current boundary |
+| --- | --- | --- |
+| `gliclass` | GLiClass v4 edge | Native complete single-label probabilities. |
+| `gliner2` | GLiNER 2.5 Decide | Observes the pinned runtime's complete native classification probabilities before public top-choice decoding. |
+| `intern` | Intern Decision 0.8B | Native calibrated text decisions; image execution remains unsupported. |
+| `liquid` | d1 omni 600M | Native text decisions with the full loaded stack; image and audio decisions remain unsupported. |
+| `d3` | d3 edge, then lite | Separately admitted native BF16 backbone with float32 readout; full text and image choice distributions. |
+| `typed-gemma` | embeddinggemma 2 typed decision | Native single-choice `decide()` with complete probabilities. |
+| `frida` | FRIDA Decisions | Russian single-choice PyTorch path; pinned and hashed original publisher source archive. |
+| `lighton` | LightOnOCR 3 0.8B | Publisher OCR prompt and deterministic transcription. |
+| `ultrabert` | UltraBERT Embed 150M | Publisher CLS pooling, query instruction, normalized 768-dimensional embeddings. |
+| `uibk` | UIBK embedding v1, Agent UIBK v1 | Full PyLate token vectors and native MaxSim, with all branches retained. |
+| `photon` | Parakeet Ultra, Redux | Direct Kestrel full-utterance TDT; Redux retains native GEMM8 panels, ternary logical shapes, scales, and activation quantization. |
+| `indra` | Indra OCR | Torch-free full ten-graph ONNX pipeline, including math; conservative full static-constant bound, with exact learned count explicitly unknown. |
+| `nemotron` | Nemotron 3.5 ASR streaming 0.6B | Separate NeMo full-utterance route, pinned archive, English language prompt, decoder, chunk and cache identity. |
+| Pending | Whistle | The inspected native interface cannot verify effective decoder depth or the complete logical packed-weight audit. |
+
+The NeMo environment is an independent copy of the compatible #112 lock.
+It does not change the QVAC profiles or their recorded validation.
+Nemotron uses the publisher's in-memory waveform path because its pinned file-list loader loses the requested language prompt.
+The adapter observes the actual one-hot language input at the native prompt projection and fails if it differs from the declared English prompt.
+Whistle never invokes a wrapper that downloads an engine or sends publisher telemetry.
+Its pinned artifact manifest is retained, but serving remains a precise unsupported path under #87.
+
+## Source review and identity
+
+Intern, Liquid, d3, typed Gemma, UltraBERT, and both UIBK models execute pinned publisher Python source.
+Review those exact files before adding `--allow-reviewed-code` to `serve`.
+Their manifest includes file sizes, original Git blob or LFS identities, and explicit SHA-256 identities for reviewed Python files.
+Changing a revision or a source file requires a new review and qualification.
+
+The result metadata retains model and source artifacts, the adapter's own source digests, the dependency lock digest, installed distribution record digests, package versions, native preparation, loaded tensor device and precision, and original license links.
+FRIDA additionally validates the pinned source archive's installed provenance.
+NeMo inventories and hashes archive members and matches the restored tokenizer back to an archive member.
+The Indra audit walks nested graphs, sparse tensors, tensor attributes, scalar/list constants, and model-local functions, and rejects unresolved attribute references, external tensor data, quantized operators, and unsupported constant precision.
+Its bound includes duplicated exports and fixed constants, so it establishes a conservative sub-billion ceiling without claiming an exact learned-parameter count.
+Each Indra result separately retains the stages actually invoked and their call counts in history and exports.
+
+Native d3 BF16 and Redux quantized runs have distinct precision and configuration identities.
+Neither is relabelled as float32.
+Indra results retain the original modified OpenRAIL license link, research scope, attribution, change disclosure, and applicable output obligations accepted by the owner in the stored adapter configuration, while each result separately carries the stages it invoked.
+Model weights and native engine binaries are never included in this package.
+
+## Retained qualification evidence
 
 ```bash
-python3.12 -m venv .venv-frida
-.venv-frida/bin/pip install uv==0.9.5
-.venv-frida/bin/uv pip sync --python .venv-frida/bin/python --torch-backend cpu --require-hashes providers/model-adapters/qit_adapters/locks/frida-linux-aarch64-py312.txt
-.venv-frida/bin/uv pip install --python .venv-frida/bin/python --no-deps ./providers/model-adapters
-.venv-frida/bin/qit-adapter verify --model ai-forever/FRIDA-Decisions --model-path /absolute/path/to/frida
-.venv-frida/bin/qit-adapter serve --model ai-forever/FRIDA-Decisions --model-path /absolute/path/to/frida
+python3 scripts/qualify-optional-adapter.py --adapter /absolute/path/to/qit-adapter --qit /absolute/path/to/qit --model knowledgator/gliclass-v4-edge --model-path /absolute/path/to/pinned-model --pack providers/model-adapters/packs/english-choice --benchmark english-choice-smoke/choice --cases providers/model-adapters/packs/english-choice/cases.jsonl --output /absolute/path/to/new-evidence-directory
 ```
 
-Use the `frida-linux-x86_64-py312.txt` lock on x86_64.
-Install the pinned local checkpoint yourself before verification or serving.
-Verification checks checkpoint artifacts.
-Serving additionally verifies the installed publisher archive identity, exact Python-file inventory, and source hashes before importing FRIDA.
-It requires no reviewed-code flag because this route uses an installed dependency rather than checkpoint Python.
-Startup retains the runtime commit and verified source hashes in environment metadata.
-
-Use `providers/model-adapters/packs/russian-choice` for the original three-case text smoke check.
-The adapter preserves native candidate probabilities and refuses overlength state, question, or candidate text.
-It requires Cyrillic state text as a conservative pack check, not a complete language detector.
-The complete CPU float32 audit includes the encoder and scalar head.
-The publisher card's rounded 823M and exact 823,401,216 stored encoder parameters differ from the retained 823,402,753 complete loaded parameters.
-The head accounts for 1,537 parameters.
-[Retained CPU checks](../../docs/research/optional-classifier-cpu-checks.md) describe the historical execution scope.
-
-## Run D3 text and image decisions
-
-Install the `d3-linux-aarch64-py312.txt` or `d3-linux-x86_64-py312.txt` lock in a separate Linux CPython 3.12 environment.
-Review the pinned publisher Python files and install the pinned local checkpoint before serving.
-Both D3 profiles require explicit reviewed-code admission.
+The helper starts the already installed adapter, records metadata, runs the installed q.it command with the provider PID, and retains logs, the complete state database, every run and sample row, and successful JSONL exports.
+Startup, import, model-audit, and inference failures remain in its evidence directory.
+Adding `--cases` with the same case file retains complete protocol responses in post-run audit probes.
+Those calls happen after the measured benchmark and are excluded from its timing and scores.
+The independent publisher check imports the original runtime directly and does not invoke q.it adapter implementations:
 
 ```bash
-.venv-adapter/bin/qit-adapter serve --model vllm-sr/d3-edge --model-path /absolute/path/to/pinned-d3 --allow-reviewed-code
-qit benchmark install providers/model-adapters/packs/english-choice
-qit run english-choice-smoke/choice --provider local-cpu --model vllm-sr/d3-edge --base-url http://127.0.0.1:8766 --warmups 0 --iterations 1
-qit benchmark install providers/model-adapters/packs/image-choice
-qit run image-choice-smoke/choice --provider local-cpu --model vllm-sr/d3-edge --base-url http://127.0.0.1:8766 --warmups 0 --iterations 1
+.venv-adapter/bin/python scripts/check-publisher-parity.py --adapter gliclass --model-path /absolute/path/to/pinned-model --evidence /absolute/path/to/new-evidence-directory
 ```
 
-Use `vllm-sr/d3-lite` with its own pinned checkpoint for Lite.
-The publisher loads its native CPU BF16 backbone with full verification and retains its CPU FP32 learned readout.
-The complete learned audit includes both the registered backbone and the unregistered readout, and must remain strictly below one billion parameters.
-D3 rejects preparation errors before inference and preserves the publisher's complete candidate distribution and choice.
-These two exact checkpoint revisions are the only native BF16 exceptions to the general float32 decision gate.
-The [D3 retained CPU evidence](../../docs/research/d3-cpu-checks.md) separates historical model execution from current fixture verification.
-Neither architecture lock establishes Raspberry Pi qualification.
-
-## Adding a route
-
-A route supplies a catalog entry with a model identifier, immutable 40-character checkpoint revision, task, precision, license, exact dependency requirements, and required file identities.
-Each file identity contains its byte size and either its SHA-256 digest or original Git blob identity.
-Model-card evidence must establish a size strictly below one billion parameters before a checkpoint is admitted.
-The loaded-stack audit is a separate runtime check.
-
-Register a loader in `qit_adapters/registry.py` for the catalog entry's adapter name.
-The loader receives the profile, resolved local model directory, and CPU thread count.
-It returns a runtime with an `audit` dictionary containing the complete learned parameter count, a decision `configuration` dictionary or `None`, and an `invoke` method.
-Decision invocation receives the case; other tasks also receive the output limit.
-The runtime returns a result event using the existing local CPU protocol.
-Optional preparation metadata is retained when present.
-
-Torch loaders can use the shared tensor auditor to check CPU placement and precision, count shared tensors once, and include learned components outside registered modules.
-Loaders own CPU runtime initialization and must audit the complete model stack before returning.
-Publisher-code loaders require the registry's reviewed-code flag and explicit source-review admission at startup.
-
-A route also supplies its hash-pinned Linux CPython 3.12 dependency lock for each supported architecture.
-Startup verifies the lock's installed package versions and retains lock, adapter-source, and installed-package provenance.
-Required model artifacts are verified before loading, and startup blocks external Python socket connections before invoking the loader.
-Native network behavior requires separate traced verification.
-The server binds to IPv4 loopback and permits one inference request at a time.
-
-## Checks
-
-```bash
-python3 -m unittest discover -s providers/model-adapters/tests
-```
-
-The tests use fixture-only profiles and runtimes, local HTTP requests, and temporary files.
-They establish package and protocol behavior without executing a model.
-They do not qualify any checkpoint, dataset, runtime installation, or Raspberry Pi performance.
+It verifies retained artifact digests, uses local-only CPU loading, blocks network access, and compares native outputs without renormalizing them.
+GLiNER2 compares its public label/confidence object; the adapter separately retains its complete unmodified internal probabilities.
+Models with publisher Python source also require `--allow-reviewed-code` for the independent check.
+Results are retained in separate native-output and parity reports.
+A separately produced retained-observation reference can instead be supplied with `--native-reference`.
+No parity is claimed unless a comparison report passes.
+Full transcripts, audio duration, native speech routing, and all accepted retrieval token vectors survive history and exports.
+Oversized retrieval observations fail rather than being truncated or collapsed to one vector.
+Generation throughput and first-token metrics remain absent for these non-generation tasks.
