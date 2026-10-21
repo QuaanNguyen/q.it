@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .decisions import load_decision
+from .models import load_embedding
 
 
 @dataclass(frozen=True)
@@ -19,4 +20,7 @@ ADAPTERS: dict[str, Adapter] = {
     "intern": Adapter(load_decision, reviewed_code=True),
     "liquid": Adapter(load_decision, reviewed_code=True),
     "typed-gemma": Adapter(load_decision, reviewed_code=True),
+    "ultrabert": Adapter(load_embedding, reviewed_code=True),
+    "uibk": Adapter(load_embedding, reviewed_code=True),
+    "uibk-agent": Adapter(load_embedding, reviewed_code=True),
 }

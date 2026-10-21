@@ -600,5 +600,221 @@
       "parameter_count": 852985920,
       "count_source": "https://huggingface.co/api/models/vllm-sr/d3-lite/revision/03560c26f5199c3c04129a2ccb38960c913635e0?blobs=true"
     }
+  },
+  {
+    "model": "dmis-lab/UltraBERT-Embed-150M",
+    "revision": "b06b36724c5417a1ec1b7863dd4fa542b74e4899",
+    "adapter": "ultrabert",
+    "task": "embedding",
+    "issue": 105,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.16.1",
+      "sentence-transformers": "6.0.1"
+    },
+    "files": {
+      "1_Pooling/config.json": {
+        "bytes": 89,
+        "git_blob": "2236c262f1f83c50f7c304e98a8d1413980280df"
+      },
+      "config.json": {
+        "bytes": 1734,
+        "git_blob": "c252a10b4a4022c429de336b9cf3473b5af07309"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 364,
+        "git_blob": "e146e9bee3cd995218c9f6bfeecd640206fd8c4f"
+      },
+      "configuration_ultrabert.py": {
+        "bytes": 2209,
+        "git_blob": "375deed383aa9c3fae21685aae234f248547ac8b",
+        "sha256": "823d10bda19f5164da4f79f8f9c01e5ebd7a75569abce78c0a26b7674fc78cd9"
+      },
+      "model.safetensors": {
+        "bytes": 604153320,
+        "sha256": "da8be29564b69e4f90fc8f2683e1f369c3d3575e75f7fe798643e28de02e2b9c"
+      },
+      "modeling_ultrabert.py": {
+        "bytes": 30581,
+        "git_blob": "167de2b852439323f415799e72fe6dd8d48216c6",
+        "sha256": "bfca1bd08af72cd170e58b5a048c67b52bc9d06a2a42847c7a387751f527f333"
+      },
+      "modules.json": {
+        "bytes": 277,
+        "git_blob": "45d2436b717b3a70d63c0df4ab2c49d5cdb02c5b"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 241,
+        "git_blob": "d2cd15826913bba6e43310063d75883bb0b7b842"
+      },
+      "tokenizer.json": {
+        "bytes": 3523570,
+        "git_blob": "b312aed63b6ea56ae750c9af813097fd71b5722a"
+      },
+      "tokenizer_config.json": {
+        "bytes": 844,
+        "git_blob": "891ff0f3b6bddd37b6ea0c5fa5c01c2fe0b6dc8b"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/dmis-lab/UltraBERT-Embed-150M/blob/b06b36724c5417a1ec1b7863dd4fa542b74e4899/README.md",
+      "parameter_count": 151032576,
+      "count_source": "https://huggingface.co/api/models/dmis-lab/UltraBERT-Embed-150M/revision/b06b36724c5417a1ec1b7863dd4fa542b74e4899?blobs=true"
+    }
+  },
+  {
+    "model": "DataScience-UIBK/uibk-embedding-v1",
+    "revision": "b18df82e77306006a1dd0162199f6dfeacb5492e",
+    "adapter": "uibk",
+    "task": "embedding",
+    "issue": 114,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.0",
+      "transformers": "5.3.0",
+      "pylate": "1.6.0",
+      "fast-plaid": "1.4.6.290"
+    },
+    "files": {
+      "1_HybridTokens/config.json": {
+        "bytes": 364,
+        "git_blob": "2bd16786aef5e508e305c6cb901b1eedd82d974f"
+      },
+      "1_HybridTokens/model.safetensors": {
+        "bytes": 41000912,
+        "sha256": "c42363bb43bcfadef8154bc5d13cdc14231242e8b57676c5242590bde2dfbc6f"
+      },
+      "branched_transformer.py": {
+        "bytes": 6383,
+        "git_blob": "f7da06ffb9934e22f1334882b4ed50b120cdd1a6",
+        "sha256": "846cd532c56aeae03479e5d098a5d663ebbf705188d14ea71e3812d67ccc0da4"
+      },
+      "config.json": {
+        "bytes": 1897,
+        "git_blob": "2a1033f017294e48963eb8ade8fce7f7dfcfacb2"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 1516,
+        "git_blob": "e033f617efd319fbaf39c296e27328f45b77058e"
+      },
+      "dense_branch.safetensors": {
+        "bytes": 80246240,
+        "sha256": "1e924278f9c2ec9c7dc326892a19ade45feb72cf2a780bef77006e0bc07ccac6"
+      },
+      "hybrid_tokens.py": {
+        "bytes": 14729,
+        "git_blob": "caafc019a2e91807ed1129133f94d2fb9ca6a563",
+        "sha256": "f4ea6f286eeccff8622efeef8e5dd3a20aac27f627acff2fbc412578c0e836e2"
+      },
+      "model.safetensors": {
+        "bytes": 596076280,
+        "sha256": "8a66be0525cff10c0b1ba931336c49f1637fc4791a34a7d63eca3ee2dae67636"
+      },
+      "modules.json": {
+        "bytes": 224,
+        "git_blob": "f98d84df804a206b0760d8b718d8641107e3392c"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 82,
+        "git_blob": "58dcac56e048410aab414c52b5537baa318fd8b6"
+      },
+      "tokenizer.json": {
+        "bytes": 3583846,
+        "git_blob": "5b7d02281c53d519c433b5014994406d5010cedf"
+      },
+      "tokenizer_config.json": {
+        "bytes": 541,
+        "git_blob": "8954ddc0e296a5c75d92a8fe3f2732534f4b2a17"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/DataScience-UIBK/uibk-embedding-v1/blob/b18df82e77306006a1dd0162199f6dfeacb5492e/README.md",
+      "parameter_count": 149015808,
+      "count_source": "https://huggingface.co/api/models/DataScience-UIBK/uibk-embedding-v1/revision/b18df82e77306006a1dd0162199f6dfeacb5492e?blobs=true"
+    },
+    "native_architectures": [
+      "x86_64"
+    ]
+  },
+  {
+    "model": "DataScience-UIBK/Agent-uibk-v1",
+    "revision": "fb1c8ae408f36729cb6f507c3898cb6ab93b4416",
+    "adapter": "uibk-agent",
+    "task": "embedding",
+    "issue": 114,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.0",
+      "transformers": "5.3.0",
+      "pylate": "1.6.0",
+      "fast-plaid": "1.4.6.290"
+    },
+    "files": {
+      "1_HybridTokens/config.json": {
+        "bytes": 363,
+        "git_blob": "cb0a10d722bc79cb04f8d263577446e7522cf404"
+      },
+      "1_HybridTokens/model.safetensors": {
+        "bytes": 41000912,
+        "sha256": "810772dc421842550a9cbd8ca9f2002df0af2bce9828a2da040365b5adcf6c91"
+      },
+      "branched_transformer.py": {
+        "bytes": 6383,
+        "git_blob": "f7da06ffb9934e22f1334882b4ed50b120cdd1a6",
+        "sha256": "846cd532c56aeae03479e5d098a5d663ebbf705188d14ea71e3812d67ccc0da4"
+      },
+      "config.json": {
+        "bytes": 1897,
+        "git_blob": "2a1033f017294e48963eb8ade8fce7f7dfcfacb2"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 1516,
+        "git_blob": "3c4c4df2c1c90028cef674154c641b8922e535b5"
+      },
+      "dense_branch.safetensors": {
+        "bytes": 80246240,
+        "sha256": "6a80ec07afcc4363d509aba7dd99570a9fa3bf3de50d95395e9644acc9e494f5"
+      },
+      "hybrid_tokens.py": {
+        "bytes": 14729,
+        "git_blob": "caafc019a2e91807ed1129133f94d2fb9ca6a563",
+        "sha256": "f4ea6f286eeccff8622efeef8e5dd3a20aac27f627acff2fbc412578c0e836e2"
+      },
+      "model.safetensors": {
+        "bytes": 596076280,
+        "sha256": "0a7f9450ea76ac8fef3b9b4b5e66f2e5127682fb4728cc389f76b8e81a81a6ac"
+      },
+      "modules.json": {
+        "bytes": 224,
+        "git_blob": "f98d84df804a206b0760d8b718d8641107e3392c"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 82,
+        "git_blob": "58dcac56e048410aab414c52b5537baa318fd8b6"
+      },
+      "tokenizer.json": {
+        "bytes": 3583846,
+        "git_blob": "5b7d02281c53d519c433b5014994406d5010cedf"
+      },
+      "tokenizer_config.json": {
+        "bytes": 541,
+        "git_blob": "8954ddc0e296a5c75d92a8fe3f2732534f4b2a17"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/DataScience-UIBK/Agent-uibk-v1/blob/fb1c8ae408f36729cb6f507c3898cb6ab93b4416/README.md",
+      "parameter_count": 149015808,
+      "count_source": "https://huggingface.co/api/models/DataScience-UIBK/Agent-uibk-v1/revision/fb1c8ae408f36729cb6f507c3898cb6ab93b4416?blobs=true"
+    },
+    "native_architectures": [
+      "x86_64"
+    ]
   }
 ]

@@ -698,6 +698,21 @@ function RunProgress({ id, expected }: { id: string; expected?: number }) {
                   <td className="sample-output">
                     {sample.error ?? sample.output_excerpt ?? (sample.output_image ? null : "-")}
                     {sample.decision && <DecisionOutput observation={sample.decision} />}
+                    {sample.retrieval && (
+                      <details>
+                        <summary>MaxSim / {sample.retrieval.query.length} query vectors</summary>
+                        <ol>
+                          {sample.retrieval.ranking.map((index) => (
+                            <li key={index}>
+                              Document {index + 1} / {sample.retrieval!.scores[index].toFixed(6)} / {sample.retrieval!.documents[index].length} vectors
+                            </li>
+                          ))}
+                        </ol>
+                        <a download={`${run.id}.json`} href={`/api/runs/${encodeURIComponent(run.id)}`}>
+                          [ raw run JSON ]
+                        </a>
+                      </details>
+                    )}
                     {sample.speech && (
                       <details className="speech-output">
                         <summary>Full transcript</summary>

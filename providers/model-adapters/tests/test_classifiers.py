@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qit_adapters.decisions import DecisionRuntime, distribution, load_decision
-from qit_adapters.artifacts import profile_for, profiles
+from qit_adapters.artifacts import lock_family, profile_for, profiles
 
 CANDIDATES = [{"id": "second", "text": "Rain"}, {"id": "first", "text": "Clear"}]
 
@@ -32,7 +32,18 @@ class ClassifierTests(unittest.TestCase):
         catalog = profiles()
         self.assertEqual(
             {row["adapter"] for row in catalog},
-            {"gliclass", "gliner2", "intern", "liquid", "typed-gemma", "frida", "d3"},
+            {
+                "gliclass",
+                "gliner2",
+                "intern",
+                "liquid",
+                "typed-gemma",
+                "frida",
+                "d3",
+                "ultrabert",
+                "uibk",
+                "uibk-agent",
+            },
         )
         for row in catalog:
             self.assertEqual(profile_for(row["model"]), row)
@@ -42,12 +53,12 @@ class ClassifierTests(unittest.TestCase):
             self.assertIn(row["revision"], row["model_card"]["url"])
             self.assertIn(row["revision"], row["model_card"]["count_source"])
             self.assertTrue(row["files"])
-            for architecture in ("x86_64", "aarch64"):
+            for architecture in row.get("native_architectures", ("x86_64", "aarch64")):
                 lock = (
                     Path(__file__).resolve().parents[1]
                     / "qit_adapters"
                     / "locks"
-                    / f"{row['adapter']}-linux-{architecture}-py312.txt"
+                    / f"{lock_family(row['adapter'])}-linux-{architecture}-py312.txt"
                 )
                 self.assertIn("--hash=sha256:", lock.read_text())
 
