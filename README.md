@@ -245,6 +245,14 @@ Start the selected model explicitly before running q.it.
 See the [local CPU provider guide](providers/local-cpu/README.md) for installation, pinned checkpoints, CPU settings, and task-specific benchmarks.
 Model loading and downloads remain outside measured runs.
 
+### Additional optional model adapters
+
+The [optional adapter guide](providers/model-adapters/README.md) covers the new decision, OCR, speech, and retrieval models.
+Install the chosen runtime and original model files separately.
+Each adapter uses an isolated CPU environment and verifies the pinned files before serving.
+Starting an adapter never downloads a model, and no model files are bundled with q.it.
+The guide records unsupported paths, precision exceptions, and the separate dataset and Raspberry Pi qualification gates.
+
 ## What q.it measures
 
 | Measurement | Plain-language meaning |
