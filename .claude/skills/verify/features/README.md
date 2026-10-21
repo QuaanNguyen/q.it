@@ -6,6 +6,7 @@ Start from `SKILL.md` for launch, doctor, evidence, and cleanup.
 | Feature | Primary surface | Proof |
 |---------|-----------------|-------|
 | [Run a benchmark](run-benchmark.md) | `qit run` | exit 0, succeeded samples, retained measurements |
+| [OCR image to text](ocr.md) | `qit run core/image-to-text-smoke` | retained output evidence, Indra bound admission |
 | [Review run history](run-history.md) | `qit results`, TUI screens | the run and its failures appear in history |
 | [Analyze in the dashboard](dashboard-analysis.md) | `qit dashboard` and `qit-web` | `/api/runs/<id>` returns retained samples |
 | [Export results](export-results.md) | `qit export` | JSONL and CSV carry every retained field |

@@ -223,11 +223,26 @@ impl ProviderClient {
         if configuration.get("device").and_then(Value::as_str) != Some("cpu") {
             return Err("Local CPU endpoint must report CPU-only execution".into());
         }
-        if !configuration
+        let exact_count = configuration
             .get("parameter_count")
             .and_then(Value::as_u64)
-            .is_some_and(|count| count > 0 && count < 1_000_000_000)
-        {
+            .is_some_and(|count| count > 0 && count < 1_000_000_000);
+        let indra_bound = self.model == "datalab-to/indra-ocr"
+            && configuration.get("revision").and_then(Value::as_str)
+                == Some("ed345c7f158eddbc7dee0c6a7269afb75a94f7e8")
+            && configuration.get("dtype").and_then(Value::as_str) == Some("float32")
+            && configuration
+                .get("parameter_count")
+                .is_some_and(Value::is_null)
+            && configuration
+                .get("parameter_count_basis")
+                .and_then(Value::as_str)
+                == Some("onnx-full-static-constant-upper-bound-v1")
+            && configuration
+                .get("parameter_count_upper_bound")
+                .and_then(Value::as_u64)
+                .is_some_and(|count| count > 0 && count < 1_000_000_000);
+        if !exact_count && !indra_bound {
             return Err(
                 "Local CPU model must report fewer than one billion loaded parameters".into(),
             );
@@ -1162,6 +1177,15 @@ fn parse_local_cpu_event(
             Ok(())
         }
         Some("result") => {
+            if let Some(metadata) = value
+                .get("output_metadata")
+                .filter(|value| !value.is_null())
+            {
+                if !metadata.is_object() || metadata.to_string().len() > 65_536 {
+                    return Err("output metadata must be an object of at most 64 KiB".into());
+                }
+                output.output_metadata = Some(metadata.clone());
+            }
             match task {
                 Task::DecisionScoring => {
                     output.decision = Some(

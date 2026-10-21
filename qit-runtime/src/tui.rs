@@ -748,6 +748,9 @@ impl App {
                 if let Some(output) = &sample.output_excerpt {
                     lines.push(output.clone());
                 }
+                if let Some(metadata) = &sample.output_metadata {
+                    lines.push(format!("Output evidence: {metadata}"));
+                }
                 if let Some(image) = &sample.output_image {
                     lines.push(format!(
                         "Saved image: {} bytes (export to view)",

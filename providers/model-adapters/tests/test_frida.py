@@ -137,9 +137,11 @@ class FridaTests(unittest.TestCase):
                 "ultrabert",
                 "uibk",
                 "uibk-agent",
+                "lighton",
+                "indra",
             },
         )
-        self.assertEqual(len(profiles()), 11)
+        self.assertEqual(len(profiles()), 13)
         self.assertFalse(ADAPTERS["frida"].reviewed_code)
         value = profile()
         self.assertEqual(len(value["files"]), 7)

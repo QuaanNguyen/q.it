@@ -84,7 +84,13 @@ class Backend:
         forbid_external_connections()
         self.runtime = adapter.load(profile, Path(directory).resolve(), threads)
         audit = self.runtime.audit
-        if type(audit.get("parameter_count")) is not int or not (
+        if profile["adapter"] == "indra":
+            bound = audit.get("parameter_count_upper_bound")
+            if type(bound) is not int or not 0 < bound < 1_000_000_000:
+                raise ValueError(
+                    "full ONNX static tensor bound must establish the sub-billion limit"
+                )
+        elif type(audit.get("parameter_count")) is not int or not (
             0 < audit["parameter_count"] < 1_000_000_000
         ):
             raise ValueError(
@@ -100,6 +106,10 @@ class Backend:
             "packages": self.environment["packages"],
             "environment": self.environment,
             "parameter_count": audit["parameter_count"],
+            "parameter_count_upper_bound": audit.get("parameter_count_upper_bound"),
+            "parameter_count_basis": audit.get(
+                "parameter_count_basis", "loaded-learned-tensors"
+            ),
             "parameter_audit": audit,
             "artifacts": self.artifacts,
             "reviewed_source_revision": profile["revision"]

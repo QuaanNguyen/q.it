@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .decisions import load_decision
-from .models import load_embedding
+from .models import load_embedding, load_image
+from .onnx_ocr import load_onnx_ocr
 
 
 @dataclass(frozen=True)
@@ -23,4 +24,6 @@ ADAPTERS: dict[str, Adapter] = {
     "ultrabert": Adapter(load_embedding, reviewed_code=True),
     "uibk": Adapter(load_embedding, reviewed_code=True),
     "uibk-agent": Adapter(load_embedding, reviewed_code=True),
+    "lighton": Adapter(load_image),
+    "indra": Adapter(load_onnx_ocr),
 }

@@ -816,5 +816,143 @@
     "native_architectures": [
       "x86_64"
     ]
+  },
+  {
+    "model": "lightonai/LightOnOCR-3-0.8B",
+    "revision": "36d8636925327c671bd8e479c517a004f7566bd9",
+    "adapter": "lighton",
+    "task": "image_to_text",
+    "issue": 104,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "requirements": {
+      "torch": "2.9.1",
+      "transformers": "5.5.4"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 2692,
+        "git_blob": "ecc3812e9f54ae67145b34964e501e179cf6853b"
+      },
+      "generation_config.json": {
+        "bytes": 205,
+        "git_blob": "338b88a230e884b84bcd99938df3d00bd97fe0a9"
+      },
+      "merges.txt": {
+        "bytes": 3353259,
+        "git_blob": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      "model.safetensors": {
+        "bytes": 1706030528,
+        "sha256": "ae46aa6fd7136d57297ac006ed9ec345b7a2083feb2e99501bedcb014ca3efdf"
+      },
+      "preprocessor_config.json": {
+        "bytes": 390,
+        "git_blob": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      "processor_config.json": {
+        "bytes": 1191,
+        "git_blob": "33818c7f9e991ad735fd240209f4fa73e6c28c50"
+      },
+      "tokenizer.json": {
+        "bytes": 19989325,
+        "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+      },
+      "tokenizer_config.json": {
+        "bytes": 1168,
+        "git_blob": "5344df8c8031f929defb2717c227e879120c6b6d"
+      },
+      "vocab.json": {
+        "bytes": 6722759,
+        "git_blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      },
+      "chat_template.jinja": {
+        "bytes": 7755,
+        "git_blob": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/lightonai/LightOnOCR-3-0.8B/blob/36d8636925327c671bd8e479c517a004f7566bd9/README.md",
+      "parameter_count": 852985920,
+      "count_source": "https://huggingface.co/api/models/lightonai/LightOnOCR-3-0.8B/revision/36d8636925327c671bd8e479c517a004f7566bd9?blobs=true"
+    }
+  },
+  {
+    "model": "datalab-to/indra-ocr",
+    "revision": "ed345c7f158eddbc7dee0c6a7269afb75a94f7e8",
+    "adapter": "indra",
+    "task": "image_to_text",
+    "issue": 88,
+    "license": "openrail",
+    "precision": "float32",
+    "requirements": {
+      "onnxruntime": "1.31.0",
+      "indra-ocr": "0.3.2"
+    },
+    "files": {
+      "LICENSE": {
+        "bytes": 14750,
+        "git_blob": "953c202748062ee95df59ab3821876339742ac6f"
+      },
+      "config.json": {
+        "bytes": 569,
+        "git_blob": "269864e48849f9df238f4a5dda3c70504a6c029a"
+      },
+      "det.onnx": {
+        "bytes": 389948,
+        "sha256": "46b0050ce4c4692f887a1a9c038480223af1c7a91b3fcced2657d9cf00290dc4"
+      },
+      "math_dec_init.onnx": {
+        "bytes": 1356364,
+        "sha256": "919417fde9962c3318aeb478c1fe3955dd2bb8cd34476c68debed2ba39e5dcd6"
+      },
+      "math_dec_step.onnx": {
+        "bytes": 8429418,
+        "sha256": "5ff6e6cbaf0dea70314f66222a1469736a8c5e7994fab06a5b4e53c90469239f"
+      },
+      "math_enc.onnx": {
+        "bytes": 9889575,
+        "sha256": "d4e4a6c40dad1ee988d32c6403b1590ca42864d4483bbe1e671c5dbb999a5a97"
+      },
+      "math_meta.json": {
+        "bytes": 7797,
+        "git_blob": "27c61906b0e933c2fb9ce29e9362273e680a5774"
+      },
+      "mathcls.onnx": {
+        "bytes": 191005,
+        "sha256": "818b1556e9ef337958db6be0c9791299d3f74a4575586b0cd469aaae9534ff96"
+      },
+      "meta.json": {
+        "bytes": 139429,
+        "git_blob": "392fdb23a511c2ffa369b3d9bf7604cc757d7c72"
+      },
+      "order.onnx": {
+        "bytes": 2973138,
+        "sha256": "23635dd2324b4ccc00c408af961273a2dedd2e4f0386bc54dba678c41bcf6b46"
+      },
+      "orient.onnx": {
+        "bytes": 371414,
+        "sha256": "8d7bfce5d08bcad55955f41ca494a7f9d9d3ed5d5b6da1f6f276d5c509590729"
+      },
+      "rec.onnx": {
+        "bytes": 4977797,
+        "sha256": "e243be069b357e56a0e867a21d7482e498df42fb19678bfb67a25f48b1f06151"
+      },
+      "rec_cjk.onnx": {
+        "bytes": 9255441,
+        "sha256": "4cec840b55e1bb7f375daf30a2975404a867a71ac1a5bc5b1629c4909ce16baa"
+      },
+      "script.onnx": {
+        "bytes": 191005,
+        "sha256": "5ba37030e817affede0097a7503b6829624104166c6e0b6aacecacf919fc7d11"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/datalab-to/indra-ocr/blob/ed345c7f158eddbc7dee0c6a7269afb75a94f7e8/README.md",
+      "parameter_count": 1250566,
+      "count_source": "https://huggingface.co/api/models/datalab-to/indra-ocr/revision/ed345c7f158eddbc7dee0c6a7269afb75a94f7e8?blobs=true"
+    }
   }
 ]
