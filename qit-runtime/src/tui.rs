@@ -313,11 +313,10 @@ impl App {
                 .providers(self.choice.facets())
                 .into_iter()
                 .map(|provider| {
-                    let count = query
-                        .routes(self.choice.facets())
-                        .into_iter()
-                        .filter(|route| route.provider() == provider)
-                        .count();
+                    let count = self
+                        .model_catalog
+                        .routes_matching(Some(provider), query.task(self.choice.facets()))
+                        .len();
                     PickerEntry {
                         choice: Choice::Provider(provider),
                         label: provider.as_str().to_string(),
@@ -1568,6 +1567,28 @@ mod tests {
             assert!(text.contains(title));
             assert!(text.contains("q.it"));
         }
+    }
+
+    #[test]
+    fn provider_model_counts_stay_stable_when_switching_providers() {
+        let mut app = app();
+        app.pin(Choice::Benchmark("core/text-generation-smoke".into()));
+        app.pin(Choice::Provider(ProviderKind::Ollama));
+        let before = app
+            .picker_entries(Axis::Provider, false)
+            .into_iter()
+            .map(|entry| (entry.label, entry.detail))
+            .collect::<Vec<_>>();
+        assert!(before
+            .iter()
+            .any(|(provider, detail)| provider == "ollama" && detail.ends_with("4 models")));
+        app.pin(Choice::Provider(ProviderKind::Transformers));
+        let after = app
+            .picker_entries(Axis::Provider, false)
+            .into_iter()
+            .map(|entry| (entry.label, entry.detail))
+            .collect::<Vec<_>>();
+        assert_eq!(before, after);
     }
 
     #[test]
