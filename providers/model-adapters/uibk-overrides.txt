@@ -1,0 +1,3 @@
+# pylate 1.6.0 pins transformers<=5.3.0; override for GHSA-fgcw-684q-jj6r, GHSA-xrqw-3rrv-vx5w, GHSA-x9r9-c232-4q39.
+# sentence-transformers stays 5.3.0: 5.4+ breaks pylate 1.6.0 ColBERT loading.
+transformers==5.10.0

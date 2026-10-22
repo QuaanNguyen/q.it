@@ -1717,10 +1717,11 @@ tqdm==4.70.1 \
     #   sentence-transformers
     #   transformers
     #   usearch
-transformers==5.3.0 \
-    --hash=sha256:009555b364029da9e2946d41f1c5de9f15e6b1df46b189b7293f33a161b9c557 \
-    --hash=sha256:50ac8c89c3c7033444fb3f9f53138096b997ebb70d4b5e50a2e810bf12d3d29a
+transformers==5.10.0 \
+    --hash=sha256:206c54d6d992bc35fef90f1252ac3f2746cdf549928b76e7c8c4f182684cee60 \
+    --hash=sha256:eae143e46d8e521da604bc4fdc45af7dd90e96eacbbc27f68d2754150aa5175a
     # via
+    #   --override providers/model-adapters/uibk-overrides.txt
     #   qit-model-adapters (providers/model-adapters/pyproject.toml)
     #   pylate
     #   sentence-transformers

@@ -19,6 +19,12 @@ The retained locks require Linux, CPython 3.12, and a matching 64-bit architectu
 The loader requires glibc 2.28 or later.
 Individual wheels can require newer glibc, and a host that satisfies the loader floor can still fail to resolve them.
 UIBK has no retained Linux ARM64 environment because its pinned FastPLAID release has no compatible wheel.
+The UIBK lock overrides pylate 1.6.0's `transformers<=5.3.0` pin with `uibk-overrides.txt` (transformers 5.10.0 for security fixes); sentence-transformers stays at 5.3.0 because 5.4 and later break pylate 1.6.0 ColBERT loading.
+Regenerate it with:
+
+```bash
+uv pip compile providers/model-adapters/pyproject.toml --extra uibk --overrides providers/model-adapters/uibk-overrides.txt --python-version 3.12 --python-platform x86_64-manylinux_2_28 --torch-backend cpu --generate-hashes --no-header -o providers/model-adapters/qit_adapters/locks/uibk-linux-x86_64-py312.txt
+```
 A resolved dependency lock is not evidence of a working native installation or Raspberry Pi execution.
 
 Run a decision smoke pack from another terminal:
