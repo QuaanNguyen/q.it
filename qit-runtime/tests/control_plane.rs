@@ -454,6 +454,18 @@ async fn dashboard_starts_runs_without_blocking_history_and_retains_failures() {
         .unwrap();
     assert_eq!(analysis["points"].as_array().unwrap().len(), 1);
     assert_eq!(observer.runs(10, false).unwrap().len(), 2);
+    gate.add_permits(1);
+    let retry = client.post(&url).json(&body).send().await.unwrap();
+    assert_eq!(retry.status(), StatusCode::ACCEPTED);
+    let retry: serde_json::Value = retry.json().await.unwrap();
+    let recovered = await_run(
+        &client,
+        &dashboard.base_url(),
+        retry["id"].as_str().unwrap(),
+    )
+    .await;
+    assert_eq!(recovered["run"]["status"], "succeeded");
+    assert_eq!(observer.runs(10, false).unwrap().len(), 3);
     dashboard.shutdown().await;
     provider.abort();
 }
