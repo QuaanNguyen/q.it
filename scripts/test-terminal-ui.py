@@ -174,8 +174,10 @@ def main():
         terminal.send(b"\x1b[B")
         terminal.send(b"\r", b"Choose Model")
         terminal.send(b"phonon", b"gradium/phonon-31m-en")
-        terminal.send(b"\r", b"Ready")
-        assert "local-cpu" in "\n".join(terminal.screen.display)
+        terminal.send(b"\r", b"Cannot start")
+        assert "needs adapter" in "\n".join(terminal.screen.display)
+        assert "Local CPU" in "\n".join(terminal.screen.display)
+        assert "needs adapter / needs adapter" not in "\n".join(terminal.screen.display)
         terminal.send(b"1", b"Benchmarks")
         terminal.send(b"m", b"Choose Model")
         terminal.send(b"qwen3:0.6b\r", b"cleared")
@@ -226,6 +228,7 @@ def main():
             "comparison",
             "picker search",
             "benchmark-first invalidation",
+            "pending adapter refusal",
             "model-first repair",
             "Ctrl-C cancellation",
             "terminal restoration",

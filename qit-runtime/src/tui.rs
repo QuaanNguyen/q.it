@@ -1088,12 +1088,16 @@ impl App {
             } else {
                 self.availability(route.key(), self.endpoint().unwrap_or(route.base_url()))
             };
-            format!(
-                "{} / {} / {}",
-                route.serve_as(),
-                route.implementation().label(),
-                state.label()
-            )
+            if route.implementation() == Implementation::Pending {
+                format!("{} / {}", route.serve_as(), state.label())
+            } else {
+                format!(
+                    "{} / {} / {}",
+                    route.serve_as(),
+                    route.implementation().label(),
+                    state.label()
+                )
+            }
         });
         let lines = vec![
             Line::from(format!("Benchmark  {}", facets.benchmark().unwrap_or("-"))),
@@ -1147,13 +1151,22 @@ impl App {
                             .and_then(|model| model.parameters())
                             .map(|value| self.model_catalog.parameters_label(Some(value)))
                             .unwrap_or_else(|| "?".into());
-                        format!(
-                            "{} / {} / {} / {}",
-                            route.serve_as(),
-                            parameters,
-                            route.implementation().label(),
-                            availability.map(Availability::label).unwrap_or("allowed")
-                        )
+                        if route.implementation() == Implementation::Pending {
+                            format!(
+                                "{} / {} / {}",
+                                route.serve_as(),
+                                parameters,
+                                route.implementation().label()
+                            )
+                        } else {
+                            format!(
+                                "{} / {} / {} / {}",
+                                route.serve_as(),
+                                parameters,
+                                route.implementation().label(),
+                                availability.map(Availability::label).unwrap_or("allowed")
+                            )
+                        }
                     })
                     .unwrap_or_else(|| "(none)".into()),
                 3..=8 => {
