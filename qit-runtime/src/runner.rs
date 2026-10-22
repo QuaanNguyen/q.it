@@ -256,6 +256,7 @@ async fn execute_observed(
                 decision: None,
                 retrieval: None,
                 speech: None,
+                synthesis: None,
             };
             match result {
                 Ok(invocation) => {
@@ -353,6 +354,13 @@ fn measured_sample(
             routing: invocation.speech_routing,
         });
     }
+    if task == Task::TextToSpeech {
+        sample.synthesis = Some(
+            invocation
+                .synthesis
+                .ok_or_else(|| "provider returned no synthesized audio".to_string())?,
+        );
+    }
     sample.output_image = invocation.output_image;
     sample.output_metadata = invocation.output_metadata;
     sample.retrieval = invocation.retrieval;
@@ -408,6 +416,7 @@ fn quality_score(
             }
             None => Ok(None),
         },
+        Task::TextToSpeech => Ok(None),
         Task::Embedding => {
             if let Some(retrieval) = &invocation.retrieval {
                 retrieval.validate(case.documents.len())?;
@@ -487,6 +496,12 @@ fn output_excerpt(task: Task, invocation: &InvocationResult) -> Result<Option<St
             )))
         }
         Task::Reranking => Ok(Some(format!("ranking: {:?}", invocation.ranking))),
+        Task::TextToSpeech => Ok(invocation.synthesis.as_ref().map(|synthesis| {
+            format!(
+                "{} bytes at {} Hz, {:.2}s",
+                synthesis.audio_bytes, synthesis.sample_rate_hz, synthesis.audio_duration_seconds
+            )
+        })),
         Task::DecisionScoring => Ok(invocation
             .decision
             .as_ref()
@@ -562,6 +577,40 @@ fn summarize(samples: &[SampleRecord]) -> RunSummary {
             .filter_map(|sample| sample.process_rss_bytes_peak)
             .max(),
         quality_score_mean: mean(successful.iter().filter_map(|sample| sample.quality_score)),
+        time_to_first_audio_ms_p50: percentile(
+            successful
+                .iter()
+                .filter_map(|sample| Some(sample.synthesis.as_ref()?.time_to_first_audio_ms))
+                .collect(),
+            50.0,
+        ),
+        time_to_first_audio_ms_p95: percentile(
+            successful
+                .iter()
+                .filter_map(|sample| Some(sample.synthesis.as_ref()?.time_to_first_audio_ms))
+                .collect(),
+            95.0,
+        ),
+        real_time_factor_p50: percentile(
+            successful
+                .iter()
+                .filter_map(|sample| {
+                    let synthesis = sample.synthesis.as_ref()?;
+                    crate::model::real_time_factor(
+                        synthesis.audio_duration_seconds,
+                        sample.latency_ms?,
+                    )
+                })
+                .collect(),
+            50.0,
+        ),
+        audio_duration_seconds_p50: percentile(
+            successful
+                .iter()
+                .filter_map(|sample| Some(sample.synthesis.as_ref()?.audio_duration_seconds))
+                .collect(),
+            50.0,
+        ),
         decision_metrics: crate::decision::summarize(
             successful
                 .iter()

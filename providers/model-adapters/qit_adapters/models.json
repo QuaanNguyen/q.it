@@ -1070,5 +1070,113 @@
       "parameter_count": 637997088,
       "count_source": "https://huggingface.co/api/models/nvidia/nemotron-3.5-asr-streaming-0.6b/revision/ea30d66debe3740a08b573244286791d423d6b3e?blobs=true"
     }
+  },
+  {
+    "model": "gradium/phonon-31m-en",
+    "revision": "541f5752bc3c79583068bb205bfda5eb39aaa08a",
+    "adapter": "phonon",
+    "task": "text_to_speech",
+    "issue": 141,
+    "license": "apache-2.0",
+    "precision": "float32",
+    "parameters": 41096035,
+    "requirements": {
+      "ptts": "0.4.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 4634,
+        "git_blob": "11cfeb2513febe31358a8ff942093e0b2c28710a"
+      },
+      "default-voice.safetensors": {
+        "bytes": 256136,
+        "sha256": "f739e8c4c76ee7f92e7c94a82002748c8cd22e99582ac49f7b9b94cd63786e18"
+      },
+      "generation_config.json": {
+        "bytes": 220,
+        "git_blob": "4626eedd4e8a443ed054f1aa2767c401e840f73c"
+      },
+      "model.safetensors": {
+        "bytes": 102823920,
+        "sha256": "8a04cf833cfe69b67c2ec968b2d31244655b9accc84ade9c0ebcc176f2074607"
+      },
+      "processor_config.json": {
+        "bytes": 747,
+        "git_blob": "a6d9a43860cfd0e930e3d905bdfe1f86936c33e9"
+      },
+      "tokenizer.json": {
+        "bytes": 277967,
+        "git_blob": "70d39980cb2154bd364dbed8424b1343923a03e2"
+      },
+      "tokenizer.model": {
+        "bytes": 65045,
+        "sha256": "82e4572006d64d483317074c22c368e87779640b6f3a9dcd07b7caae32b030ce"
+      },
+      "tokenizer_config.json": {
+        "bytes": 575,
+        "git_blob": "89101f16a3ea9bdd36dea4460b0e5fcf394d7cd8"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/gradium/phonon-31m-en/blob/541f5752bc3c79583068bb205bfda5eb39aaa08a/README.md",
+      "parameter_count": 41096035,
+      "count_source": "https://huggingface.co/api/models/gradium/phonon-31m-en/revision/541f5752bc3c79583068bb205bfda5eb39aaa08a?blobs=true"
+    },
+    "native_architectures": []
+  },
+  {
+    "model": "gradium/phonon-40m-multilingual",
+    "revision": "a411985d04262e21e306e505bd59d8fe30bd486b",
+    "adapter": "phonon",
+    "task": "text_to_speech",
+    "issue": 141,
+    "license": "cc-by-nc-4.0",
+    "precision": "float32",
+    "parameters": 50539363,
+    "requirements": {
+      "ptts": "0.4.1"
+    },
+    "files": {
+      "config.json": {
+        "bytes": 4674,
+        "git_blob": "5ddd955511e851a1f8c744ac23b69eb6000565d5"
+      },
+      "default-voice.safetensors": {
+        "bytes": 256136,
+        "sha256": "f739e8c4c76ee7f92e7c94a82002748c8cd22e99582ac49f7b9b94cd63786e18"
+      },
+      "generation_config.json": {
+        "bytes": 220,
+        "git_blob": "4626eedd4e8a443ed054f1aa2767c401e840f73c"
+      },
+      "model.safetensors": {
+        "bytes": 121713400,
+        "sha256": "54337d793c7e6ee231a4b24164fe23621cac06a726ddb55d57776ac0f8133210"
+      },
+      "processor_config.json": {
+        "bytes": 747,
+        "git_blob": "a6d9a43860cfd0e930e3d905bdfe1f86936c33e9"
+      },
+      "tokenizer.json": {
+        "bytes": 277749,
+        "git_blob": "e2d7bebf27916234f26883ad8e55c5219d0ae148"
+      },
+      "tokenizer.model": {
+        "bytes": 65303,
+        "sha256": "6ff32b815a8325c2989b1b140794cb18ec4ffabda8fc80df955fa336cd58b162"
+      },
+      "tokenizer_config.json": {
+        "bytes": 575,
+        "git_blob": "89101f16a3ea9bdd36dea4460b0e5fcf394d7cd8"
+      }
+    },
+    "qualification": "unverified",
+    "model_card": {
+      "url": "https://huggingface.co/gradium/phonon-40m-multilingual/blob/a411985d04262e21e306e505bd59d8fe30bd486b/README.md",
+      "parameter_count": 50539363,
+      "count_source": "https://huggingface.co/api/models/gradium/phonon-40m-multilingual/revision/a411985d04262e21e306e505bd59d8fe30bd486b?blobs=true"
+    },
+    "native_architectures": []
   }
 ]

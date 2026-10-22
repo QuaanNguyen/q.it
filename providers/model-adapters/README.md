@@ -36,6 +36,13 @@ An Agent UIBK pack must retain the publisher's reasoning-and-query format.
 OCR routes require an OCR pack whose prompt is `<OCR>`; chat and VQA packs are rejected.
 Speech qualification needs actual spoken audio, such as the pinned LibriSpeech case retained with the Sol evidence, rather than the core tone transport case.
 
+The Phonon text-to-speech routes remain pending in the catalog.
+The isolated publisher-runtime prototype accepts a local checkpoint directory, but serving remains disabled until native dependency locks and a complete loaded parameter audit are available.
+The synthesis smoke pack can test a compatible local CPU endpoint that implements streamed PCM synthesis.
+
+The smoke pack checks transport, the first-audio timestamp, PCM duration, byte count, and sample rate.
+It is not a speech-quality evaluation.
+
 ## Explicit artifact staging
 
 `qit-adapter verify` compares every required file against the exact revision and byte identity in the installed manifest.
@@ -74,6 +81,7 @@ No candidate checkbox is completed by dependency resolution or fixture tests.
 | `photon` | Parakeet Ultra, Redux | Direct Kestrel full-utterance TDT; Redux retains native GEMM8 panels, ternary logical shapes, scales, and activation quantization. |
 | `indra` | Indra OCR | Torch-free full ten-graph ONNX pipeline, including math; conservative full static-constant bound, with exact learned count explicitly unknown. |
 | `nemotron` | Nemotron 3.5 ASR streaming 0.6B | Separate NeMo full-utterance route, pinned archive, English language prompt, decoder, chunk and cache identity. |
+| `phonon` | Phonon 31m, Phonon 40m multilingual | Pending; isolated publisher-runtime prototype only; serving requires native dependency locks and a complete loaded parameter audit. |
 | Pending | Whistle | The inspected native interface cannot verify effective decoder depth or the complete logical packed-weight audit. |
 
 The NeMo environment is an independent copy of the compatible #112 lock.

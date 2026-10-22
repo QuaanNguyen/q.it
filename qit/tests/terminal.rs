@@ -15,6 +15,19 @@ use tokio::net::TcpListener;
 use tokio::process::Command;
 
 #[tokio::test]
+async fn model_catalog_defaults_to_listing_without_a_subcommand() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = Command::new(binary())
+        .env("QIT_HOME", directory.path())
+        .arg("models")
+        .output()
+        .await
+        .unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("gradium/phonon-31m-en"));
+}
+
+#[tokio::test]
 async fn piped_tui_explains_the_terminal_requirement_without_touching_state() {
     let directory = tempfile::tempdir().unwrap();
     let state = directory.path().join("state");

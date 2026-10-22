@@ -4,7 +4,7 @@ use std::path::{Component, Path, PathBuf};
 
 use uuid::Uuid;
 
-use crate::model::{BenchmarkCase, BenchmarkDefinition, BenchmarkPackManifest, ProviderKind, Task};
+use crate::model::{BenchmarkCase, BenchmarkDefinition, BenchmarkPackManifest, Task};
 
 const CORE_MANIFEST: &str = include_str!("../benchmarks/core/pack.json");
 const CORE_TEXT_GENERATION: &str = include_str!("../benchmarks/core/text-generation-smoke.jsonl");
@@ -13,6 +13,7 @@ const CORE_IMAGE_TO_TEXT: &str = include_str!("../benchmarks/core/image-to-text-
 const CORE_SPEECH_TO_TEXT: &str = include_str!("../benchmarks/core/speech-to-text-smoke.jsonl");
 const CORE_RERANKING: &str = include_str!("../benchmarks/core/reranking-relevance.jsonl");
 const CORE_TEXT_TO_IMAGE: &str = include_str!("../benchmarks/core/text-to-image-smoke.jsonl");
+const CORE_TEXT_TO_SPEECH: &str = include_str!("../benchmarks/core/text-to-speech-smoke.jsonl");
 
 #[derive(Clone)]
 pub struct PackCatalog {
@@ -147,6 +148,7 @@ fn load_builtin() -> Result<Vec<BenchmarkDefinition>, String> {
         "speech-to-text-smoke.jsonl" => Ok(CORE_SPEECH_TO_TEXT.to_string()),
         "reranking-relevance.jsonl" => Ok(CORE_RERANKING.to_string()),
         "text-to-image-smoke.jsonl" => Ok(CORE_TEXT_TO_IMAGE.to_string()),
+        "text-to-speech-smoke.jsonl" => Ok(CORE_TEXT_TO_SPEECH.to_string()),
         _ => Err(format!("unknown built-in case file '{case_file}'")),
     })
 }
@@ -276,10 +278,6 @@ where
         } else if benchmark.decision_input.is_some() {
             return Err("decision_input is only valid for decision benchmarks".into());
         }
-        let supported_providers = ProviderKind::ALL
-            .into_iter()
-            .filter(|provider| provider.supports(benchmark.task))
-            .collect();
         definitions.push(BenchmarkDefinition {
             id: format!("{}/{}", manifest.id, benchmark.id),
             pack_id: manifest.id.clone(),
@@ -293,7 +291,6 @@ where
             tags: benchmark.tags,
             default_max_output_tokens: benchmark.default_max_output_tokens,
             built_in,
-            supported_providers,
             cases,
         });
     }
@@ -352,6 +349,9 @@ fn validate_case(task: Task, case: &BenchmarkCase) -> Result<(), String> {
     if task != Task::DecisionScoring && case.decision.is_some() {
         return Err("decision cases require the decision_scoring task".into());
     }
+    if task != Task::TextToSpeech && case.speech.is_some() {
+        return Err("speech settings require the text_to_speech task".into());
+    }
     match task {
         Task::DecisionScoring => {
             if case.prompt.is_some()
@@ -395,6 +395,39 @@ fn validate_case(task: Task, case: &BenchmarkCase) -> Result<(), String> {
             require_text(&case.media, "media")
         }
         Task::SpeechToText => require_text(&case.media, "media"),
+        Task::TextToSpeech => {
+            require_text(&case.prompt, "prompt")?;
+            if case.input.is_some()
+                || case.media.is_some()
+                || case.media_type.is_some()
+                || !case.documents.is_empty()
+                || case.expected_index.is_some()
+                || !case.expected_contains.is_empty()
+                || case.expected_text.is_some()
+                || case.query_prefix.is_some()
+                || case.document_prefix.is_some()
+                || case.image_settings.is_some()
+            {
+                return Err(
+                    "text to speech cases use only the prompt and optional speech settings".into(),
+                );
+            }
+            if let Some(speech) = &case.speech {
+                for (name, value) in [("language", &speech.language), ("voice", &speech.voice)] {
+                    if let Some(value) = value {
+                        if value.trim().is_empty() {
+                            return Err(format!("speech {name} must not be empty"));
+                        }
+                    }
+                }
+                if let Some(seconds) = speech.max_audio_seconds {
+                    if !seconds.is_finite() || !(1.0..=120.0).contains(&seconds) {
+                        return Err("max_audio_seconds must be between 1 and 120".into());
+                    }
+                }
+            }
+            Ok(())
+        }
         Task::Embedding | Task::Reranking => {
             require_text(&case.input, "input")?;
             if case.documents.is_empty() {

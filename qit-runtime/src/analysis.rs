@@ -20,6 +20,8 @@ pub struct AnalysisPoint {
     pub memory_bytes: Option<u64>,
     pub cpu_percent: Option<f64>,
     pub quality_score: Option<f64>,
+    pub time_to_first_audio_ms: Option<f64>,
+    pub real_time_factor: Option<f64>,
     pub pareto: bool,
 }
 
@@ -53,16 +55,20 @@ pub enum Metric {
     Quality,
     Cpu,
     Memory,
+    FirstAudio,
+    RealTimeFactor,
 }
 
 impl Metric {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Latency,
         Self::Ttft,
         Self::Throughput,
         Self::Quality,
         Self::Cpu,
         Self::Memory,
+        Self::FirstAudio,
+        Self::RealTimeFactor,
     ];
 
     pub fn name(self) -> &'static str {
@@ -73,6 +79,8 @@ impl Metric {
             Self::Quality => "Quality",
             Self::Cpu => "CPU %",
             Self::Memory => "Provider RSS MiB",
+            Self::FirstAudio => "First audio ms",
+            Self::RealTimeFactor => "RTF",
         }
     }
 
@@ -87,6 +95,8 @@ impl Metric {
                 .summary
                 .process_rss_bytes_peak
                 .map(|value| value as f64 / 1_048_576.0),
+            Self::FirstAudio => run.summary.time_to_first_audio_ms_p50,
+            Self::RealTimeFactor => run.summary.real_time_factor_p50,
         }
         .filter(|value| value.is_finite())
     }
@@ -246,6 +256,8 @@ pub fn analyze(runs: Vec<RunRecord>) -> Analysis {
                     memory_bytes: memory,
                     cpu_percent: run.summary.host_cpu_percent_mean,
                     quality_score: run.summary.quality_score_mean,
+                    time_to_first_audio_ms: run.summary.time_to_first_audio_ms_p50,
+                    real_time_factor: run.summary.real_time_factor_p50,
                     pareto,
                 }
             })

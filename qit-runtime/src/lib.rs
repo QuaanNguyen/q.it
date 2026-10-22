@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod catalog;
 pub mod command;
 pub mod config;
 pub mod dashboard;
@@ -9,6 +10,7 @@ pub mod paths;
 pub mod provider;
 pub mod retrieval;
 pub mod runner;
+pub mod select;
 pub mod spa;
 pub mod store;
 pub mod telemetry;

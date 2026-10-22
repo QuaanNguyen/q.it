@@ -61,6 +61,15 @@
       "cases": "text-to-image-smoke.jsonl",
       "tags": ["image", "generation", "multimodal"],
       "default_max_output_tokens": 1
+    },
+    {
+      "id": "text-to-speech-smoke",
+      "name": "Text to speech transport smoke",
+      "description": "Measures first-audio latency, real-time factor, and peak memory for short synthesized utterances and does not claim speech quality.",
+      "task": "text_to_speech",
+      "cases": "text-to-speech-smoke.jsonl",
+      "tags": ["audio", "speech", "generation"],
+      "default_max_output_tokens": 1
     }
   ]
 }

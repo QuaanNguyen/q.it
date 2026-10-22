@@ -9,9 +9,13 @@ use reqwest::{RequestBuilder, Response};
 use serde_json::{json, Value};
 
 use crate::decision::{DecisionConfiguration, DecisionInput, DecisionResult};
-use crate::model::{BenchmarkCase, InvocationResult, ProviderKind, ProviderMetadata, Task};
+use crate::model::{
+    BenchmarkCase, InvocationResult, ProviderKind, ProviderMetadata, SynthesisObservation, Task,
+};
 
 const HF_SERVE_MAX_BATCH_INPUTS: usize = 4;
+const AUDIO_SAMPLE_RATES: [u64; 5] = [16_000, 22_050, 24_000, 44_100, 48_000];
+const MAX_SYNTHESIZED_AUDIO_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct ProviderClient {
@@ -201,6 +205,47 @@ impl ProviderClient {
         }
     }
 
+    pub async fn probe(&self) -> Result<bool, String> {
+        let path = match self.kind {
+            ProviderKind::LocalCpu => "/v1/qit/model",
+            ProviderKind::Ollama => "/api/tags",
+            ProviderKind::Transformers | ProviderKind::HfServe | ProviderKind::Tei => "/v1/models",
+        };
+        let response = self
+            .authorized(self.client.get(self.url(path)))
+            .send()
+            .await
+            .map_err(|error| format!("probe {}: {error}", self.kind.as_str()))?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        let response = successful(response, "Provider probe").await?;
+        let value = response_json(response, "Provider probe").await?;
+        if self.kind == ProviderKind::LocalCpu {
+            return Ok(value.get("model").and_then(Value::as_str) == Some(self.model.as_str()));
+        }
+        let names = match self.kind {
+            ProviderKind::Ollama => value.get("models").and_then(Value::as_array).map(|models| {
+                models
+                    .iter()
+                    .filter_map(|model| model.get("name").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+            }),
+            _ => value.get("data").and_then(Value::as_array).map(|models| {
+                models
+                    .iter()
+                    .filter_map(|model| model.get("id").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+            }),
+        }
+        .ok_or_else(|| format!("{} probe returned no model list", self.kind.as_str()))?;
+        Ok(names.iter().any(|name| {
+            *name == self.model
+                || name.strip_suffix(":latest") == Some(self.model.as_str())
+                || self.model.strip_suffix(":latest") == Some(*name)
+        }))
+    }
+
     async fn local_cpu_metadata(&self) -> Result<ProviderMetadata, String> {
         let response = self
             .authorized(self.client.get(self.url("/v1/qit/model")))
@@ -361,6 +406,23 @@ impl ProviderClient {
         }
         if task == Task::SpeechToText && output.output_text.is_none() {
             return Err("Local CPU provider returned no transcript".into());
+        }
+        if task == Task::TextToSpeech {
+            let synthesis = output
+                .synthesis
+                .as_ref()
+                .ok_or_else(|| "Local CPU provider returned no synthesized audio".to_string())?;
+            let limit = case
+                .speech
+                .as_ref()
+                .and_then(|speech| speech.max_audio_seconds)
+                .unwrap_or(30.0);
+            if synthesis.audio_duration_seconds > limit {
+                return Err(format!(
+                    "synthesized audio lasted {:.2}s, above the {limit:.2}s case limit",
+                    synthesis.audio_duration_seconds
+                ));
+            }
         }
         if task == Task::TextToImage {
             validate_generated_image(
@@ -1176,6 +1238,45 @@ fn parse_local_cpu_event(
                 .push_str(text);
             Ok(())
         }
+        Some("audio") if task == Task::TextToSpeech => {
+            let encoded = value
+                .get("pcm_base64")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "Local CPU audio event has no pcm_base64".to_string())?;
+            let sample_rate_hz = value
+                .get("sample_rate_hz")
+                .and_then(Value::as_u64)
+                .filter(|rate| AUDIO_SAMPLE_RATES.contains(rate))
+                .ok_or_else(|| {
+                    format!("Local CPU audio sample rate must be one of {AUDIO_SAMPLE_RATES:?}")
+                })?;
+            let bytes = STANDARD
+                .decode(encoded)
+                .map_err(|error| format!("decode Local CPU audio chunk: {error}"))?;
+            if bytes.is_empty() {
+                return Err("Local CPU audio event carried no samples".into());
+            }
+            let first_audio_ms = elapsed_ms(started);
+            let observation = output.synthesis.get_or_insert(SynthesisObservation {
+                time_to_first_audio_ms: first_audio_ms,
+                audio_duration_seconds: 0.0,
+                sample_rate_hz: sample_rate_hz as u32,
+                audio_bytes: 0,
+                routing: None,
+            });
+            if observation.sample_rate_hz as u64 != sample_rate_hz {
+                return Err("Local CPU audio chunks changed sample rate mid-stream".into());
+            }
+            observation.audio_bytes = observation
+                .audio_bytes
+                .checked_add(bytes.len() as u64)
+                .filter(|total| *total <= MAX_SYNTHESIZED_AUDIO_BYTES)
+                .ok_or_else(|| {
+                    "Local CPU synthesized audio exceeded the maximum size".to_string()
+                })?;
+            Ok(())
+        }
+        Some("audio") => Err("Local CPU audio events are only valid for text to speech".into()),
         Some("result") => {
             if let Some(metadata) = value
                 .get("output_metadata")
@@ -1272,6 +1373,52 @@ fn parse_local_cpu_event(
                                 .ok_or_else(|| "Local CPU ranking has an invalid index".to_string())
                         })
                         .collect::<Result<Vec<_>, _>>()?;
+                }
+                Task::TextToSpeech => {
+                    let observation = output.synthesis.as_mut().ok_or_else(|| {
+                        "Local CPU text to speech stream contained no audio".to_string()
+                    })?;
+                    let audio_duration_seconds = value
+                        .get("audio_duration_seconds")
+                        .and_then(Value::as_f64)
+                        .filter(|duration| duration.is_finite() && *duration > 0.0)
+                        .ok_or_else(|| {
+                            "text to speech duration must be a positive finite number".to_string()
+                        })?;
+                    let sample_rate_hz = value
+                        .get("sample_rate_hz")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| "text to speech result has no sample rate".to_string())?;
+                    let audio_bytes = value
+                        .get("audio_bytes")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| "text to speech result has no byte count".to_string())?;
+                    if sample_rate_hz != observation.sample_rate_hz as u64 {
+                        return Err(
+                            "text to speech result sample rate differs from its audio".into()
+                        );
+                    }
+                    if audio_bytes != observation.audio_bytes {
+                        return Err(format!(
+                            "text to speech result reports {audio_bytes} bytes but the stream carried {}",
+                            observation.audio_bytes
+                        ));
+                    }
+                    let expected = observation.audio_bytes as f64 / (sample_rate_hz as f64 * 2.0);
+                    if (audio_duration_seconds - expected).abs() > expected * 0.02 {
+                        return Err(format!(
+                            "text to speech duration {audio_duration_seconds:.3}s disagrees with {audio_bytes} bytes at {sample_rate_hz} Hz"
+                        ));
+                    }
+                    observation.audio_duration_seconds = audio_duration_seconds;
+                    if let Some(routing) =
+                        value.get("speech_routing").filter(|value| !value.is_null())
+                    {
+                        if !routing.is_object() {
+                            return Err("speech routing evidence must be an object".into());
+                        }
+                        observation.routing = Some(routing.clone());
+                    }
                 }
                 Task::TextToImage => {
                     output.output_image = Some(
