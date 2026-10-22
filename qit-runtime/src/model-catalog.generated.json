@@ -9,7 +9,7 @@
     {
       "name": "model-adapters",
       "path": "providers/model-adapters/qit_adapters/models.json",
-      "sha256": "258395c7d65a2194b1740cff0ef52c7ccf3c2ea4726bfad57f4483b6e7294c39"
+      "sha256": "7c84a28545a478eb23fe263543e77663c8f5d7d33154c6c130937349eb25c9dd"
     },
     {
       "name": "ollama",
@@ -121,44 +121,6 @@
           ],
           "implementation": "experimental",
           "precision": "native_ternary",
-          "qualification": "unverified"
-        }
-      ]
-    },
-    {
-      "id": "DataScience-UIBK/Agent-uibk-v1",
-      "parameters": 149015808,
-      "license": "apache-2.0",
-      "revision": "fb1c8ae408f36729cb6f507c3898cb6ab93b4416",
-      "routes": [
-        {
-          "provider": "local-cpu",
-          "serve_as": "DataScience-UIBK/Agent-uibk-v1",
-          "adapter": "uibk-agent",
-          "tasks": [
-            "embedding"
-          ],
-          "implementation": "experimental",
-          "precision": "float32",
-          "qualification": "unverified"
-        }
-      ]
-    },
-    {
-      "id": "DataScience-UIBK/uibk-embedding-v1",
-      "parameters": 149015808,
-      "license": "apache-2.0",
-      "revision": "b18df82e77306006a1dd0162199f6dfeacb5492e",
-      "routes": [
-        {
-          "provider": "local-cpu",
-          "serve_as": "DataScience-UIBK/uibk-embedding-v1",
-          "adapter": "uibk",
-          "tasks": [
-            "embedding"
-          ],
-          "implementation": "experimental",
-          "precision": "float32",
           "qualification": "unverified"
         }
       ]

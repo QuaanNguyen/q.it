@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 
-LOCK_FAMILIES = {"uibk-agent": "uibk", "redux": "photon"}
+LOCK_FAMILIES = {"redux": "photon"}
 
 
 def profiles():

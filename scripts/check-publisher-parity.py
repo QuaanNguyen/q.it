@@ -154,19 +154,6 @@ def initialize(adapter, directory, configuration, torch):
             .float()
             .eval()
         )
-    if adapter in {"uibk", "uibk-agent"}:
-        from pylate.models import ColBERT
-
-        return (
-            ColBERT(
-                str(directory),
-                device="cpu",
-                local_files_only=True,
-                trust_remote_code=True,
-            )
-            .float()
-            .eval()
-        )
     if adapter in {"photon", "redux"}:
         from kestrel.models.parakeet_tdt.weights import load_parakeet_tdt
 
@@ -308,48 +295,6 @@ def reference(adapter, native, request, configuration, torch):
             show_progress_bar=False,
         )
         return queries.tolist() + documents.tolist()
-    if adapter in {"uibk", "uibk-agent"}:
-        from pylate.scores import colbert_scores
-
-        query = torch.as_tensor(
-            native.encode(
-                [case["input"]],
-                is_query=True,
-                prompt_name="query",
-                batch_size=1,
-                convert_to_numpy=False,
-                show_progress_bar=False,
-                pool_factor=1,
-            )[0]
-        )
-        documents = [
-            torch.as_tensor(value)
-            for value in native.encode(
-                case["documents"],
-                is_query=False,
-                prompt_name="document",
-                batch_size=1,
-                convert_to_numpy=False,
-                show_progress_bar=False,
-                pool_factor=1,
-            )
-        ]
-        scores = [
-            float(
-                colbert_scores(
-                    query.unsqueeze(0), document.unsqueeze(0), backend="torch"
-                )[0, 0]
-            )
-            for document in documents
-        ]
-        return {
-            "query": query.tolist(),
-            "documents": [document.tolist() for document in documents],
-            "scores": scores,
-            "ranking": sorted(
-                range(len(documents)), key=lambda index: (-scores[index], index)
-            ),
-        }
     if adapter in {"photon", "redux"}:
         from kestrel.models.parakeet_tdt.features import parakeet_features
 
@@ -400,8 +345,6 @@ def main():
                 "typed-gemma",
                 "d3",
                 "ultrabert",
-                "uibk",
-                "uibk-agent",
             }
             and not args.allow_reviewed_code
         ):
@@ -481,12 +424,6 @@ def main():
                         for key in ("candidates", "selected_id")
                     }
                     scope = "complete native candidate distribution and choice"
-                elif args.adapter in {"uibk", "uibk-agent"}:
-                    expected = {
-                        key: expected["retrieval"][key]
-                        for key in ("query", "documents", "scores", "ranking")
-                    }
-                    scope = "complete token vectors, native MaxSim and ranking"
                 elif args.adapter == "ultrabert":
                     expected = expected["embeddings"]
                     scope = "native normalized dense vectors"

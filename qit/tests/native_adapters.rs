@@ -130,7 +130,7 @@ async fn bf16_admission_is_limited_to_the_two_original_d3_revisions() {
 
 fn model(variant: &str) -> &str {
     if variant.starts_with("retrieval") {
-        "DataScience-UIBK/uibk-embedding-v1"
+        "fixture/retrieval"
     } else if variant.starts_with("indra") {
         "datalab-to/indra-ocr"
     } else if variant == "d3-lite" {

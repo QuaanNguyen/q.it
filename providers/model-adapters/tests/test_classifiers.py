@@ -41,8 +41,6 @@ class ClassifierTests(unittest.TestCase):
                 "frida",
                 "d3",
                 "ultrabert",
-                "uibk",
-                "uibk-agent",
                 "lighton",
                 "indra",
                 "photon",

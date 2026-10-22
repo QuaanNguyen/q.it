@@ -24,8 +24,6 @@ ADAPTERS: dict[str, Adapter] = {
     "liquid": Adapter(load_decision, reviewed_code=True),
     "typed-gemma": Adapter(load_decision, reviewed_code=True),
     "ultrabert": Adapter(load_embedding, reviewed_code=True),
-    "uibk": Adapter(load_embedding, reviewed_code=True),
-    "uibk-agent": Adapter(load_embedding, reviewed_code=True),
     "lighton": Adapter(load_image),
     "indra": Adapter(load_onnx_ocr),
     "photon": Adapter(load_speech),

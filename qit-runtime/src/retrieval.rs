@@ -35,7 +35,7 @@ impl RetrievalObservation {
                 scalar_count += vector.len();
                 if vector.len() != 128 || vector.iter().any(|value| !value.is_finite()) {
                     return Err(
-                        "UIBK retrieval requires finite native 128-dimensional vectors".into(),
+                        "retrieval requires finite native 128-dimensional vectors".into(),
                     );
                 }
             }

@@ -18,13 +18,6 @@ Use the `linux-x86_64` lock on Sol.
 The retained locks require Linux, CPython 3.12, and a matching 64-bit architecture.
 The loader requires glibc 2.28 or later.
 Individual wheels can require newer glibc, and a host that satisfies the loader floor can still fail to resolve them.
-UIBK has no retained Linux ARM64 environment because its pinned FastPLAID release has no compatible wheel.
-The UIBK lock overrides pylate 1.6.0's `transformers<=5.3.0` pin with `uibk-overrides.txt` (transformers 5.10.0 for security fixes); sentence-transformers stays at 5.3.0 because 5.4 and later break pylate 1.6.0 ColBERT loading.
-Regenerate it with:
-
-```bash
-uv pip compile providers/model-adapters/pyproject.toml --extra uibk --overrides providers/model-adapters/uibk-overrides.txt --python-version 3.12 --python-platform x86_64-manylinux_2_28 --torch-backend cpu --generate-hashes --no-header -o providers/model-adapters/qit_adapters/locks/uibk-linux-x86_64-py312.txt
-```
 A resolved dependency lock is not evidence of a working native installation or Raspberry Pi execution.
 
 Run a decision smoke pack from another terminal:
@@ -38,7 +31,6 @@ qit tui
 These three original cases test transport and scoring, without a dataset-quality claim.
 Use the versioned `russian-choice` pack for FRIDA.
 The FRIDA adapter rejects non-Russian states; it must not be scored on English packs.
-An Agent UIBK pack must retain the publisher's reasoning-and-query format.
 OCR routes require an OCR pack whose prompt is `<OCR>`; chat and VQA packs are rejected.
 Speech qualification needs actual spoken audio, such as the pinned LibriSpeech case retained with the Sol evidence, rather than the core tone transport case.
 
@@ -83,7 +75,6 @@ No candidate checkbox is completed by dependency resolution or fixture tests.
 | `frida` | FRIDA Decisions | Russian single-choice PyTorch path; pinned and hashed original publisher source archive. |
 | `lighton` | LightOnOCR 3 0.8B | Publisher OCR prompt and deterministic transcription. |
 | `ultrabert` | UltraBERT Embed 150M | Publisher CLS pooling, query instruction, normalized 768-dimensional embeddings. |
-| `uibk` | UIBK embedding v1, Agent UIBK v1 | Full PyLate token vectors and native MaxSim, with all branches retained. |
 | `photon` | Parakeet Ultra, Redux | Direct Kestrel full-utterance TDT; Redux retains native GEMM8 panels, ternary logical shapes, scales, and activation quantization. |
 | `indra` | Indra OCR | Torch-free full ten-graph ONNX pipeline, including math; conservative full static-constant bound, with exact learned count explicitly unknown. |
 | `nemotron` | Nemotron 3.5 ASR streaming 0.6B | Separate NeMo full-utterance route, pinned archive, English language prompt, decoder, chunk and cache identity. |
@@ -99,7 +90,7 @@ Its pinned artifact manifest is retained, but serving remains a precise unsuppor
 
 ## Source review and identity
 
-Intern, Liquid, d3, typed Gemma, UltraBERT, and both UIBK models execute pinned publisher Python source.
+Intern, Liquid, d3, typed Gemma, and UltraBERT execute pinned publisher Python source.
 Review those exact files before adding `--allow-reviewed-code` to `serve`.
 Their manifest includes file sizes, original Git blob or LFS identities, and explicit SHA-256 identities for reviewed Python files.
 Changing a revision or a source file requires a new review and qualification.
