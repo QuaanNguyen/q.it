@@ -104,7 +104,7 @@ def database(state):
     return sqlite3.connect(Path(state) / "results.db")
 
 
-def until_saved(state, count=1):
+def until_saved(state, count=1, terminal=None):
     end = time.monotonic() + 10
     while time.monotonic() < end:
         with database(state) as connection:
@@ -116,15 +116,19 @@ def until_saved(state, count=1):
             ):
                 return
         time.sleep(0.05)
-    raise AssertionError("run did not save a sample")
+    screen = "\n".join(terminal.screen.display) if terminal else ""
+    raise AssertionError(f"run did not save a sample: {screen}")
 
 
 def start(terminal, endpoint):
     terminal.send(b"2", b"Start run")
-    terminal.send(b"\r" + b"\x7f" * 80 + b"core/text-generation-smoke\r")
-    terminal.send(b"\x1b[B\x1b[B\rfixture\r")
-    terminal.send(b"\x1b[B\r")
-    terminal.send(b"\x7f" * 64 + endpoint.encode() + b"\r")
+    terminal.send(b"\r", b"Choose Benchmark")
+    terminal.send(b"core/text-generation-smoke\r")
+    terminal.send(b"\x1b[B\r", b"Choose Provider")
+    terminal.send(b"ollama\r")
+    terminal.send(b"\x1b[B\r", b"Choose Model")
+    terminal.send(b"qwen3:0.6b\r")
+    terminal.send(b"\x1b[B\r" + b"\x7f" * 80 + endpoint.encode() + b"\r")
     terminal.send(b"\x1b[B\x1b[B\r\x7f0\r")
     terminal.send(b"\x1b[B" * 4 + b"\r", b"Live progress")
 
@@ -157,12 +161,26 @@ def main():
             ["ps", "-p", str(terminal.process.pid), "-o", "pcpu=,rss=,time="], text=True
         ).strip()
         start(terminal, endpoint)
-        until_saved(state)
+        until_saved(state, terminal=terminal)
         terminal.read_until(b"succeeded")
         terminal.send(b"4", b"Results")
         terminal.send(b"\r", b"Run detail")
         terminal.send(b"\x1b")
         terminal.send(b"5", b"Latency ms")
+        terminal.send(b"2", b"Start run")
+        terminal.send(b"\x1b[A" * 9)
+        terminal.send(b"\r", b"Choose Benchmark")
+        terminal.send(b"text-to-speech\r", b"cleared")
+        terminal.send(b"\x1b[B")
+        terminal.send(b"\r", b"Choose Model")
+        terminal.send(b"phonon", b"gradium/phonon-31m-en")
+        terminal.send(b"\r", b"Cannot start")
+        assert "needs adapter" in "\n".join(terminal.screen.display)
+        assert "Local CPU" in "\n".join(terminal.screen.display)
+        assert "needs adapter / needs adapter" not in "\n".join(terminal.screen.display)
+        terminal.send(b"1", b"Benchmarks")
+        terminal.send(b"m", b"Choose Model")
+        terminal.send(b"qwen3:0.6b\r", b"cleared")
         terminal.close()
         with database(state) as connection:
             run = connection.execute(
@@ -174,7 +192,7 @@ def main():
         interrupted_state = state / "interrupted"
         terminal = Terminal(executable, interrupted_state)
         start(terminal, endpoint)
-        until_saved(interrupted_state)
+        until_saved(interrupted_state, terminal=terminal)
         before = subprocess.check_output(
             ["ps", "-p", str(terminal.process.pid), "-o", "time="], text=True
         ).strip()
@@ -208,6 +226,10 @@ def main():
             "saved samples",
             "results detail",
             "comparison",
+            "picker search",
+            "benchmark-first invalidation",
+            "pending adapter refusal",
+            "model-first repair",
             "Ctrl-C cancellation",
             "terminal restoration",
         ]

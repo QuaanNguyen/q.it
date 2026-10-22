@@ -8,8 +8,8 @@ This keeps each run predictable and avoids including model setup time by acciden
 
 ## Current status
 
-The repository includes six small, self-made benchmarks that confirm a model and server work correctly.
-They exercise text generation, text embeddings, image input, audio upload, and reranking without downloading a large dataset.
+The repository includes seven small, self-made benchmarks that confirm a model and server work correctly.
+They exercise text generation, text embeddings, image input, audio upload, speech synthesis, and reranking without downloading a large dataset.
 
 These built-in checks are smoke tests, not official model evaluations.
 Official datasets such as MMLU-Pro, GSM8K, LibriSpeech, OCRBench, MTEB, and BEIR are intended to be separate benchmark packs.
@@ -71,7 +71,13 @@ qit tui
 ```
 
 Use the numbered screens to choose a benchmark, start a run, watch progress, inspect saved results, and compare models.
-Use the arrow keys and Enter to select or edit, Tab to change screens, and `q` to exit.
+Use the arrow keys and Enter to open a picker or edit a value, Tab to change screens, and `q` to exit.
+The benchmark, provider, and model pickers share one catalog, so each choice narrows the others in both directions.
+Type in a picker to search it, and press Esc to close it without changing the selection.
+When a choice invalidates another field, the workspace says what it cleared and moves focus to that field.
+Press `m` on the benchmark screen to choose a model first, or `b` and `p` to browse benchmarks and providers.
+Press `p` on the start screen to check whether the selected endpoint is running and has the model.
+A route that has not been probed stays allowed, while a missing model or stopped endpoint blocks the run.
 Press `x` on the progress screen to interrupt a run and retain its completed cases in history.
 The terminal workspace works inside an SSH session without a browser, listening port, Node, or special font.
 Models and their optional serving packages must already be installed and running.
@@ -82,6 +88,14 @@ List the available server types:
 
 ```bash
 qit provider list
+```
+
+List catalog models, their provider routes, adapters, and task support:
+
+```bash
+qit models list
+qit models list --task text_to_speech --search phonon
+qit models list --json
 ```
 
 List benchmarks that Ollama can run:
@@ -156,10 +170,12 @@ See [the dashboard design research](docs/research/dashboard-ranking-design.md) f
 | `core/embedding-retrieval` | Checks whether related text is placed near a query in embedding space. | Ollama, Hugging Face Serve, Text Embeddings Inference, or Local CPU |
 | `core/image-to-text-smoke` | Sends a generated two-color image and asks the model to identify its colors. | Ollama, Transformers Serve, or Local CPU |
 | `core/speech-to-text-smoke` | Confirms that an audio file can travel through the transcription endpoint. | Transformers Serve or Local CPU |
+| `core/text-to-speech-smoke` | Synthesizes short spoken phrases and validates the returned PCM stream and duration. | Compatible Local CPU endpoint; Phonon adapter pending |
 | `core/reranking-relevance` | Checks whether the most relevant passage is ranked first. | Text Embeddings Inference or Local CPU |
 | `core/text-to-image-smoke` | Generates and validates a PNG image through the optional CPU server. | Local CPU |
 
 The speech check uses a generated tone, so it does not measure transcription accuracy.
+The text-to-speech check measures time to first audio, real-time factor, and peak memory for each synthesized phrase.
 The text-to-image check uses the optional local CPU provider and saves its generated image with the sample.
 
 ## Supported model servers
@@ -247,10 +263,11 @@ Model loading and downloads remain outside measured runs.
 
 ### Additional optional model adapters
 
-The [optional adapter guide](providers/model-adapters/README.md) covers the new decision, OCR, speech, and retrieval models.
+The [optional adapter guide](providers/model-adapters/README.md) covers the new decision, OCR, speech, synthesis, and retrieval models.
 Install the chosen runtime and original model files separately.
 Each adapter uses an isolated CPU environment and verifies the pinned files before serving.
 Starting an adapter never downloads a model, and no model files are bundled with q.it.
+The pinned Phonon text-to-speech catalog entries remain pending until native dependency locks and a complete loaded parameter audit are available.
 The guide records unsupported paths, precision exceptions, and the separate dataset and Raspberry Pi qualification gates.
 
 ## What q.it measures
@@ -260,6 +277,8 @@ The guide records unsupported paths, precision exceptions, and the separate data
 | Request latency | How long the complete request took. |
 | TTFT | How long the user waited before the first meaningful generated text appeared. |
 | TPS | How many output tokens the model generated per second after output began. |
+| Time to first audio | How long the user waited before the first synthesized audio chunk arrived. |
+| Real-time factor | Synthesis wall-clock seconds divided by synthesized audio seconds. Below one is faster than real time. |
 | CPU use | How busy the whole Pi was during the measured request. |
 | RAM use | The highest total used memory observed during the measured request. |
 | Process memory | The highest memory observed for a supplied model-server process. |

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "routes": [
+    {
+      "model": "google/embeddinggemma-300m",
+      "provider": "hf-serve",
+      "task": "embedding",
+      "license": "gemma"
+    },
+    {
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "provider": "hf-serve",
+      "task": "embedding",
+      "license": "apache-2.0"
+    },
+    {
+      "model": "Qwen/Qwen3-0.6B",
+      "provider": "transformers",
+      "task": "text_generation",
+      "license": "apache-2.0"
+    },
+    {
+      "model": "HuggingFaceTB/SmolVLM-256M-Instruct",
+      "provider": "transformers",
+      "task": "image_to_text",
+      "license": "apache-2.0"
+    },
+    {
+      "model": "openai/whisper-tiny",
+      "provider": "transformers",
+      "task": "speech_to_text",
+      "license": "apache-2.0"
+    }
+  ]
+}

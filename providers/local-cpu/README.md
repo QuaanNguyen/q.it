@@ -164,6 +164,11 @@ Successful checks are reused only when the provider source, q.it executable, val
 A successful smoke request establishes local loading and transport behavior, not an official evaluation score or Raspberry Pi performance.
 Linux ARM64 package availability and real Pi memory fit require separate qualification.
 
+## Optional speech synthesis
+
+Phonon text-to-speech checkpoints use the optional `ptts` adapter environment rather than the Transformers local CPU server.
+See the [optional adapter guide](../model-adapters/README.md) for installation, pinned checkpoints, and the synthesis smoke pack.
+
 ## Optional QVAC NeMo installation
 
 QVAC speech checkpoints use a separate optional NeMo environment and command.

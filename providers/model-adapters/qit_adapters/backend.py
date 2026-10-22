@@ -124,6 +124,9 @@ class Backend:
                 "libc": platform.libc_ver(),
             },
             "decision": self.runtime.configuration,
+            "speech": self.runtime.configuration
+            if profile["task"] == "text_to_speech"
+            else None,
             "preparation": getattr(self.runtime, "preparation", None),
             "retrieval": getattr(self.runtime, "retrieval", None),
             "qualification": "experimental; real checkpoint execution remains unverified",
@@ -158,6 +161,8 @@ class Backend:
                 or not 1 <= payload["max_output_tokens"] <= 32768
             ):
                 raise ValueError("bounded output limit is required")
+            if self.profile["task"] == "text_to_speech":
+                self.runtime.validate_request(payload)
             return
         case = payload.get("case")
         if not isinstance(case, dict) or not isinstance(case.get("decision"), dict):

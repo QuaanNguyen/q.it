@@ -1,0 +1,2 @@
+{"id":"short-greeting","prompt":"q dot i t benchmarks edge speech.","speech":{"language":"en","max_audio_seconds":8}}
+{"id":"short-sentence","prompt":"Small models can speak on a small computer.","speech":{"language":"en","max_audio_seconds":10}}

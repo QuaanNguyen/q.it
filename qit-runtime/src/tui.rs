@@ -8,16 +8,21 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{
-    Block, Borders, Cell, Gauge, Paragraph, Row, Table, TableState, Tabs, Wrap,
+    Block, Borders, Cell, Clear, Gauge, Paragraph, Row, Table, TableState, Tabs, Wrap,
 };
 use ratatui::Frame;
 
 use crate::analysis::{analyze, rank, ComparisonGroup, Metric};
-use crate::command::{parse_run_request, workspace};
-use crate::model::{BenchmarkDefinition, ProviderKind, RunRecord, RunStatus, SampleRecord};
+use crate::catalog::{Catalog, Implementation, RouteKey};
+use crate::command::workspace;
+use crate::model::{BenchmarkDefinition, RunRecord, RunSettings, RunStatus, SampleRecord};
 use crate::packs::PackCatalog;
 use crate::paths::Paths;
 use crate::runner::{execute_with_control, prepare_benchmark, ExecutionControl, RunProgress};
+use crate::select::{
+    Availability, Axis, BenchmarkFact, Choice, Evidence, ProbeReport, ProbeRequest, Query,
+    Selection,
+};
 use crate::store::Store;
 
 const BLUE: Color = Color::Rgb(74, 174, 237);
@@ -82,16 +87,45 @@ enum WorkerEvent {
     Finished(Result<Box<RunRecord>, String>),
 }
 
+struct ProbeWorker {
+    receiver: Receiver<ProbeReport>,
+    join: Option<JoinHandle<()>>,
+}
+
+impl Drop for ProbeWorker {
+    fn drop(&mut self) {
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+    }
+}
+
+struct Picker {
+    axis: Axis,
+    query: String,
+    selected: usize,
+    all_tasks: bool,
+}
+
+struct PickerEntry {
+    choice: Choice,
+    label: String,
+    detail: String,
+}
+
 struct App {
     paths: Paths,
     catalog: PackCatalog,
+    model_catalog: &'static Catalog,
     store: Store,
     benchmarks: Vec<BenchmarkDefinition>,
+    facts: Vec<BenchmarkFact>,
     runs: Vec<RunRecord>,
     groups: Vec<ComparisonGroup>,
     screen: usize,
     selection: usize,
-    form: Vec<String>,
+    choice: Selection,
+    settings: Vec<String>,
     field: usize,
     editing: bool,
     filter_editing: bool,
@@ -104,26 +138,57 @@ struct App {
     metric: usize,
     progress: RunProgress,
     worker: Option<Worker>,
-    message: String,
+    probe: Option<ProbeWorker>,
+    picker: Option<Picker>,
+    evidence: Evidence,
+    notice: String,
 }
 
 impl App {
     fn new(paths: Paths, catalog: PackCatalog, store: Store) -> Result<Self, String> {
         let benchmarks = catalog.benchmarks()?;
+        let model_catalog = Catalog::builtin()?;
+        let facts = BenchmarkFact::from_definitions(&benchmarks);
+        let mut choice = Selection::new();
+        {
+            let query = Query::new(model_catalog, &facts);
+            let available = query.benchmarks(choice.facets());
+            let first = available
+                .iter()
+                .find(|fact| fact.task == crate::model::Task::TextGeneration)
+                .or_else(|| available.first())
+                .map(|fact| fact.id.clone());
+            if let Some(id) = first {
+                choice.pin(&query, Choice::Benchmark(id));
+            }
+            if let Some(provider) = query.providers(choice.facets()).first().copied() {
+                choice.pin(&query, Choice::Provider(provider));
+            }
+            if let Some(route) = query.routes(choice.facets()).first() {
+                let key = route.key().clone();
+                choice.pin(&query, Choice::Model(key));
+            }
+        }
+        let base_url = choice
+            .facets()
+            .route()
+            .and_then(|key| model_catalog.route(key))
+            .map(|route| route.base_url().to_string())
+            .unwrap_or_default();
         let mut app = Self {
             paths,
             catalog,
+            model_catalog,
             store,
             benchmarks,
+            facts,
             runs: Vec::new(),
             groups: Vec::new(),
             screen: 0,
             selection: 0,
-            form: vec![
-                String::new(),
-                "ollama".into(),
-                String::new(),
-                "http://127.0.0.1:11434".into(),
+            choice,
+            settings: vec![
+                base_url,
                 "3".into(),
                 "1".into(),
                 String::new(),
@@ -142,9 +207,11 @@ impl App {
             metric: 0,
             progress: RunProgress::default(),
             worker: None,
-            message: String::new(),
+            probe: None,
+            picker: None,
+            evidence: Evidence::default(),
+            notice: String::new(),
         };
-        app.choose_benchmark(0);
         app.refresh()?;
         Ok(app)
     }
@@ -156,21 +223,303 @@ impl App {
         Ok(())
     }
 
-    fn choose_benchmark(&mut self, index: usize) {
-        if let Some(benchmark) = self.benchmarks.get(index) {
-            self.form[0] = benchmark.id.clone();
-            self.form[6].clear();
-            if !benchmark
-                .supported_providers
+    fn pin(&mut self, choice: Choice) {
+        let previous = (
+            self.choice.facets().route().cloned(),
+            self.choice.facets().provider(),
+        );
+        let outcome = {
+            let query = Query::new(self.model_catalog, &self.facts);
+            self.choice.pin(&query, choice)
+        };
+        if let Some(line) = outcome.line() {
+            self.notice = line;
+        } else {
+            self.notice.clear();
+        }
+        if let Some(release) = &outcome.released {
+            self.field = match release.axis {
+                Axis::Benchmark => 0,
+                Axis::Provider => 1,
+                Axis::Model => 2,
+            };
+        }
+        if previous
+            != (
+                self.choice.facets().route().cloned(),
+                self.choice.facets().provider(),
+            )
+        {
+            self.sync_endpoint();
+        }
+    }
+
+    fn sync_endpoint(&mut self) {
+        let endpoint = self
+            .choice
+            .facets()
+            .route()
+            .and_then(|key| self.model_catalog.route(key))
+            .map(|route| route.base_url().to_string())
+            .or_else(|| {
+                self.choice
+                    .facets()
+                    .provider()
+                    .map(|provider| provider.default_base_url().to_string())
+            });
+        if let Some(endpoint) = endpoint {
+            self.settings[0] = endpoint;
+        }
+    }
+
+    fn visible_benchmarks(&self) -> Vec<&BenchmarkDefinition> {
+        let query = Query::new(self.model_catalog, &self.facts);
+        let allowed = query
+            .benchmarks(self.choice.facets())
+            .into_iter()
+            .map(|fact| fact.id.clone())
+            .collect::<Vec<_>>();
+        self.benchmarks
+            .iter()
+            .filter(|benchmark| allowed.contains(&benchmark.id))
+            .collect()
+    }
+
+    fn availability(&self, key: &RouteKey, base_url: &str) -> Availability {
+        self.evidence
+            .get(key, base_url)
+            .map(|entry| entry.availability)
+            .unwrap_or(Availability::Unprobed)
+    }
+
+    fn picker_entries(&self, axis: Axis, all_tasks: bool) -> Vec<PickerEntry> {
+        let query = Query::new(self.model_catalog, &self.facts);
+        match axis {
+            Axis::Benchmark => self
+                .facts
                 .iter()
-                .any(|provider| provider.as_str() == self.form[1])
-            {
-                if let Some(provider) = benchmark.supported_providers.first() {
-                    self.form[1] = provider.as_str().into();
-                    self.form[3] = provider.default_base_url().into();
-                }
+                .map(|fact| PickerEntry {
+                    choice: Choice::Benchmark(fact.id.clone()),
+                    label: fact.id.clone(),
+                    detail: format!(
+                        "{} / v{} / {} cases",
+                        fact.task.label(),
+                        fact.pack_version,
+                        fact.case_count
+                    ),
+                })
+                .collect(),
+            Axis::Provider => query
+                .providers(self.choice.facets())
+                .into_iter()
+                .map(|provider| {
+                    let count = self
+                        .model_catalog
+                        .routes_matching(Some(provider), query.task(self.choice.facets()))
+                        .len();
+                    PickerEntry {
+                        choice: Choice::Provider(provider),
+                        label: provider.as_str().to_string(),
+                        detail: format!("{} / {count} models", provider.default_base_url()),
+                    }
+                })
+                .collect(),
+            Axis::Model => {
+                let routes = if all_tasks {
+                    self.model_catalog.routes_matching(None, None)
+                } else {
+                    query.routes(self.choice.facets())
+                };
+                routes
+                    .into_iter()
+                    .map(|route| {
+                        let model = self.model_catalog.model(route.model());
+                        let availability = if let Implementation::Pending = route.implementation() {
+                            Availability::AdapterPending
+                        } else {
+                            self.availability(route.key(), route.base_url())
+                        };
+                        PickerEntry {
+                            choice: Choice::Model(route.key().clone()),
+                            label: route.serve_as().to_string(),
+                            detail: format!(
+                                "{} / {} / {} / {} / {}",
+                                route.model(),
+                                model
+                                    .and_then(|model| model.parameters())
+                                    .map(|value| self.model_catalog.parameters_label(Some(value)))
+                                    .unwrap_or_else(|| "?".into()),
+                                route.provider().as_str(),
+                                route.implementation().label(),
+                                availability.label()
+                            ),
+                        }
+                    })
+                    .collect()
             }
         }
+    }
+
+    fn picker_matches(&self, axis: Axis, query: &str, all_tasks: bool) -> Vec<PickerEntry> {
+        let needle = query.to_lowercase();
+        self.picker_entries(axis, all_tasks)
+            .into_iter()
+            .filter(|entry| {
+                needle.is_empty()
+                    || entry.label.to_lowercase().contains(&needle)
+                    || entry.detail.to_lowercase().contains(&needle)
+            })
+            .collect()
+    }
+
+    fn open_picker(&mut self, axis: Axis, all_tasks: bool) {
+        let entries = self.picker_entries(axis, all_tasks);
+        let current = match axis {
+            Axis::Benchmark => self
+                .choice
+                .facets()
+                .benchmark()
+                .map(|id| Choice::Benchmark(id.to_string())),
+            Axis::Provider => self.choice.facets().provider().map(Choice::Provider),
+            Axis::Model => self
+                .choice
+                .facets()
+                .route()
+                .map(|key| Choice::Model(key.clone())),
+        };
+        let selected = current
+            .and_then(|choice| entries.iter().position(|entry| entry.choice == choice))
+            .unwrap_or(0);
+        self.picker = Some(Picker {
+            axis,
+            query: String::new(),
+            selected,
+            all_tasks,
+        });
+    }
+
+    fn commit_picker(&mut self) {
+        let Some(picker) = self.picker.take() else {
+            return;
+        };
+        let entries = self.picker_matches(picker.axis, &picker.query, picker.all_tasks);
+        let Some(entry) = entries
+            .get(picker.selected.min(entries.len().saturating_sub(1)))
+            .map(|entry| Choice::clone(&entry.choice))
+        else {
+            self.notice = format!("No {} matches '{}'", picker.axis.label(), picker.query);
+            return;
+        };
+        self.pin(entry);
+    }
+
+    fn probe(&mut self) {
+        let Some(key) = self.choice.facets().route().cloned() else {
+            self.notice = "Choose a model before probing".into();
+            return;
+        };
+        let Some(route) = self.model_catalog.route(&key) else {
+            self.notice = "The selected route is no longer in the catalog".into();
+            return;
+        };
+        if let Implementation::Pending = route.implementation() {
+            self.evidence.record(
+                key.clone(),
+                route.base_url().to_string(),
+                Availability::AdapterPending,
+                format!(
+                    "install the {} adapter",
+                    route.adapter().unwrap_or("optional")
+                ),
+            );
+            self.notice = format!("{} needs its optional adapter", route.model());
+            return;
+        }
+        let base_url = if self.settings[0].trim().is_empty() {
+            route.base_url().to_string()
+        } else {
+            self.settings[0].trim().to_string()
+        };
+        let request = ProbeRequest {
+            route: key,
+            provider: route.provider(),
+            base_url,
+            serve_as: route.serve_as().to_string(),
+        };
+        let (sender, receiver) = mpsc::channel();
+        let join = std::thread::spawn(move || {
+            let report = request.run(Duration::from_secs(3));
+            let _ = sender.send(report);
+        });
+        self.probe = Some(ProbeWorker {
+            receiver,
+            join: Some(join),
+        });
+        self.notice = "Probing the selected endpoint".into();
+    }
+
+    fn record_probe(&mut self, report: ProbeReport) {
+        match report {
+            ProbeReport::Settled {
+                route,
+                base_url,
+                availability,
+                detail,
+            } => {
+                self.notice = format!("Probe: {}", availability.label());
+                self.evidence.record(route, base_url, availability, detail);
+            }
+            ProbeReport::Failed {
+                route,
+                base_url,
+                detail,
+            } => {
+                self.notice = format!("Probe failed: {detail}");
+                self.evidence
+                    .record(route, base_url, Availability::Unreachable, detail);
+            }
+        }
+    }
+
+    fn run_settings(&self) -> Result<RunSettings, String> {
+        let number = |value: &str, name: &str, low: u32, high: u32| -> Result<u32, String> {
+            let value = value.trim();
+            let parsed = value
+                .parse::<u32>()
+                .map_err(|_| format!("{name} must be a whole number"))?;
+            if !(low..=high).contains(&parsed) {
+                return Err(format!("{name} must be between {low} and {high}"));
+            }
+            Ok(parsed)
+        };
+        let max_output_tokens = if self.settings[3].trim().is_empty() {
+            None
+        } else {
+            Some(number(&self.settings[3], "max tokens", 1, u32::MAX)?)
+        };
+        let target_pid = if self.settings[5].trim().is_empty() {
+            None
+        } else {
+            Some(number(
+                &self.settings[5],
+                "provider PID",
+                1,
+                i32::MAX as u32,
+            )?)
+        };
+        Ok(RunSettings {
+            api_key: std::env::var("QIT_API_KEY").ok(),
+            base_url: if self.settings[0].trim().is_empty() {
+                None
+            } else {
+                Some(self.settings[0].trim().to_string())
+            },
+            iterations: number(&self.settings[1], "passes", 1, 10_000)?,
+            warmups: number(&self.settings[2], "warmups", 0, 10_000)?,
+            max_output_tokens,
+            timeout_seconds: u64::from(number(&self.settings[4], "timeout", 1, 86_400)?),
+            target_pid,
+        })
     }
 
     fn run(&mut self, terminal: &mut ratatui::DefaultTerminal) -> Result<(), String> {
@@ -211,11 +560,25 @@ impl App {
     }
 
     fn receive(&mut self) -> Result<bool, String> {
-        let Some(worker) = &self.worker else {
-            return Ok(false);
-        };
-        let events = worker.receiver.try_iter().collect::<Vec<_>>();
-        let changed = !events.is_empty();
+        let mut changed = false;
+        let reports = self
+            .probe
+            .as_ref()
+            .map(|probe| probe.receiver.try_iter().collect::<Vec<_>>())
+            .unwrap_or_default();
+        if !reports.is_empty() {
+            self.probe = None;
+            for report in reports {
+                self.record_probe(report);
+            }
+            changed = true;
+        }
+        let events = self
+            .worker
+            .as_ref()
+            .map(|worker| worker.receiver.try_iter().collect::<Vec<_>>())
+            .unwrap_or_default();
+        changed |= !events.is_empty();
         for event in events {
             match event {
                 WorkerEvent::Progress(progress) => {
@@ -228,7 +591,7 @@ impl App {
                     }
                 }
                 WorkerEvent::Finished(result) => {
-                    self.message = match result {
+                    self.notice = match result {
                         Ok(run) => format!(
                             "{}: {}",
                             run.status.as_str(),
@@ -259,43 +622,34 @@ impl App {
 
     fn start(&mut self) -> Result<(), String> {
         if self.worker.is_some() || self.store.has_running_run()? {
-            self.message = "A benchmark is already running".into();
+            self.notice = "A benchmark is already running".into();
             return Ok(());
         }
-        let mut arguments = vec![self.form[0].clone()];
-        for (index, name) in [
-            "provider",
-            "model",
-            "base-url",
-            "iterations",
-            "warmups",
-            "max-tokens",
-            "timeout",
-            "pid",
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let value = &self.form[index + 1];
-            if !value.is_empty() {
-                arguments.push(format!("--{name}"));
-                arguments.push(value.clone());
+        let resolved = {
+            let query = Query::new(self.model_catalog, &self.facts);
+            match self.choice.status(&query, &self.evidence, self.endpoint()) {
+                Ok(resolved) => resolved,
+                Err(refusal) => {
+                    self.notice = refusal.to_string();
+                    return Ok(());
+                }
             }
-        }
-        let request = match parse_run_request(&arguments) {
-            Ok(request) => request,
+        };
+        let settings = match self.run_settings() {
+            Ok(settings) => settings,
             Err(error) => {
-                self.message = error;
+                self.notice = error;
                 return Ok(());
             }
         };
-        let prepared = match prepare_benchmark(&self.store, &self.catalog, request) {
-            Ok(prepared) => prepared,
-            Err(error) => {
-                self.message = error;
-                return Ok(());
-            }
-        };
+        let prepared =
+            match prepare_benchmark(&self.store, &self.catalog, resolved.request(&settings)) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    self.notice = error;
+                    return Ok(());
+                }
+            };
         self.progress = RunProgress {
             run_id: prepared.run.id.clone(),
             phase: "starting".into(),
@@ -327,7 +681,7 @@ impl App {
             join: Some(join),
         });
         self.screen = 2;
-        self.message.clear();
+        self.notice.clear();
         Ok(())
     }
 
@@ -356,6 +710,42 @@ impl App {
             self.worker.take();
             return Ok(true);
         }
+        if self.picker.is_some() {
+            match key.code {
+                KeyCode::Esc => {
+                    self.picker = None;
+                    return Ok(false);
+                }
+                KeyCode::Enter => {
+                    self.commit_picker();
+                    return Ok(false);
+                }
+                _ => {}
+            }
+            let count = {
+                let picker = self.picker.as_ref().unwrap();
+                self.picker_matches(picker.axis, &picker.query, picker.all_tasks)
+                    .len()
+            };
+            if let Some(picker) = self.picker.as_mut() {
+                match key.code {
+                    KeyCode::Down => {
+                        picker.selected = (picker.selected + 1).min(count.saturating_sub(1))
+                    }
+                    KeyCode::Up => picker.selected = picker.selected.saturating_sub(1),
+                    KeyCode::Backspace => {
+                        picker.query.pop();
+                        picker.selected = 0;
+                    }
+                    KeyCode::Char(character) if !character.is_control() => {
+                        picker.query.push(character);
+                        picker.selected = 0;
+                    }
+                    _ => {}
+                }
+            }
+            return Ok(false);
+        }
         if self.filter_editing {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => self.filter_editing = false,
@@ -376,10 +766,14 @@ impl App {
                     self.field = (self.field + 1) % FIELDS.len();
                 }
                 KeyCode::Backspace => {
-                    self.form[self.field].pop();
+                    if let Some(value) = self.settings.get_mut(self.field.saturating_sub(3)) {
+                        value.pop();
+                    }
                 }
                 KeyCode::Char(character) if !character.is_control() => {
-                    self.form[self.field].push(character)
+                    if let Some(value) = self.settings.get_mut(self.field.saturating_sub(3)) {
+                        value.push(character);
+                    }
                 }
                 _ => {}
             }
@@ -408,16 +802,25 @@ impl App {
             0 => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.selection =
-                        (self.selection + 1).min(self.benchmarks.len().saturating_sub(1))
+                        (self.selection + 1).min(self.visible_benchmarks().len().saturating_sub(1))
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
                     self.selection = self.selection.saturating_sub(1)
                 }
                 KeyCode::Enter => {
-                    self.choose_benchmark(self.selection);
-                    self.screen = 1;
-                    self.field = 2;
+                    let id = self
+                        .visible_benchmarks()
+                        .get(self.selection)
+                        .map(|benchmark| benchmark.id.clone());
+                    if let Some(id) = id {
+                        self.pin(Choice::Benchmark(id));
+                        self.screen = 1;
+                        self.field = 2;
+                    }
                 }
+                KeyCode::Char('b') => self.open_picker(Axis::Benchmark, false),
+                KeyCode::Char('p') => self.open_picker(Axis::Provider, false),
+                KeyCode::Char('m') => self.open_picker(Axis::Model, true),
                 _ => {}
             },
             1 => match key.code {
@@ -425,18 +828,27 @@ impl App {
                 KeyCode::Up | KeyCode::Char('k') => {
                     self.field = (self.field + FIELDS.len() - 1) % FIELDS.len()
                 }
-                KeyCode::Left | KeyCode::Right if self.field <= 1 => {
+                KeyCode::Left | KeyCode::Right if self.field <= 2 => {
                     self.cycle_field(key.code == KeyCode::Right)
                 }
                 KeyCode::Enter if self.field == 9 => self.start()?,
+                KeyCode::Enter if self.field <= 2 => {
+                    let axis = match self.field {
+                        0 => Axis::Benchmark,
+                        1 => Axis::Provider,
+                        _ => Axis::Model,
+                    };
+                    self.open_picker(axis, false);
+                }
                 KeyCode::Enter => self.editing = true,
+                KeyCode::Char('p') => self.probe(),
                 _ => {}
             },
             2 => {
                 if key.code == KeyCode::Char('x') {
                     if let Some(worker) = &self.worker {
                         worker.control.cancel();
-                        self.message = "Interrupting benchmark".into();
+                        self.notice = "Interrupting benchmark".into();
                     }
                 }
             }
@@ -497,40 +909,82 @@ impl App {
     }
 
     fn cycle_field(&mut self, forward: bool) {
-        if self.field == 0 {
-            let current = self
-                .benchmarks
+        let axis = match self.field {
+            0 => Axis::Benchmark,
+            1 => Axis::Provider,
+            2 => Axis::Model,
+            _ => return,
+        };
+        let mut choices = match axis {
+            Axis::Benchmark => self
+                .visible_benchmarks()
                 .iter()
-                .position(|benchmark| benchmark.id == self.form[0])
-                .unwrap_or(0);
-            if !self.benchmarks.is_empty() {
-                let next = if forward {
-                    (current + 1) % self.benchmarks.len()
-                } else {
-                    (current + self.benchmarks.len() - 1) % self.benchmarks.len()
-                };
-                self.choose_benchmark(next);
+                .map(|benchmark| Choice::Benchmark(benchmark.id.clone()))
+                .collect::<Vec<_>>(),
+            Axis::Provider => {
+                let query = Query::new(self.model_catalog, &self.facts);
+                query
+                    .providers(self.choice.facets())
+                    .into_iter()
+                    .map(Choice::Provider)
+                    .collect()
             }
+            Axis::Model => {
+                let query = Query::new(self.model_catalog, &self.facts);
+                query
+                    .routes(self.choice.facets())
+                    .into_iter()
+                    .map(|route| Choice::Model(route.key().clone()))
+                    .collect()
+            }
+        };
+        if choices.is_empty() {
+            return;
+        }
+        let current = choices
+            .iter()
+            .position(|choice| match (choice, axis) {
+                (Choice::Benchmark(id), Axis::Benchmark) => {
+                    self.choice.facets().benchmark() == Some(id.as_str())
+                }
+                (Choice::Provider(provider), Axis::Provider) => {
+                    self.choice.facets().provider() == Some(*provider)
+                }
+                (Choice::Model(key), Axis::Model) => self.choice.facets().route() == Some(key),
+                _ => false,
+            })
+            .unwrap_or(0);
+        let next = if forward {
+            (current + 1) % choices.len()
         } else {
-            let providers = self
-                .benchmarks
-                .iter()
-                .find(|benchmark| benchmark.id == self.form[0])
-                .map(|benchmark| benchmark.supported_providers.clone())
-                .unwrap_or_else(|| ProviderKind::ALL.to_vec());
-            if !providers.is_empty() {
-                let current = providers
-                    .iter()
-                    .position(|provider| provider.as_str() == self.form[1])
-                    .unwrap_or(0);
-                let next = if forward {
-                    (current + 1) % providers.len()
-                } else {
-                    (current + providers.len() - 1) % providers.len()
-                };
-                self.form[1] = providers[next].as_str().into();
-                self.form[3] = providers[next].default_base_url().into();
-            }
+            (current + choices.len() - 1) % choices.len()
+        };
+        self.pin(choices.swap_remove(next));
+    }
+
+    fn endpoint(&self) -> Option<&str> {
+        let value = self.settings[0].trim();
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    }
+
+    fn status_line(&self) -> String {
+        if !self.notice.is_empty() {
+            return self.notice.clone();
+        }
+        let query = Query::new(self.model_catalog, &self.facts);
+        match self.choice.status(&query, &self.evidence, self.endpoint()) {
+            Ok(resolved) => format!(
+                "Ready  {} / {} / {} at {}",
+                resolved.benchmark(),
+                resolved.route().provider().as_str(),
+                resolved.serve_as(),
+                self.endpoint().unwrap_or(resolved.base_url())
+            ),
+            Err(refusal) => format!("Cannot start  {refusal}"),
         }
     }
 
@@ -567,87 +1021,170 @@ impl App {
             4 => self.draw_comparison(frame, layout[1]),
             _ => {}
         }
-        let keys = if self.editing {
+        let keys = if self.picker.is_some() {
+            "Type to search  Up-Down choose  Enter apply  Esc cancel"
+        } else if self.editing {
             "Type value  Enter save  Esc done"
         } else if self.filter_editing {
             "Type filter  Enter apply  Esc done"
         } else {
-            "Tab screen  Arrows select  Enter open  r refresh  q quit"
-        };
-        let message = if self.message.is_empty() {
-            keys
-        } else {
-            &self.message
+            match self.screen {
+                0 => "Up-Down move  Enter setup  b benchmark  p provider  m model  q quit",
+                1 => "Up-Down field  Enter choose or edit  Left-Right cycle  p probe  q quit",
+                2 => "x interrupts run  q exits and interrupts run",
+                _ => "Tab screen  Arrows select  Enter open  / filter  r refresh  q quit",
+            }
         };
         frame.render_widget(
-            Paragraph::new(message)
-                .style(Style::default().fg(BLUE))
-                .wrap(Wrap { trim: false }),
+            Paragraph::new(vec![
+                Line::from(self.status_line()),
+                Line::from(keys).style(Style::default().fg(Color::Gray)),
+            ])
+            .style(Style::default().fg(BLUE))
+            .wrap(Wrap { trim: false }),
             layout[2],
         );
+        if self.picker.is_some() {
+            self.draw_picker(frame);
+        }
     }
 
     fn draw_benchmarks(&self, frame: &mut Frame, area: Rect) {
         let layout = Layout::vertical([Constraint::Min(4), Constraint::Length(7)]).split(area);
-        let rows = self.benchmarks.iter().map(|benchmark| {
+        let visible = self.visible_benchmarks();
+        let rows = visible.iter().map(|benchmark| {
+            let models = self
+                .model_catalog
+                .routes_matching(self.choice.facets().provider(), Some(benchmark.task))
+                .len();
             Row::new([
                 benchmark.id.clone(),
                 benchmark.task.label().into(),
                 benchmark.pack_version.clone(),
                 benchmark.case_count.to_string(),
-                benchmark
-                    .supported_providers
-                    .iter()
-                    .map(|provider| provider.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
+                models.to_string(),
             ])
         });
         render_table(
             frame,
             layout[0],
             "Benchmarks",
-            &["Benchmark", "Task", "Version", "Cases", "Providers"],
+            &["Benchmark", "Task", "Version", "Cases", "Models"],
             rows,
             &[
-                Constraint::Percentage(34),
-                Constraint::Percentage(20),
+                Constraint::Percentage(42),
+                Constraint::Percentage(19),
                 Constraint::Length(7),
                 Constraint::Length(5),
-                Constraint::Min(10),
+                Constraint::Length(6),
             ],
-            self.selection,
+            self.selection.min(visible.len().saturating_sub(1)),
         );
-        let providers = ProviderKind::ALL
-            .into_iter()
-            .map(|provider| {
-                Line::from(format!(
-                    "{:<16} {}",
-                    provider.as_str(),
-                    provider.default_base_url()
-                ))
-            })
-            .collect::<Vec<_>>();
-        frame.render_widget(
-            Paragraph::new(providers).block(panel("Providers")),
-            layout[1],
-        );
+        let facets = self.choice.facets();
+        let route = facets.route().and_then(|key| self.model_catalog.route(key));
+        let model = route.map(|route| {
+            let state = if let Implementation::Pending = route.implementation() {
+                Availability::AdapterPending
+            } else {
+                self.availability(route.key(), self.endpoint().unwrap_or(route.base_url()))
+            };
+            if route.implementation() == Implementation::Pending {
+                format!("{} / {}", route.serve_as(), state.label())
+            } else {
+                format!(
+                    "{} / {} / {}",
+                    route.serve_as(),
+                    route.implementation().label(),
+                    state.label()
+                )
+            }
+        });
+        let lines = vec![
+            Line::from(format!("Benchmark  {}", facets.benchmark().unwrap_or("-"))),
+            Line::from(format!(
+                "Provider   {}",
+                facets
+                    .provider()
+                    .map(|provider| provider.as_str())
+                    .unwrap_or("-")
+            )),
+            Line::from(format!("Model      {}", model.as_deref().unwrap_or("-"))),
+            Line::from(format!(
+                "Endpoint   {}",
+                self.endpoint()
+                    .map(str::to_string)
+                    .or_else(|| route.map(|route| route.base_url().to_string()))
+                    .unwrap_or_else(|| "-".into())
+            )),
+            Line::from("Enter opens setup / Left-Right cycles on setup"),
+        ];
+        frame.render_widget(Paragraph::new(lines).block(panel("Selection")), layout[1]);
     }
 
     fn draw_form(&self, frame: &mut Frame, area: Rect) {
+        let facets = self.choice.facets();
+        let query = Query::new(self.model_catalog, &self.facts);
+        let task = query.task(facets);
+        let route = facets.route().and_then(|key| self.model_catalog.route(key));
+        let availability = route.map(|route| {
+            if let Implementation::Pending = route.implementation() {
+                Availability::AdapterPending
+            } else {
+                self.availability(route.key(), self.endpoint().unwrap_or(route.base_url()))
+            }
+        });
         let rows = FIELDS.iter().enumerate().map(|(index, name)| {
-            let value = self
-                .form
-                .get(index)
-                .map(String::as_str)
-                .unwrap_or("[ Start ]");
-            let value = if value.is_empty() { "(default)" } else { value };
+            let value = match index {
+                0 => facets
+                    .benchmark()
+                    .map(|id| format!("{id} / {}", task.map(|task| task.label()).unwrap_or("-")))
+                    .unwrap_or_else(|| "(none)".into()),
+                1 => facets
+                    .provider()
+                    .map(|provider| provider.label().to_string())
+                    .unwrap_or_else(|| "(none)".into()),
+                2 => route
+                    .map(|route| {
+                        let parameters = self
+                            .model_catalog
+                            .model(route.model())
+                            .and_then(|model| model.parameters())
+                            .map(|value| self.model_catalog.parameters_label(Some(value)))
+                            .unwrap_or_else(|| "?".into());
+                        if route.implementation() == Implementation::Pending {
+                            format!(
+                                "{} / {} / {}",
+                                route.serve_as(),
+                                parameters,
+                                route.implementation().label()
+                            )
+                        } else {
+                            format!(
+                                "{} / {} / {} / {}",
+                                route.serve_as(),
+                                parameters,
+                                route.implementation().label(),
+                                availability.map(Availability::label).unwrap_or("allowed")
+                            )
+                        }
+                    })
+                    .unwrap_or_else(|| "(none)".into()),
+                3..=8 => {
+                    let value = self.settings[index - 3].as_str();
+                    if value.is_empty() {
+                        "(default)".into()
+                    } else {
+                        value.to_string()
+                    }
+                }
+                _ => "[ Start ]".into(),
+            };
             Row::new([Cell::from(*name), Cell::from(value)])
         });
         let title = if self.editing {
             "Start run / editing"
         } else {
-            "Start run / Enter edits / Left-Right cycles benchmark or provider"
+            "Start run / Enter chooses or edits / Left-Right cycles"
         };
         render_table(
             frame,
@@ -657,6 +1194,54 @@ impl App {
             rows,
             &[Constraint::Length(16), Constraint::Min(20)],
             self.field,
+        );
+    }
+
+    fn draw_picker(&self, frame: &mut Frame) {
+        let Some(picker) = &self.picker else {
+            return;
+        };
+        let entries = self.picker_matches(picker.axis, &picker.query, picker.all_tasks);
+        let area = frame.area();
+        let width = area.width.saturating_sub(4).min(88);
+        let height = area.height.saturating_sub(2).min(20);
+        let area = Rect::new(
+            (area.width - width) / 2,
+            (area.height - height) / 2,
+            width,
+            height,
+        );
+        frame.render_widget(Clear, area);
+        let layout = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+        ])
+        .split(area);
+        let title = format!("Choose {} / {} matches", picker.axis.label(), entries.len());
+        frame.render_widget(
+            Paragraph::new(format!("Search: {}", picker.query)).block(panel(&title)),
+            layout[0],
+        );
+        let rows = entries.iter().map(|entry| {
+            Row::new([
+                Cell::from(entry.label.clone()),
+                Cell::from(entry.detail.clone()),
+            ])
+        });
+        render_table(
+            frame,
+            layout[1],
+            "Type to filter",
+            &["Value", "Detail"],
+            rows,
+            &[Constraint::Length(30), Constraint::Min(10)],
+            picker.selected.min(entries.len().saturating_sub(1)),
+        );
+        frame.render_widget(
+            Paragraph::new("Up-Down choose  Enter apply  Esc cancel")
+                .style(Style::default().fg(BLUE)),
+            layout[2],
         );
     }
 
@@ -695,6 +1280,12 @@ impl App {
             format!("Latency   {} ms", metric(summary.latency_ms_p50)),
             format!("TTFT      {} ms", metric(summary.ttft_ms_p50)),
             format!("Tokens/s  {}", metric(summary.tokens_per_second_p50)),
+            format!(
+                "First audio {} ms",
+                metric(summary.time_to_first_audio_ms_p50)
+            ),
+            format!("RTF       {}", ratio_metric(summary.real_time_factor_p50)),
+            format!("Audio     {} s", metric(summary.audio_duration_seconds_p50)),
             format!("Host CPU  {} %", metric(summary.host_cpu_percent_mean)),
             format!("Host RAM  {}", memory(summary.host_memory_used_bytes_peak)),
             format!("Server RSS {}", memory(summary.process_rss_bytes_peak)),
@@ -752,6 +1343,17 @@ impl App {
                     ));
                     lines.push(speech.transcript.clone());
                     if let Some(routing) = &speech.routing {
+                        lines.push(serde_json::to_string_pretty(routing).unwrap_or_default());
+                    }
+                } else if let Some(synthesis) = &sample.synthesis {
+                    lines.push(format!(
+                        "First audio {} ms / duration {} s / {} Hz / {} bytes",
+                        metric(Some(synthesis.time_to_first_audio_ms)),
+                        metric(Some(synthesis.audio_duration_seconds)),
+                        synthesis.sample_rate_hz,
+                        synthesis.audio_bytes
+                    ));
+                    if let Some(routing) = &synthesis.routing {
                         lines.push(serde_json::to_string_pretty(routing).unwrap_or_default());
                     }
                 } else if let Some(output) = &sample.output_excerpt {
@@ -924,6 +1526,12 @@ fn metric(value: Option<f64>) -> String {
         .unwrap_or_else(|| "-".into())
 }
 
+fn ratio_metric(value: Option<f64>) -> String {
+    value
+        .map(|value| format!("{value:.2}"))
+        .unwrap_or_else(|| "-".into())
+}
+
 fn memory(value: Option<u64>) -> String {
     value
         .map(|value| format!("{:.1} MiB", value as f64 / 1_048_576.0))
@@ -933,17 +1541,32 @@ fn memory(value: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::ProviderKind;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
-    #[test]
-    fn five_screens_fit_an_ssh_terminal_and_form_preserves_typed_model() {
+    fn app() -> App {
         let directory = tempfile::tempdir().unwrap();
         let paths = Paths::new(directory.path().into());
         paths.ensure().unwrap();
         let store = Store::open(&paths.database).unwrap();
         let catalog = PackCatalog::new(paths.packs.clone());
-        let mut app = App::new(paths, catalog, store).unwrap();
+        App::new(paths, catalog, store).unwrap()
+    }
+
+    fn press(app: &mut App, code: KeyCode) {
+        app.key(KeyEvent::new(code, KeyModifiers::NONE)).unwrap();
+    }
+
+    fn type_text(app: &mut App, text: &str) {
+        for character in text.chars() {
+            press(app, KeyCode::Char(character));
+        }
+    }
+
+    #[test]
+    fn five_screens_fit_an_ssh_terminal() {
+        let mut app = app();
         let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
         for (screen, title) in SCREENS.iter().enumerate() {
             app.screen = screen;
@@ -957,12 +1580,127 @@ mod tests {
             assert!(text.contains(title));
             assert!(text.contains("q.it"));
         }
+    }
+
+    #[test]
+    fn provider_model_counts_stay_stable_when_switching_providers() {
+        let mut app = app();
+        app.pin(Choice::Benchmark("core/text-generation-smoke".into()));
+        app.pin(Choice::Provider(ProviderKind::Ollama));
+        let before = app
+            .picker_entries(Axis::Provider, false)
+            .into_iter()
+            .map(|entry| (entry.label, entry.detail))
+            .collect::<Vec<_>>();
+        assert!(before
+            .iter()
+            .any(|(provider, detail)| provider == "ollama" && detail.ends_with("4 models")));
+        app.pin(Choice::Provider(ProviderKind::Transformers));
+        let after = app
+            .picker_entries(Axis::Provider, false)
+            .into_iter()
+            .map(|entry| (entry.label, entry.detail))
+            .collect::<Vec<_>>();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn model_picker_searches_and_commits_without_downloading() {
+        let mut app = app();
+        app.pin(Choice::Benchmark("core/text-to-speech-smoke".into()));
         app.screen = 1;
         app.field = 2;
-        app.editing = true;
-        app.key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE))
-            .unwrap();
-        assert_eq!(app.form[2], "q");
+        press(&mut app, KeyCode::Enter);
+        assert!(app.picker.is_some());
+        type_text(&mut app, "phonon");
+        let entries = app.picker_matches(Axis::Model, "phonon", false);
+        assert_eq!(entries.len(), 2);
+        press(&mut app, KeyCode::Enter);
+        assert!(app.picker.is_none());
+        let key = app.choice.facets().route().unwrap();
+        let route = app.model_catalog.route(key).unwrap();
+        assert!(route.model().as_str().starts_with("gradium/phonon"));
+        assert_eq!(app.settings[0], route.base_url());
+    }
+
+    #[test]
+    fn picker_renders_inside_eighty_by_twenty_four() {
+        let mut app = app();
+        app.open_picker(Axis::Model, false);
+        type_text(&mut app, "qwen");
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("Choose Model"));
+        assert!(text.contains("Search: qwen"));
+    }
+
+    #[test]
+    fn benchmark_first_narrows_models_and_clears_the_old_one() {
+        let mut app = app();
+        let text_model = app.choice.facets().route().cloned().unwrap();
+        app.pin(Choice::Benchmark("core/text-to-speech-smoke".into()));
+        assert_eq!(
+            app.choice.facets().benchmark(),
+            Some("core/text-to-speech-smoke")
+        );
+        assert_ne!(app.choice.facets().route(), Some(&text_model));
+        let providers = {
+            let query = Query::new(app.model_catalog, &app.facts);
+            query.providers(app.choice.facets())
+        };
+        assert!(providers.contains(&ProviderKind::LocalCpu));
+        assert!(!providers.contains(&ProviderKind::Transformers));
+    }
+
+    #[test]
+    fn switching_benchmark_clears_an_incompatible_model_and_focuses_it() {
+        let mut app = app();
+        app.pin(Choice::Benchmark("core/text-to-speech-smoke".into()));
+        let speech = {
+            let query = Query::new(app.model_catalog, &app.facts);
+            query
+                .routes(app.choice.facets())
+                .first()
+                .map(|route| Choice::Model(route.key().clone()))
+                .unwrap()
+        };
+        app.pin(speech);
+        assert!(app.choice.facets().route().is_some());
+        app.pin(Choice::Benchmark("core/text-generation-smoke".into()));
+        assert!(app.choice.facets().route().is_none());
+        assert_eq!(app.field, 2);
+        assert!(app.notice.contains("cleared"));
+    }
+
+    #[test]
+    fn choosing_a_model_first_clears_an_incompatible_benchmark() {
+        let mut app = app();
+        app.screen = 0;
+        press(&mut app, KeyCode::Char('m'));
+        type_text(&mut app, "phonon");
+        press(&mut app, KeyCode::Enter);
+        assert!(app.choice.facets().benchmark().is_none());
+        assert!(app.choice.facets().route().is_some());
+        assert_eq!(app.field, 0);
+        assert!(app.notice.contains("cleared"));
+    }
+
+    #[test]
+    fn typed_settings_are_preserved_while_editing() {
+        let mut app = app();
+        app.screen = 1;
+        app.field = 3;
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Backspace);
+        type_text(&mut app, "q");
+        assert!(app.settings[0].ends_with('q'));
         assert!(app.editing);
     }
 }

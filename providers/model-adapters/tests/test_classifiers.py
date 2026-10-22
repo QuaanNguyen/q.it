@@ -48,6 +48,7 @@ class ClassifierTests(unittest.TestCase):
                 "photon",
                 "redux",
                 "nemotron",
+                "phonon",
             },
         )
         for row in catalog:

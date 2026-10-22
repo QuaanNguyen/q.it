@@ -39,7 +39,7 @@ async fn dashboard_exposes_benchmarks_history_and_embedded_assets() {
             .json()
             .await
             .unwrap();
-    assert_eq!(benchmarks.as_array().unwrap().len(), 6);
+    assert_eq!(benchmarks.as_array().unwrap().len(), 7);
     assert!(benchmarks
         .as_array()
         .unwrap()

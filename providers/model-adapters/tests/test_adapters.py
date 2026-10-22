@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qit_adapters.artifacts import (
     environment,
     fingerprint,
+    locked_environment,
+    profiles,
     profile_for,
     verify,
 )
@@ -333,6 +335,137 @@ class AdapterTests(unittest.TestCase):
     def test_server_binds_only_to_loopback(self):
         with self.assertRaisesRegex(ValueError, "loopback"):
             CpuServer(("0.0.0.0", 0), None)
+
+
+class FakeAudio:
+    def __init__(self):
+        self.chunks = [
+            [0.5] * 2400,
+            [-0.5] * 1200,
+        ]
+
+    def __enter__(self):
+        return iter(self.chunks)
+
+    def __exit__(self, *arguments):
+        return False
+
+
+class FakeEngine:
+    sample_rate = 24000
+    voices = ["default", "calm"]
+
+    def __init__(self):
+        self.requests = []
+
+    def stream(self, text, voice=None):
+        self.requests.append((text, voice))
+        return FakeAudio()
+
+
+class FakePTTS:
+    __version__ = "test"
+
+    def __init__(self):
+        self.loads = []
+
+    def TTS(self, directory, lang):
+        self.loads.append((directory, lang))
+        return FakeEngine()
+
+
+class PhononTests(unittest.TestCase):
+    def test_pending_phonon_routes_refuse_serving_and_missing_native_locks(self):
+        candidates = [row for row in profiles() if row["adapter"] == "phonon"]
+        self.assertEqual(len(candidates), 2)
+        self.assertNotIn("phonon", ADAPTERS)
+        for candidate in candidates:
+            self.assertEqual(candidate["native_architectures"], [])
+            with tempfile.TemporaryDirectory() as directory:
+                with patch("qit_adapters.backend.verify", return_value={}):
+                    with self.assertRaisesRegex(ValueError, "unsupported adapter"):
+                        Backend(candidate, directory)
+            with (
+                patch("platform.system", return_value="Linux"),
+                patch("platform.machine", return_value="aarch64"),
+                patch("platform.libc_ver", return_value=("glibc", "2.28")),
+                patch("sys.version_info", (3, 12)),
+            ):
+                with self.assertRaisesRegex(ValueError, "no retained lock"):
+                    locked_environment(candidate)
+
+    def runtime(self):
+        from qit_adapters.phonon import PhononRuntime
+
+        module = FakePTTS()
+        profile = {
+            "model": "fixture/phonon",
+            "adapter": "phonon",
+            "task": "text_to_speech",
+        }
+        return PhononRuntime(profile, Path("/models/phonon"), module), module
+
+    def test_streams_sixteen_bit_pcm_and_reconciles_the_result(self):
+        import base64
+
+        runtime, module = self.runtime()
+        self.assertEqual(module.loads, [("/models/phonon", "en")])
+        events = list(
+            runtime.invoke(
+                {
+                    "id": "one",
+                    "prompt": "Hello",
+                    "speech": {"language": "en", "max_audio_seconds": 1},
+                },
+                128,
+            )
+        )
+        audio = [event for event in events if event["type"] == "audio"]
+        self.assertEqual(len(audio), 2)
+        self.assertEqual(len(base64.b64decode(audio[0]["pcm_base64"])), 4800)
+        self.assertEqual(audio[0]["sample_rate_hz"], 24000)
+        result = events[-1]
+        self.assertEqual(result["type"], "result")
+        self.assertEqual(result["audio_bytes"], 7200)
+        self.assertAlmostEqual(result["audio_duration_seconds"], 0.15)
+        self.assertEqual(result["speech_routing"]["language"], "en")
+        self.assertEqual(result["speech_routing"]["chunks"], 2)
+        self.assertEqual(result["sample_rate_hz"], 24000)
+
+    def test_rejects_unbounded_or_malformed_speech_settings(self):
+        runtime, _ = self.runtime()
+        for speech in (
+            {"language": "xx"},
+            {"voice": ""},
+            {"voice": "remote-name"},
+            {"max_audio_seconds": 0},
+            {"max_audio_seconds": 121},
+            {"unexpected": True},
+        ):
+            with self.assertRaises(ValueError):
+                runtime.validate_request(
+                    {
+                        "case": {
+                            "prompt": "Hello",
+                            "speech": speech,
+                        }
+                    }
+                )
+        with self.assertRaises(ValueError):
+            runtime.validate_request({"case": {"prompt": "  "}})
+
+    def test_stops_when_audio_exceeds_the_case_limit(self):
+        runtime, _ = self.runtime()
+        with self.assertRaises(ValueError):
+            list(
+                runtime.invoke(
+                    {
+                        "prompt": "Hello",
+                        "speech": {"language": "en", "max_audio_seconds": 0.05},
+                    },
+                    128,
+                )
+            )
 
 
 if __name__ == "__main__":

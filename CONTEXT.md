@@ -19,8 +19,33 @@ Packs are declarative and never contain executable code.
 _Avoid_: plugin, suite, extension
 
 **Task**:
-The model capability exercised by a benchmark, such as text to text, image to text, speech to text, embedding, reranking, or text to image.
+The model capability exercised by a benchmark, such as text to text, image to text, speech to text, text to speech, embedding, reranking, or text to image.
 _Avoid_: modality, capability
+
+**Model catalog**:
+The generated list of known models, their provider routes, tasks, adapters, and pinned identifiers.
+It describes what q.it can invoke, never what is installed or running on this machine.
+_Avoid_: registry, model zoo, download list
+
+**Route**:
+One way to serve a model: a provider, an optional adapter, a served model name, and the tasks it can run.
+A model may have several routes with different providers or adapters.
+_Avoid_: deployment, endpoint, variant
+
+**Selection**:
+The benchmark, provider, and model choices made together in the terminal workspace.
+Each choice narrows the others when routes cannot serve the selected task.
+_Avoid_: form, filter state
+
+**Released choice**:
+A previously selected benchmark, provider, or model that was cleared because another choice made it incompatible.
+The workspace reports the cleared value, the reason, and moves focus to that field.
+_Avoid_: reset, invalidation error
+
+**Availability probe**:
+A short check that the selected endpoint is reachable and lists the selected model.
+An unprobed route stays allowed; a failed probe blocks the start gate with the observed reason.
+_Avoid_: health check, ping
 
 **Decision scoring**:
 Assessing a fixed set of candidate answers to a named question about a supplied state, with a probability for each candidate and a selected answer.
@@ -60,6 +85,15 @@ _Avoid_: startup time, first response time
 **Token throughput**:
 Completion tokens divided by provider-reported generation time when available, otherwise by elapsed time after the first token when an exact completion-token count is available.
 _Avoid_: requests per second, characters per second
+
+**Time to first audio**:
+Elapsed time from starting a speech synthesis request until the first non-empty audio chunk arrives.
+_Avoid_: startup time, first response time
+
+**Real-time factor**:
+Wall-clock synthesis time divided by the synthesized audio duration.
+A value below one means synthesis ran faster than playback.
+_Avoid_: speed, latency ratio
 
 **Analysis dashboard**:
 The optional local web interface for starting benchmark runs, inspecting run history, and comparing successful runs with charts and a Pareto frontier.

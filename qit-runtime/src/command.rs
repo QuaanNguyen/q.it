@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
+use crate::catalog::{Catalog, Implementation};
 use crate::config::{home_from_env, Config};
 use crate::model::{ProviderKind, RunRecord, RunRequest, RunStatus, Task};
 use crate::packs::PackCatalog;
@@ -43,6 +44,7 @@ fn execute(arguments: Vec<String>) -> Result<i32, String> {
         }
         "benchmark" | "benchmarks" => benchmark_command(rest),
         "provider" | "providers" => provider_command(rest),
+        "models" => models_command(rest),
         "run" => run_command(rest),
         "tui" => tui_command(rest),
         "results" => results_command(rest),
@@ -65,28 +67,29 @@ fn benchmark_command(arguments: &[String]) -> Result<i32, String> {
                 .map(ProviderKind::from_str)
                 .transpose()?;
             let (_, catalog, _) = workspace()?;
+            let model_catalog = Catalog::builtin()?;
             let benchmarks = catalog.benchmarks()?;
             println!(
                 "{:<34} {:<19} {:<7} PROVIDERS",
                 "BENCHMARK", "TASK", "CASES"
             );
             for benchmark in benchmarks {
+                let providers = model_catalog.providers_for(Some(benchmark.task));
                 if let Some(provider) = provider {
                     println!(
                         "{:<34} {:<19} {:<7} {}",
                         benchmark.id,
                         benchmark.task.as_str(),
                         benchmark.case_count,
-                        if provider.supports(benchmark.task) {
+                        if providers.contains(&provider) {
                             "supported"
                         } else {
                             "unsupported"
                         }
                     );
                 } else {
-                    let providers = benchmark
-                        .supported_providers
-                        .iter()
+                    let providers = providers
+                        .into_iter()
                         .map(|provider| provider.as_str())
                         .collect::<Vec<_>>()
                         .join(",");
@@ -170,6 +173,94 @@ fn provider_command(arguments: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         unknown => Err(format!("unknown provider action '{unknown}'")),
+    }
+}
+
+fn models_command(arguments: &[String]) -> Result<i32, String> {
+    let action = arguments.first().map(String::as_str).unwrap_or("list");
+    match action {
+        "list" => {
+            let options = Options::parse(
+                arguments.get(1..).unwrap_or_default(),
+                &["provider", "task", "search"],
+                &["json"],
+            )?;
+            options.require_no_positionals()?;
+            let provider = options
+                .value("provider")
+                .map(ProviderKind::from_str)
+                .transpose()?;
+            let task = options.value("task").map(Task::parse).transpose()?;
+            let search = options.value("search").map(str::to_lowercase);
+            let catalog = Catalog::builtin()?;
+            let rows = catalog
+                .models()
+                .iter()
+                .flat_map(|model| model.routes().iter().map(move |route| (model, route)))
+                .filter(|(_, route)| provider.is_none_or(|value| route.provider() == value))
+                .filter(|(_, route)| task.is_none_or(|value| route.serves(value)))
+                .filter(|(model, route)| {
+                    search.as_ref().is_none_or(|needle| {
+                        model.id().as_str().to_lowercase().contains(needle)
+                            || route.serve_as().to_lowercase().contains(needle)
+                            || route
+                                .adapter()
+                                .is_some_and(|adapter| adapter.to_lowercase().contains(needle))
+                    })
+                })
+                .collect::<Vec<_>>();
+            if options.flag("json") {
+                let body = rows
+                    .iter()
+                    .map(|(model, route)| {
+                        serde_json::json!({
+                            "model": model.id().as_str(),
+                            "parameters": model.parameters(),
+                            "license": model.license(),
+                            "provider": route.provider().as_str(),
+                            "serve_as": route.serve_as(),
+                            "tasks": route.tasks().tasks().iter().map(|task| task.as_str()).collect::<Vec<_>>(),
+                            "implementation": match route.implementation() {
+                                Implementation::Direct => "direct",
+                                Implementation::Experimental => "experimental",
+                                Implementation::Pending => "pending",
+                            },
+                            "adapter": route.adapter(),
+                            "base_url": route.base_url(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&body)
+                        .map_err(|error| format!("serialize model catalog: {error}"))?
+                );
+                return Ok(0);
+            }
+            println!(
+                "{:<42} {:<8} {:<13} {:<26} TASKS / IMPLEMENTATION",
+                "MODEL", "PARAMS", "PROVIDER", "SERVED AS"
+            );
+            for (model, route) in rows {
+                println!(
+                    "{:<42} {:<8} {:<13} {:<26} {} / {}",
+                    model.id().as_str(),
+                    catalog.parameters_label(model.parameters()),
+                    route.provider().as_str(),
+                    route.serve_as(),
+                    route.tasks().labels(),
+                    route.implementation().label()
+                );
+            }
+            Ok(0)
+        }
+        "help" | "--help" | "-h" => {
+            println!(
+                "Usage:\n  qit models list [--provider PROVIDER] [--task TASK] [--search TEXT] [--json]"
+            );
+            Ok(0)
+        }
+        unknown => Err(format!("unknown models action '{unknown}'")),
     }
 }
 
@@ -436,6 +527,19 @@ fn print_run_summary(run: &RunRecord) {
                 crate::decision::LogLoss::Infinite => println!("Negative log likelihood: infinite"),
             }
         }
+    } else if run.task == crate::model::Task::TextToSpeech {
+        println!(
+            "First audio p50: {}",
+            format_metric(run.summary.time_to_first_audio_ms_p50, "ms")
+        );
+        println!(
+            "Real-time factor p50: {}",
+            format_metric(run.summary.real_time_factor_p50, "")
+        );
+        println!(
+            "Audio duration p50: {}",
+            format_metric(run.summary.audio_duration_seconds_p50, "s")
+        );
     } else {
         println!("TTFT p50: {}", format_metric(run.summary.ttft_ms_p50, "ms"));
         println!(
@@ -474,7 +578,7 @@ fn export_jsonl(store: &Store, runs: &[RunRecord]) -> Result<String, String> {
 
 fn export_csv(runs: &[RunRecord]) -> String {
     let mut output = String::from(
-        "run_id,benchmark_id,task,provider,model,host_name,started_at_ms,latency_ms_p50,ttft_ms_p50,tokens_per_second_p50,cpu_percent_mean,memory_used_bytes_peak,process_rss_bytes_peak,quality_score_mean,provider_version,brier_score_mean,negative_log_likelihood_mean,zero_gold_probability_count\n",
+        "run_id,benchmark_id,task,provider,model,host_name,started_at_ms,latency_ms_p50,ttft_ms_p50,tokens_per_second_p50,cpu_percent_mean,memory_used_bytes_peak,process_rss_bytes_peak,quality_score_mean,provider_version,brier_score_mean,negative_log_likelihood_mean,zero_gold_probability_count,time_to_first_audio_ms_p50,real_time_factor_p50,audio_duration_seconds_p50\n",
     );
     for run in runs {
         let fields = [
@@ -517,6 +621,9 @@ fn export_csv(runs: &[RunRecord]) -> String {
                 .as_ref()
                 .map(|metrics| metrics.zero_gold_probability_count.to_string())
                 .unwrap_or_default(),
+            optional_string(run.summary.time_to_first_audio_ms_p50),
+            optional_string(run.summary.real_time_factor_p50),
+            optional_string(run.summary.audio_duration_seconds_p50),
         ];
         output.push_str(
             &fields
@@ -579,7 +686,7 @@ fn print_help() {
     println!(
         "q.it - Raspberry Pi edge-model benchmarks\n\n\
 Usage:\n  qit <command> [options]\n\n\
-Commands:\n  benchmark list              List installed benchmarks\n  benchmark verify PATH       Validate a benchmark pack\n  benchmark install PATH      Install a declarative benchmark pack\n  benchmark remove ID         Remove an installed benchmark pack\n  provider list               List serving protocols and supported tasks\n  tui                         Open the terminal workspace\n  run BENCHMARK               Run a benchmark and store its result\n  results                     Show run history\n  export                      Export the successful run dataset\n  dashboard                   Start the local analysis dashboard\n  help                        Show this help\n\n\
+Commands:\n  benchmark list              List installed benchmarks\n  benchmark verify PATH       Validate a benchmark pack\n  benchmark install PATH      Install a declarative benchmark pack\n  benchmark remove ID         Remove an installed benchmark pack\n  provider list               List serving protocols and supported tasks\n  models list                 List catalog models, routes, and adapters\n  tui                         Open the terminal workspace\n  run BENCHMARK               Run a benchmark and store its result\n  results                     Show run history\n  export                      Export the successful run dataset\n  dashboard                   Start the local analysis dashboard\n  help                        Show this help\n\n\
 Run 'qit run --help' for execution options."
     );
 }

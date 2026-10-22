@@ -17,24 +17,26 @@ pub struct HostInfo {
     pub qit_version: String,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Task {
     TextGeneration,
     Embedding,
     ImageToText,
     SpeechToText,
+    TextToSpeech,
     Reranking,
     TextToImage,
     DecisionScoring,
 }
 
 impl Task {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::TextGeneration,
         Self::Embedding,
         Self::ImageToText,
         Self::SpeechToText,
+        Self::TextToSpeech,
         Self::Reranking,
         Self::TextToImage,
         Self::DecisionScoring,
@@ -46,6 +48,7 @@ impl Task {
             Self::Embedding => "embedding",
             Self::ImageToText => "image_to_text",
             Self::SpeechToText => "speech_to_text",
+            Self::TextToSpeech => "text_to_speech",
             Self::Reranking => "reranking",
             Self::TextToImage => "text_to_image",
             Self::DecisionScoring => "decision_scoring",
@@ -58,10 +61,18 @@ impl Task {
             Self::Embedding => "Text embedding",
             Self::ImageToText => "Image to text",
             Self::SpeechToText => "Speech to text",
+            Self::TextToSpeech => "Text to speech",
             Self::Reranking => "Reranking",
             Self::TextToImage => "Text to image",
             Self::DecisionScoring => "Decision scoring",
         }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        Self::ALL
+            .into_iter()
+            .find(|task| task.as_str() == value)
+            .ok_or_else(|| format!("unknown task '{value}'"))
     }
 }
 
@@ -71,7 +82,7 @@ impl Display for Task {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
     Ollama,
@@ -208,7 +219,6 @@ pub struct BenchmarkDefinition {
     pub tags: Vec<String>,
     pub default_max_output_tokens: u32,
     pub built_in: bool,
-    pub supported_providers: Vec<ProviderKind>,
     #[serde(skip)]
     pub cases: Vec<BenchmarkCase>,
 }
@@ -245,6 +255,19 @@ pub struct BenchmarkCase {
     pub document_prefix: Option<String>,
     #[serde(default)]
     pub image_settings: Option<ImageSettings>,
+    #[serde(default)]
+    pub speech: Option<SpeechSynthesisSettings>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpeechSynthesisSettings {
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub voice: Option<String>,
+    #[serde(default)]
+    pub max_audio_seconds: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -311,6 +334,10 @@ pub struct RunSummary {
     pub host_memory_used_bytes_peak: Option<u64>,
     pub process_rss_bytes_peak: Option<u64>,
     pub quality_score_mean: Option<f64>,
+    pub time_to_first_audio_ms_p50: Option<f64>,
+    pub time_to_first_audio_ms_p95: Option<f64>,
+    pub real_time_factor_p50: Option<f64>,
+    pub audio_duration_seconds_p50: Option<f64>,
     #[serde(default)]
     pub decision_metrics: Option<crate::decision::DecisionSummary>,
 }
@@ -353,6 +380,15 @@ pub struct SpeechObservation {
     pub routing: Option<serde_json::Value>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SynthesisObservation {
+    pub time_to_first_audio_ms: f64,
+    pub audio_duration_seconds: f64,
+    pub sample_rate_hz: u32,
+    pub audio_bytes: u64,
+    pub routing: Option<serde_json::Value>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SampleRecord {
     pub id: String,
@@ -377,6 +413,7 @@ pub struct SampleRecord {
     pub decision: Option<crate::decision::DecisionObservation>,
     pub retrieval: Option<crate::retrieval::RetrievalObservation>,
     pub speech: Option<SpeechObservation>,
+    pub synthesis: Option<SynthesisObservation>,
 }
 
 #[derive(Clone, Debug)]
@@ -391,6 +428,31 @@ pub struct RunRequest {
     pub max_output_tokens: Option<u32>,
     pub timeout_seconds: u64,
     pub target_pid: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RunSettings {
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub iterations: u32,
+    pub warmups: u32,
+    pub max_output_tokens: Option<u32>,
+    pub timeout_seconds: u64,
+    pub target_pid: Option<u32>,
+}
+
+impl Default for RunSettings {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            base_url: None,
+            iterations: 3,
+            warmups: 1,
+            max_output_tokens: None,
+            timeout_seconds: 120,
+            target_pid: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -410,6 +472,7 @@ pub struct InvocationResult {
     pub audio_duration_seconds: Option<f64>,
     pub speech_routing: Option<serde_json::Value>,
     pub retrieval: Option<crate::retrieval::RetrievalObservation>,
+    pub synthesis: Option<SynthesisObservation>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -418,4 +481,12 @@ pub struct TelemetrySummary {
     pub host_cpu_percent_peak: Option<f64>,
     pub host_memory_used_bytes_peak: Option<u64>,
     pub process_rss_bytes_peak: Option<u64>,
+}
+
+pub fn real_time_factor(audio_duration_seconds: f64, latency_ms: f64) -> Option<f64> {
+    (audio_duration_seconds.is_finite()
+        && audio_duration_seconds > 0.0
+        && latency_ms.is_finite()
+        && latency_ms > 0.0)
+        .then(|| (latency_ms / 1000.0) / audio_duration_seconds)
 }

@@ -1,0 +1,1181 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "name": "local-cpu",
+      "path": "providers/local-cpu/qit_cpu/models.json",
+      "sha256": "27721a7d87683a33fe8d9b86dc023a471495730ba791aaf5877977c762ac1bee"
+    },
+    {
+      "name": "model-adapters",
+      "path": "providers/model-adapters/qit_adapters/models.json",
+      "sha256": "258395c7d65a2194b1740cff0ef52c7ccf3c2ea4726bfad57f4483b6e7294c39"
+    },
+    {
+      "name": "ollama",
+      "path": "providers/model-routes/ollama.json",
+      "sha256": "aea960c85978d57c25b4df92c586edb8f134d52ae0660224a1dae1bf127c16fd"
+    },
+    {
+      "name": "huggingface",
+      "path": "providers/model-routes/huggingface.json",
+      "sha256": "3d44db89b92063054978632dc168bf351e8a91af05486cef98755588dff2f46c"
+    }
+  ],
+  "models": [
+    {
+      "id": "datalab-to/indra-ocr",
+      "parameters": 1250566,
+      "license": "openrail",
+      "revision": "ed345c7f158eddbc7dee0c6a7269afb75a94f7e8",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "datalab-to/indra-ocr",
+          "adapter": "indra",
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "gradium/phonon-31m-en",
+      "parameters": 41096035,
+      "license": "apache-2.0",
+      "revision": "541f5752bc3c79583068bb205bfda5eb39aaa08a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "gradium/phonon-31m-en",
+          "adapter": "phonon",
+          "tasks": [
+            "text_to_speech"
+          ],
+          "implementation": "pending",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "gradium/phonon-40m-multilingual",
+      "parameters": 50539363,
+      "license": "cc-by-nc-4.0",
+      "revision": "a411985d04262e21e306e505bd59d8fe30bd486b",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "gradium/phonon-40m-multilingual",
+          "adapter": "phonon",
+          "tasks": [
+            "text_to_speech"
+          ],
+          "implementation": "pending",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "parameters": 134515008,
+      "license": null,
+      "revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "HuggingFaceTB/SmolLM2-135M-Instruct",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "ollama",
+          "serve_as": "smollm2:135m",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "moondream/parakeet-redux",
+      "parameters": 148923399,
+      "license": "cc-by-4.0",
+      "revision": "2bf128600aac4b16946f7ed8372e56117fe5e23b",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "moondream/parakeet-redux",
+          "adapter": "redux",
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "experimental",
+          "precision": "native_ternary",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "DataScience-UIBK/Agent-uibk-v1",
+      "parameters": 149015808,
+      "license": "apache-2.0",
+      "revision": "fb1c8ae408f36729cb6f507c3898cb6ab93b4416",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "DataScience-UIBK/Agent-uibk-v1",
+          "adapter": "uibk-agent",
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "DataScience-UIBK/uibk-embedding-v1",
+      "parameters": 149015808,
+      "license": "apache-2.0",
+      "revision": "b18df82e77306006a1dd0162199f6dfeacb5492e",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "DataScience-UIBK/uibk-embedding-v1",
+          "adapter": "uibk",
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "dmis-lab/UltraBERT-Embed-150M",
+      "parameters": 151032576,
+      "license": "apache-2.0",
+      "revision": "b06b36724c5417a1ec1b7863dd4fa542b74e4899",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "dmis-lab/UltraBERT-Embed-150M",
+          "adapter": "ultrabert",
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "mrm8488/embeddinggemma-2-ft-typed-decision",
+      "parameters": 272120348,
+      "license": "apache-2.0",
+      "revision": "8403ff7fddc75b6994130e581a832f875fb5bd0e",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "mrm8488/embeddinggemma-2-ft-typed-decision",
+          "adapter": "typed-gemma",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "parameters": 361821120,
+      "license": null,
+      "revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "HuggingFaceTB/SmolLM2-360M-Instruct",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "ollama",
+          "serve_as": "smollm2:360m",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "knowledgator/gliclass-v4-edge",
+      "parameters": 439790595,
+      "license": "apache-2.0",
+      "revision": "90be5550327b138635db1f63531f9dfa15e624da",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "knowledgator/gliclass-v4-edge",
+          "adapter": "gliclass",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "fastino/GLiNER2.5-Decide",
+      "parameters": 486444053,
+      "license": "apache-2.0",
+      "revision": "9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "fastino/GLiNER2.5-Decide",
+          "adapter": "gliner2",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "parameters": 494032768,
+      "license": null,
+      "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "Qwen/Qwen2.5-0.5B-Instruct",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "ollama",
+          "serve_as": "qwen2.5:0.5b",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "LiquidAI/d1-omni-600M",
+      "parameters": 587161089,
+      "license": "other",
+      "revision": "02b55d7076f15129e59ab3f94783f32c4b088674",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "LiquidAI/d1-omni-600M",
+          "adapter": "liquid",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "vllm-sr/d3-edge",
+      "parameters": 594321600,
+      "license": "apache-2.0",
+      "revision": "c454ee39b862248d70abd7f84195d2f54ffe6d43",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "vllm-sr/d3-edge",
+          "adapter": "d3",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "bfloat16",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "moondream/parakeet-ultra",
+      "parameters": 627270663,
+      "license": "cc-by-4.0",
+      "revision": "73175eb7aeb0d82f1e2a6b53b3aabc10a90bcd0b",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "moondream/parakeet-ultra",
+          "adapter": "photon",
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+      "parameters": 637997088,
+      "license": "other",
+      "revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+          "adapter": "nemotron",
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "Qwen/Qwen3-0.6B",
+      "parameters": 751632384,
+      "license": "apache-2.0",
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "Qwen/Qwen3-0.6B",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "ollama",
+          "serve_as": "qwen3:0.6b",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "transformers",
+          "serve_as": "Qwen/Qwen3-0.6B",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "ai-forever/FRIDA-Decisions",
+      "parameters": 823401216,
+      "license": "mit",
+      "revision": "e8fc105679af2ab44e4c2e52b65d29db58166083",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "ai-forever/FRIDA-Decisions",
+          "adapter": "frida",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "internlm/Intern-Decision-0.8B",
+      "parameters": 852985920,
+      "license": "apache-2.0",
+      "revision": "85a0cc5a99d67ea8d56dfe98115689212867171d",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "internlm/Intern-Decision-0.8B",
+          "adapter": "intern",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "lightonai/LightOnOCR-3-0.8B",
+      "parameters": 852985920,
+      "license": "apache-2.0",
+      "revision": "36d8636925327c671bd8e479c517a004f7566bd9",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "lightonai/LightOnOCR-3-0.8B",
+          "adapter": "lighton",
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "experimental",
+          "precision": "float32",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "vllm-sr/d3-lite",
+      "parameters": 852985920,
+      "license": "apache-2.0",
+      "revision": "03560c26f5199c3c04129a2ccb38960c913635e0",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "vllm-sr/d3-lite",
+          "adapter": "d3",
+          "tasks": [
+            "decision_scoring"
+          ],
+          "implementation": "experimental",
+          "precision": "bfloat16",
+          "qualification": "unverified"
+        }
+      ]
+    },
+    {
+      "id": "Alibaba-NLP/gte-modernbert-base",
+      "parameters": null,
+      "license": null,
+      "revision": "e7f32e3c00f91d699e8c43b53106206bcc72bb22",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "Alibaba-NLP/gte-modernbert-base",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "Alibaba-NLP/gte-reranker-modernbert-base",
+      "parameters": null,
+      "license": null,
+      "revision": "f7481e6055501a30fb19d090657df9ec1f79ab2c",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "Alibaba-NLP/gte-reranker-modernbert-base",
+          "adapter": null,
+          "tasks": [
+            "reranking"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "BAAI/bge-base-en-v1.5",
+      "parameters": null,
+      "license": null,
+      "revision": "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "BAAI/bge-base-en-v1.5",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "BAAI/bge-reranker-base",
+      "parameters": null,
+      "license": null,
+      "revision": "2cfc18c9415c912f9d8155881c133215df768a70",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "BAAI/bge-reranker-base",
+          "adapter": null,
+          "tasks": [
+            "reranking"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "BAAI/bge-reranker-large",
+      "parameters": null,
+      "license": null,
+      "revision": "55611d7bca2a7133960a6d3b71e083071bbfc312",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "BAAI/bge-reranker-large",
+          "adapter": null,
+          "tasks": [
+            "reranking"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "BAAI/bge-reranker-v2-m3",
+      "parameters": null,
+      "license": null,
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "BAAI/bge-reranker-v2-m3",
+          "adapter": null,
+          "tasks": [
+            "reranking"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "BAAI/bge-small-en-v1.5",
+      "parameters": null,
+      "license": null,
+      "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "BAAI/bge-small-en-v1.5",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "EleutherAI/pythia-410m",
+      "parameters": null,
+      "license": null,
+      "revision": "9879c9b5f8bea9051dcb0e68dff21493d67e9d4f",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "EleutherAI/pythia-410m",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "HuggingFaceTB/SmolVLM-256M-Instruct",
+      "parameters": null,
+      "license": "apache-2.0",
+      "revision": "7e3e67edbbed1bf9888184d9df282b700a323964",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "HuggingFaceTB/SmolVLM-256M-Instruct",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "transformers",
+          "serve_as": "HuggingFaceTB/SmolVLM-256M-Instruct",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "HuggingFaceTB/SmolVLM-500M-Instruct",
+      "parameters": null,
+      "license": null,
+      "revision": "a7da5b986cb59b408707209984f360a5f4ad7e47",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "HuggingFaceTB/SmolVLM-500M-Instruct",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
+      "parameters": null,
+      "license": null,
+      "revision": "067788b187b95ebe7b2e040b3e4299e342e5b8fd",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+      "parameters": null,
+      "license": null,
+      "revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "Qwen/Qwen3-Embedding-0.6B",
+      "parameters": null,
+      "license": "apache-2.0",
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "routes": [
+        {
+          "provider": "hf-serve",
+          "serve_as": "Qwen/Qwen3-Embedding-0.6B",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "local-cpu",
+          "serve_as": "Qwen/Qwen3-Embedding-0.6B",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "Salesforce/blip-image-captioning-large",
+      "parameters": null,
+      "license": null,
+      "revision": "353689b859fcf0523410b1806dace5fb46ecdf41",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "Salesforce/blip-image-captioning-large",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "Snowflake/snowflake-arctic-embed-m-v1.5",
+      "parameters": null,
+      "license": null,
+      "revision": "e58a8f756156a1293d763f17e3aae643474e9b8a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "Snowflake/snowflake-arctic-embed-m-v1.5",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "cross-encoder/ms-marco-MiniLM-L12-v2",
+      "parameters": null,
+      "license": null,
+      "revision": "7b0235231ca2674cb8ca8f022859a6eba2b1c968",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "cross-encoder/ms-marco-MiniLM-L12-v2",
+          "adapter": null,
+          "tasks": [
+            "reranking"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "cross-encoder/ms-marco-MiniLM-L6-v2",
+      "parameters": null,
+      "license": null,
+      "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "cross-encoder/ms-marco-MiniLM-L6-v2",
+          "adapter": null,
+          "tasks": [
+            "reranking"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "distil-whisper/distil-medium.en",
+      "parameters": null,
+      "license": null,
+      "revision": "6e61418885eaf4d5cc9f64e508e80ac5b4c052b7",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "distil-whisper/distil-medium.en",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "distil-whisper/distil-small.en",
+      "parameters": null,
+      "license": null,
+      "revision": "9e4a67ca4569c30be43a3fe7fba1621e504f0093",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "distil-whisper/distil-small.en",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "google/embeddinggemma-300m",
+      "parameters": null,
+      "license": "gemma",
+      "revision": "57c266a740f537b4dc058e1b0cda161fd15afa75",
+      "routes": [
+        {
+          "provider": "hf-serve",
+          "serve_as": "google/embeddinggemma-300m",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "local-cpu",
+          "serve_as": "google/embeddinggemma-300m",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "ibm-granite/granite-4.0-350m",
+      "parameters": null,
+      "license": null,
+      "revision": "bd8a1497065c0d6ba1ef19af6b0d2b14bacf71c2",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "ibm-granite/granite-4.0-350m",
+          "adapter": null,
+          "tasks": [
+            "text_generation"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "intfloat/e5-base-v2",
+      "parameters": null,
+      "license": null,
+      "revision": "f52bf8ec8c7124536f0efb74aca902b2995e5bcd",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "intfloat/e5-base-v2",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "intfloat/e5-small-v2",
+      "parameters": null,
+      "license": null,
+      "revision": "ffb93f3bd4047442299a41ebb6fa998a38507c52",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "intfloat/e5-small-v2",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "jinaai/jina-embeddings-v2-base-en",
+      "parameters": null,
+      "license": null,
+      "revision": "322d4d7e2f35e84137961a65af894fda0385eb7a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "jinaai/jina-embeddings-v2-base-en",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "microsoft/Florence-2-base",
+      "parameters": null,
+      "license": null,
+      "revision": "5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "microsoft/Florence-2-base",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "microsoft/Florence-2-large",
+      "parameters": null,
+      "license": null,
+      "revision": "21a599d414c4d928c9032694c424fb94458e3594",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "microsoft/Florence-2-large",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "microsoft/git-base",
+      "parameters": null,
+      "license": null,
+      "revision": "1f7fe8444292beb4a259e3a5b6eba440cd5999d4",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "microsoft/git-base",
+          "adapter": null,
+          "tasks": [
+            "image_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "moonshine-ai/moonshine-base",
+      "parameters": null,
+      "license": null,
+      "revision": "7a73d8d55ac0ba2ef3ae761593f6784b51f96dcf",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "moonshine-ai/moonshine-base",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "moonshine-ai/moonshine-tiny",
+      "parameters": null,
+      "license": null,
+      "revision": "390624ed33d594443aa4aa221f5b9f283b545b5a",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "moonshine-ai/moonshine-tiny",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "nomic-ai/nomic-embed-text-v1.5",
+      "parameters": null,
+      "license": null,
+      "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nomic-ai/nomic-embed-text-v1.5",
+          "adapter": null,
+          "tasks": [
+            "embedding"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "nota-ai/bk-sdm-base",
+      "parameters": null,
+      "license": null,
+      "revision": "0c03b7a0369b49f97d1acf7256d4ee55ced9b2e0",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nota-ai/bk-sdm-base",
+          "adapter": null,
+          "tasks": [
+            "text_to_image"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "nota-ai/bk-sdm-small",
+      "parameters": null,
+      "license": null,
+      "revision": "572238db7ed3a10858900803f3fc8cca53e893e0",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nota-ai/bk-sdm-small",
+          "adapter": null,
+          "tasks": [
+            "text_to_image"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "nota-ai/bk-sdm-tiny",
+      "parameters": null,
+      "license": null,
+      "revision": "0364108e53b7f7f4d2585e817a0b7a83dc261cfa",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nota-ai/bk-sdm-tiny",
+          "adapter": null,
+          "tasks": [
+            "text_to_image"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "nota-ai/bk-sdm-v2-small",
+      "parameters": null,
+      "license": null,
+      "revision": "ad82c51a3b568e855a7f79c5b893ea2f9ebb197f",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nota-ai/bk-sdm-v2-small",
+          "adapter": null,
+          "tasks": [
+            "text_to_image"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "nota-ai/bk-sdm-v2-tiny",
+      "parameters": null,
+      "license": null,
+      "revision": "68277af553777858cd47e133f92e4db47321bc74",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "nota-ai/bk-sdm-v2-tiny",
+          "adapter": null,
+          "tasks": [
+            "text_to_image"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "openai/whisper-base",
+      "parameters": null,
+      "license": null,
+      "revision": "e37978b90ca9030d5170a5c07aadb050351a65bb",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "openai/whisper-base",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "openai/whisper-medium",
+      "parameters": null,
+      "license": null,
+      "revision": "abdf7c39ab9d0397620ccaea8974cc764cd0953e",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "openai/whisper-medium",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "openai/whisper-small",
+      "parameters": null,
+      "license": null,
+      "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "openai/whisper-small",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    },
+    {
+      "id": "openai/whisper-tiny",
+      "parameters": null,
+      "license": "apache-2.0",
+      "revision": "169d4a4341b33bc18d8881c4b69c2e104e1cc0af",
+      "routes": [
+        {
+          "provider": "local-cpu",
+          "serve_as": "openai/whisper-tiny",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        },
+        {
+          "provider": "transformers",
+          "serve_as": "openai/whisper-tiny",
+          "adapter": null,
+          "tasks": [
+            "speech_to_text"
+          ],
+          "implementation": "direct"
+        }
+      ]
+    }
+  ]
+}

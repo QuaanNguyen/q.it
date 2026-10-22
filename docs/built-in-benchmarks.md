@@ -1,6 +1,6 @@
 # Built-in benchmarks
 
-The built-in `core` pack contains six small benchmarks with eleven cases in total.
+The built-in `core` pack contains seven small benchmarks with thirteen cases in total.
 They are designed to confirm that q.it, the model server, and the selected model can complete each kind of request.
 
 They are not official model leaderboards and should not be used as broad claims about model quality.
@@ -84,6 +84,27 @@ The audio does not contain spoken words.
 This benchmark does not measure speech recognition accuracy and does not produce a word-error score.
 
 Transformers Serve and the optional local CPU provider support this check.
+
+## Text-to-speech transport check
+
+Command:
+
+```bash
+qit run core/text-to-speech-smoke \
+  --provider local-cpu \
+  --model gradium/phonon-31m-en
+```
+
+This benchmark synthesizes two short phrases and validates the returned audio stream.
+The first phrase is a greeting and the second is a short sentence, both with an explicit language and duration limit.
+q.it checks the sample rate, the byte count, and the decoded duration of the received PCM audio.
+
+The benchmark records time to first audio, real-time factor, and peak memory for each phrase.
+An audio clip that exceeds the case duration limit fails validation.
+This is a transport and latency check, not a speech-quality evaluation.
+
+The optional local CPU provider with the Phonon adapter supports this check.
+No other provider integration can synthesize audio.
 
 ## Reranking relevance check
 

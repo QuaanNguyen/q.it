@@ -55,6 +55,13 @@ struct ProviderBody {
 }
 
 #[derive(Serialize)]
+struct BenchmarkBody {
+    #[serde(flatten)]
+    definition: BenchmarkDefinition,
+    supported_providers: Vec<ProviderKind>,
+}
+
+#[derive(Serialize)]
 struct RunsBody {
     runs: Vec<RunRecord>,
     succeeded: usize,
@@ -114,12 +121,19 @@ async fn providers() -> Json<Vec<ProviderBody>> {
 
 async fn benchmarks(
     State(state): State<DashboardState>,
-) -> Result<Json<Vec<BenchmarkDefinition>>, ApiError> {
-    state
+) -> Result<Json<Vec<BenchmarkBody>>, ApiError> {
+    let model_catalog = crate::catalog::Catalog::builtin().map_err(ApiError::internal)?;
+    let bodies = state
         .catalog
         .benchmarks()
-        .map(Json)
-        .map_err(ApiError::internal)
+        .map_err(ApiError::internal)?
+        .into_iter()
+        .map(|definition| BenchmarkBody {
+            supported_providers: model_catalog.providers_for(Some(definition.task)),
+            definition,
+        })
+        .collect();
+    Ok(Json(bodies))
 }
 
 async fn runs(

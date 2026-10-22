@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "routes": [
+    {
+      "model": "Qwen/Qwen3-0.6B",
+      "package": "qwen3:0.6b",
+      "task": "text_generation",
+      "parameters": 751632384
+    },
+    {
+      "model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "package": "qwen2.5:0.5b",
+      "task": "text_generation",
+      "parameters": 494032768
+    },
+    {
+      "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "package": "smollm2:135m",
+      "task": "text_generation",
+      "parameters": 134515008
+    },
+    {
+      "model": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "package": "smollm2:360m",
+      "task": "text_generation",
+      "parameters": 361821120
+    }
+  ]
+}
