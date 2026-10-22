@@ -34,9 +34,7 @@ impl RetrievalObservation {
             for vector in vectors {
                 scalar_count += vector.len();
                 if vector.len() != 128 || vector.iter().any(|value| !value.is_finite()) {
-                    return Err(
-                        "retrieval requires finite native 128-dimensional vectors".into(),
-                    );
+                    return Err("retrieval requires finite native 128-dimensional vectors".into());
                 }
             }
         }
