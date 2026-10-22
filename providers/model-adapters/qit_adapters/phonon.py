@@ -11,10 +11,7 @@ LANGUAGES = {"en", "fr", "de", "es", "pt", "none"}
 def pcm16(values):
     samples = array.array(
         "h",
-        (
-            max(-32768, min(32767, int(sample * 32767.0)))
-            for sample in values
-        ),
+        (max(-32768, min(32767, int(sample * 32767.0))) for sample in values),
     )
     if sys.byteorder != "little":
         samples.byteswap()
@@ -67,18 +64,12 @@ class PhononRuntime:
         language = speech.get("language")
         if language is not None:
             if not isinstance(language, str) or language not in LANGUAGES:
-                raise ValueError(
-                    "speech language must be en, fr, de, es, pt, or none"
-                )
+                raise ValueError("speech language must be en, fr, de, es, pt, or none")
         voice = speech.get("voice")
-        if voice is not None and (
-            not isinstance(voice, str) or not voice.strip()
-        ):
+        if voice is not None and (not isinstance(voice, str) or not voice.strip()):
             raise ValueError("speech voice must be a nonempty name")
         if voice is not None and voice not in self.voices:
-            raise ValueError(
-                "speech voice must already exist in the local checkpoint"
-            )
+            raise ValueError("speech voice must already exist in the local checkpoint")
         limit = speech.get("max_audio_seconds")
         if limit is not None:
             if (
